@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200" role="img" aria-label="Nền họa tiết học đường">
+  <rect width="1600" height="1200" fill="#f8fbff"/>
+  <g opacity="0.75">
+    <circle cx="120" cy="120" r="62" fill="#e0f2fe"/>
+    <circle cx="1480" cy="140" r="80" fill="#ede9fe"/>
+    <circle cx="1380" cy="1020" r="90" fill="#dcfce7"/>
+    <circle cx="180" cy="1030" r="70" fill="#fef3c7"/>
+  </g>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(230 240)" fill="none" stroke="#93c5fd" stroke-width="8" opacity="0.65">
+      <path d="M0 24 l56 -24 l80 36 l-56 24 z"/><path d="M20 34 v38 c0 18 96 18 96 0 v-38"/>
+    </g>
+    <g transform="translate(1180 260)" fill="none" stroke="#a78bfa" stroke-width="8" opacity="0.55">
+      <rect x="0" y="0" width="92" height="72" rx="12"/><path d="M14 20 h64M14 38 h54M14 56 h40"/>
+    </g>
+    <g transform="translate(320 850)" fill="none" stroke="#22c55e" stroke-width="8" opacity="0.55">
+      <path d="M42 0 C26 18 18 48 24 70 C30 92 56 104 74 94 C92 84 96 58 84 42 C74 28 56 16 42 0Z"/>
+      <path d="M44 8 v118"/>
+    </g>
+    <g transform="translate(1160 820)" fill="none" stroke="#f59e0b" stroke-width="8" opacity="0.55">
+      <path d="M0 44 h88"/><path d="M44 0 v88"/>
+      <circle cx="44" cy="44" r="34"/>
+    </g>
+    <g transform="translate(760 120)" fill="none" stroke="#60a5fa" stroke-width="8" opacity="0.45">
+      <path d="M0 18 l28 -18 l28 18 l-28 18 z"/>
+      <path d="M36 40 l22 -12 l18 10"/>
+    </g>
+    <g transform="translate(720 980)" fill="none" stroke="#fb7185" stroke-width="8" opacity="0.45">
+      <path d="M0 56 c18 -30 52 -48 88 -48 c32 0 64 12 88 34"/>
+      <path d="M34 94 c20 -12 44 -18 68 -18 c28 0 56 8 80 24"/>
+    </g>
+  </g>
+</svg>

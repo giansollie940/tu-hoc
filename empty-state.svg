@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-label="Chưa có dữ liệu">
+  <rect width="1200" height="800" fill="#f8fbff"/>
+  <circle cx="300" cy="140" r="60" fill="#dbeafe"/>
+  <circle cx="980" cy="160" r="46" fill="#ede9fe"/>
+  <ellipse cx="600" cy="680" rx="260" ry="26" fill="#dbeafe"/>
+  <rect x="390" y="170" width="420" height="440" rx="40" fill="#ffffff" stroke="#dbeafe" stroke-width="6"/>
+  <rect x="446" y="236" width="308" height="28" rx="14" fill="#2563eb"/>
+  <rect x="446" y="286" width="240" height="18" rx="9" fill="#bfdbfe"/>
+  <rect x="446" y="322" width="272" height="18" rx="9" fill="#e2e8f0"/>
+  <rect x="446" y="358" width="218" height="18" rx="9" fill="#e2e8f0"/>
+  <circle cx="600" cy="476" r="92" fill="#eff6ff"/>
+  <path d="M563 456 a37 37 0 1 1 74 0 c0 24 -14 36 -26 46 l-11 10 v13" fill="none" stroke="#60a5fa" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="600" cy="548" r="8" fill="#2563eb"/>
+  <g transform="translate(250 515)">
+    <circle cx="56" cy="56" r="56" fill="#dcfce7"/>
+    <path d="M40 56 l11 11 l24 -29" fill="none" stroke="#16a34a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(840 500)">
+    <circle cx="44" cy="44" r="44" fill="#fde68a"/>
+    <path d="M44 24 v18 M44 62 v2 M30 38 h28" stroke="#b45309" stroke-width="8" stroke-linecap="round"/>
+  </g>
+</svg>

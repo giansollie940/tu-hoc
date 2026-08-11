@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="description" content="Sổ Tự Học - đăng ký, theo dõi và phê duyệt nội dung tự học theo tuần.">
+  <title>Sổ Tự Học</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="toastHost" class="toast-host" aria-live="polite"></div>
+
+  <section id="loginView" class="login-view">
+    <div class="login-art">
+      <div class="brand brand-large"><span class="brand-mark">📚</span><span>SỔ TỰ HỌC</span></div>
+      <h1>Đăng ký · Theo dõi · Phê duyệt<br><span>giờ tự học mỗi tuần</span></h1>
+      <p>Một không gian học tập gọn gàng cho học sinh, cán sự lớp và giáo viên.</p>
+      <img class="hero-illustration" src="assets/images/login-hero.svg" alt="Minh họa học sinh tự học với sách vở">
+      <div class="art-note"><b>Tự học hôm nay</b><span>Thành công ngày mai!</span></div>
+    </div>
+
+    <div class="login-panel">
+      <div class="login-card">
+        <div class="mobile-brand brand"><span class="brand-mark">📚</span><span>SỔ TỰ HỌC</span></div>
+        <div class="cap-icon">🎓</div>
+        <h2>Đăng nhập</h2>
+        <p class="muted">Bản demo chạy trực tiếp trên trình duyệt.</p>
+        <form id="loginForm">
+          <label>Mã đăng nhập
+            <input id="loginId" autocomplete="username" placeholder="VD: 10A1-01 hoặc GV-10A1" value="HS01">
+          </label>
+          <label>Mật khẩu
+            <input id="loginPassword" type="password" autocomplete="current-password" value="123456">
+          </label>
+          <button class="btn btn-primary btn-block" type="submit">Đăng nhập</button>
+        </form>
+        <div class="demo-divider"><span>Đăng nhập nhanh bản demo</span></div>
+        <div class="demo-buttons">
+          <button class="btn btn-soft" data-demo-role="student">👩‍🎓 Học sinh</button>
+          <button class="btn btn-soft" data-demo-role="monitor">🧑‍💼 Cán sự</button>
+          <button class="btn btn-soft" data-demo-role="teacher">👩‍🏫 Giáo viên</button>
+        </div>
+        <p class="tiny muted center">Dữ liệu demo được lưu bằng localStorage trên máy này.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="appView" class="app-shell hidden">
+    <aside id="sidebar" class="sidebar">
+      <div class="brand"><span class="brand-mark">📚</span><span>SỔ TỰ HỌC</span></div>
+      <nav id="sideNav" class="side-nav" aria-label="Điều hướng chính"></nav>
+      <div class="sidebar-quote">
+        <div class="quote-art">🌱📖</div>
+        <b>Mỗi tiết tự học</b>
+        <span>là một bước tiến nhỏ.</span>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button id="menuBtn" class="icon-btn mobile-only" aria-label="Mở menu">☰</button>
+        <div class="topbar-title">
+          <span id="pageEyebrow">Sổ Tự Học</span>
+          <strong id="pageTitle">Trang chủ</strong>
+        </div>
+        <div class="top-actions">
+          <label class="week-picker">
+            <span>Tuần</span>
+            <select id="globalWeekSelect" aria-label="Chọn tuần học"></select>
+          </label>
+          <button id="syncBtn" class="icon-btn hidden" title="Đồng bộ dữ liệu từ máy chủ" aria-label="Đồng bộ dữ liệu">↻</button>
+          <button class="icon-btn" title="Thông báo">🔔<span class="badge-dot"></span></button>
+          <button id="profileBtn" class="profile-chip">
+            <span id="profileAvatar" class="avatar">HS</span>
+            <span><b id="profileName">Người dùng</b><small id="profileRole">Vai trò</small></span>
+          </button>
+        </div>
+      </header>
+
+      <div id="content" class="content"></div>
+    </main>
+  </section>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-card">
+      <button id="modalClose" class="modal-close" aria-label="Đóng">×</button>
+      <h3 id="modalTitle">Đăng ký tự học</h3>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-service.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
