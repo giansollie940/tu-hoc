@@ -67,6 +67,21 @@
     return data;
   }
 
+  async function teacherUpdateUser(userId,changes){
+    const sb=requireClient();
+    const payload={
+      userId,
+      code:String(changes?.code||"").trim(),
+      fullName:String(changes?.fullName||"").trim(),
+      role:String(changes?.role||"student"),
+      active:changes?.active!==false
+    };
+    const { data,error }=await sb.functions.invoke("admin-update-user",{body:payload});
+    if(error) throw error;
+    if(!data?.ok) throw new Error(data?.error||"Không cập nhật được tài khoản.");
+    return data;
+  }
+
   async function signOut(){
     const sb = requireClient();
     const { error } = await sb.auth.signOut();
@@ -120,17 +135,47 @@
     return out;
   }
 
+  function dateISOInTimeZone(date=new Date()){
+    const timeZone=String(cfg.timeZone||"Asia/Ho_Chi_Minh");
+    try{
+      const parts=new Intl.DateTimeFormat("en-CA",{
+        timeZone,year:"numeric",month:"2-digit",day:"2-digit"
+      }).formatToParts(date);
+      const get=t=>parts.find(p=>p.type===t)?.value;
+      return `${get("year")}-${get("month")}-${get("day")}`;
+    }catch{
+      const y=date.getFullYear(),m=String(date.getMonth()+1).padStart(2,"0"),d=String(date.getDate()).padStart(2,"0");
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  function chooseCurrentWeek(weeks){
+    if(!weeks?.length) return null;
+    const today=dateISOInTimeZone();
+
+    // Mon–Fri: đúng tuần chứa hôm nay.
+    const exact=weeks.find(w=>w.startDate<=today && w.endDate>=today);
+    if(exact) return exact;
+
+    // Trước năm học hoặc cuối tuần/khoảng nghỉ: ưu tiên tuần kế tiếp.
+    const next=weeks.find(w=>w.startDate>today);
+    if(next) return next;
+
+    // Sau năm học: giữ tuần cuối cùng thay vì rơi về tuần 1.
+    return weeks[weeks.length-1];
+  }
+
   async function loadState(){
     const sb = requireClient();
     const user = await authUser();
     if (!user) return { currentUser:null, state:null };
 
-    const { data:profile, error:profileErr } = await sb.from("profiles").select("*").eq("id",user.id).single();
+    const safeProfileColumns="id,student_code,full_name,role,class_name,active";
+    const { data:profile, error:profileErr } = await sb.from("profiles").select(safeProfileColumns).eq("id",user.id).single();
     if (profileErr) throw profileErr;
 
-    const membersQuery = profile.role === "monitor"
-      ? sb.from("class_members").select("*").order("full_name")
-      : sb.from("profiles").select("*").order("full_name");
+    // Danh bạ an toàn: không bao giờ lấy email nội bộ về frontend.
+    const membersQuery = sb.from("class_members").select("*").order("full_name");
 
     const [
       profilesRes, yearsRes, periodsRes, scheduleRes, overridesRes, regsRes, settingsRes
@@ -157,10 +202,7 @@
 
     const settingsObj = {};
     (settingsRes.data || []).forEach(x=>settingsObj[x.key]=x.value);
-    const nowIso = new Date().toISOString().slice(0,10);
-    const currentWeek = weeks.find(w=>w.startDate<=nowIso && w.endDate>=nowIso)
-      || weeks.find(w=>w.status==="open")
-      || weeks[0];
+    const currentWeek = chooseCurrentWeek(weeks);
 
     const state = {
       version:2,
@@ -281,15 +323,7 @@
         }
       }
 
-      // User roles / active flags.
-      const oldUsers=new Map((before.users||[]).map(u=>[u.id,u]));
-      for(const u of state.users||[]){
-        const old=oldUsers.get(u.id);
-        if(old && (u.role!==old.role || u.active!==old.active)){
-          const { error }=await sb.from("profiles").update({role:u.role,active:u.active}).eq("id",u.id);
-          if(error) throw error;
-        }
-      }
+      // Thông tin tài khoản được cập nhật qua Edge Function admin-update-user.
 
       // App settings.
       if(stable(state.settings||{})!==stable(before.settings||{})){
@@ -320,7 +354,8 @@
 
   window.SupabaseService={
     enabled,init,signInCode,signOut,authUser,loadState,syncState,resetSnapshot,
-    codeToEmail,changeOwnPassword,teacherResetPassword,
+    codeToEmail,changeOwnPassword,teacherResetPassword,teacherUpdateUser,
+    chooseCurrentWeek,dateISOInTimeZone,
     get client(){return client;}
   };
 })();

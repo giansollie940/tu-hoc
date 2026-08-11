@@ -17,7 +17,8 @@
       ["dashboard","🏠","Trang chủ"],["register","📝","Đăng ký tự học"],["history","🕘","Lịch sử của tôi"],["comments","💬","Nhận xét của GV"]
     ],
     monitor:[
-      ["dashboard","🏠","Tổng quan"],["class","👥","Theo dõi cả lớp"],["missing","⚠️","Danh sách thiếu"],["history","🕘","Lịch sử của tôi"]
+      ["dashboard","🏠","Tổng quan"],["register","📝","Đăng ký của tôi"],["class","👥","Theo dõi cả lớp"],
+      ["missing","⚠️","Danh sách thiếu"],["history","🕘","Lịch sử của tôi"],["comments","💬","Nhận xét của GV"]
     ],
     teacher:[
       ["dashboard","▦","Dashboard"],["approvals","✅","Duyệt đăng ký"],["class","👥","Theo dõi cả lớp"],["schedule","📅","TKB tự học"],
@@ -41,12 +42,21 @@
   }
   function resetDemo(){
     if(isProd){ toast("Chức năng khôi phục chỉ dùng ở chế độ Demo.","warn"); return; }
-    state=DemoData.defaultState(); saveState(); toast("Đã khôi phục dữ liệu demo.","success"); render();
+    state=DemoData.defaultState(); const aw=actualWeek(); if(aw)state.currentWeekId=aw.id; saveState(); toast("Đã khôi phục dữ liệu demo.","success"); render();
   }
   function esc(v=""){ return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
   function fmtDate(s){ if(!s)return""; const [y,m,d]=s.slice(0,10).split("-"); return `${d}/${m}/${y}`; }
   function fmtDateShort(s){ if(!s)return""; const [y,m,d]=s.slice(0,10).split("-"); return `${d}/${m}`; }
   function week(){ return state.weeks.find(w=>w.id===state.currentWeekId)||state.weeks[0]; }
+  function actualWeek(){
+    if(!state.weeks?.length) return null;
+    if(isProd && prod?.chooseCurrentWeek) return prod.chooseCurrentWeek(state.weeks);
+    const now=new Date(), y=now.getFullYear(), m=String(now.getMonth()+1).padStart(2,"0"), d=String(now.getDate()).padStart(2,"0");
+    const today=`${y}-${m}-${d}`;
+    return state.weeks.find(w=>w.startDate<=today&&w.endDate>=today)
+      || state.weeks.find(w=>w.startDate>today)
+      || state.weeks[state.weeks.length-1];
+  }
   function period(n){ return state.periods.find(p=>p.n===Number(n)); }
   function slotLabel(dow,p){ const pe=period(p); return `${DemoData.DOW[dow]} · Tiết ${p}${pe?` (${pe.start}–${pe.end})`:""}`; }
   function studentUsers(){ return state.users.filter(u=>u.active && (u.role==="student"||u.role==="monitor")); }
@@ -350,8 +360,8 @@
       <input class="week-deadline" data-id="${w.id}" type="datetime-local" value="${w.deadline||""}">
       <button class="btn btn-ghost view-week" data-id="${w.id}">Xem</button>
     </div>`).join("");
-    return head("Quản lý tuần","Theo dõi toàn bộ tuần trong năm học.",
-      `<button class="btn btn-primary" id="saveWeeks">Lưu thay đổi</button>`)+`<div class="week-list">${rows}</div>`;
+    return head("Quản lý tuần","Theo dõi toàn bộ tuần trong năm học. Tuần mặc định được xác định theo ngày hiện tại.",
+      `<div class="toolbar"><button class="btn btn-ghost" id="goCurrentWeek">📍 Tuần hiện tại</button><button class="btn btn-primary" id="saveWeeks">Lưu thay đổi</button></div>`)+`<div class="week-list">${rows}</div>`;
   }
   function bindWeeks(){
     $("#saveWeeks")?.addEventListener("click",()=>{
@@ -360,25 +370,106 @@
       audit("Cập nhật tuần học","weeks");saveState();toast("Đã lưu cấu hình tuần.","success");render();
     });
     content.querySelectorAll(".view-week").forEach(b=>b.onclick=()=>{state.currentWeekId=b.dataset.id;saveState();renderShell();render();});
+    $("#goCurrentWeek")?.addEventListener("click",()=>{
+      const w=actualWeek();
+      if(!w){toast("Chưa có tuần học nào.","warn");return;}
+      state.currentWeekId=w.id;
+      if(!isProd) saveState();
+      toast(`Đã chuyển về tuần ${w.number}.`,"success");
+      renderShell();render();
+    });
   }
   function weekStatus(x){return {open:"🟢 Đang mở",locked:"🔒 Đã khóa",upcoming:"🕒 Sắp tới",holiday:"🏖️ Nghỉ"}[x]||x;}
 
   function studentsPage(){
-    return head("Quản lý học sinh","Phân quyền học sinh / cán sự, bật tắt tài khoản và đặt lại mật khẩu.")+
-      `<div class="card"><div class="callout" style="margin-bottom:12px">Học sinh đăng nhập bằng <b>Mã</b> + mật khẩu; không cần biết email nội bộ của Supabase.</div>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>Mã đăng nhập</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
-      ${state.users.filter(u=>u.role!=="teacher").map(u=>`<tr><td><b>${esc(u.code)}</b></td><td><div class="person"><span class="avatar">${initials(u.name)}</span><b>${esc(u.name)}</b></div></td>
-      <td><select class="role-select" data-id="${u.id}"><option value="student" ${u.role==="student"?"selected":""}>Học sinh</option><option value="monitor" ${u.role==="monitor"?"selected":""}>Cán sự</option></select></td>
-      <td><label style="margin:0"><input class="active-check" data-id="${u.id}" type="checkbox" style="width:auto" ${u.active?"checked":""}> Hoạt động</label></td>
-      <td>${isProd?`<button class="btn btn-ghost reset-password-btn" data-id="${u.id}">🔑 Đặt lại MK</button>`:`<span class="tiny muted">Chế độ demo</span>`}</td></tr>`).join("")}
-      </tbody></table></div><div class="toolbar" style="margin-top:14px"><span class="muted tiny">Tài khoản Auth được tạo bằng script quản trị/Edge Function phía server.</span><button class="btn btn-primary right" id="saveStudents">Lưu thay đổi</button></div></div>`;
+    const rows=state.users.filter(u=>u.role!=="teacher").map(u=>`
+      <tr>
+        <td><b>${esc(u.code)}</b></td>
+        <td><div class="person"><span class="avatar">${initials(u.name)}</span><b>${esc(u.name)}</b></div></td>
+        <td>${roleLabel[u.role]||esc(u.role)}</td>
+        <td>${u.active?'<span class="status approved">Hoạt động</span>':'<span class="status missing">Đã khóa</span>'}</td>
+        <td>
+          <div class="toolbar" style="gap:6px">
+            <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">✏️ Sửa tài khoản</button>
+            ${isProd?`<button class="btn btn-ghost reset-password-btn" data-id="${u.id}">🔑 Đặt lại MK</button>`:""}
+          </div>
+        </td>
+      </tr>`).join("");
+
+    return head("Quản lý học sinh","Sửa mã đăng nhập, họ tên, vai trò, trạng thái và mật khẩu.")+
+      `<div class="card">
+        <div class="callout" style="margin-bottom:12px">
+          Khi đổi <b>mã đăng nhập</b>, hệ thống sẽ đổi đồng thời định danh Auth nội bộ. Học sinh dùng mã mới từ lần đăng nhập tiếp theo.
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Mã đăng nhập</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
   }
+
   function bindStudents(){
-    $("#saveStudents")?.addEventListener("click",()=>{
-      content.querySelectorAll(".role-select").forEach(el=>{const u=state.users.find(x=>x.id===el.dataset.id);if(u)u.role=el.value;});
-      content.querySelectorAll(".active-check").forEach(el=>{const u=state.users.find(x=>x.id===el.dataset.id);if(u)u.active=el.checked;});
-      audit("Cập nhật thành viên","users");saveState();toast("Đã lưu danh sách thành viên.","success");render();
-    });
+    content.querySelectorAll(".edit-user-btn").forEach(btn=>btn.addEventListener("click",()=>{
+      const u=state.users.find(x=>x.id===btn.dataset.id); if(!u)return;
+      openModal("Sửa tài khoản học sinh",`
+        <form id="editUserForm">
+          <div class="callout">Mã hiện tại: <b>${esc(u.code)}</b></div>
+          <label>Mã đăng nhập *
+            <input id="editUserCode" value="${esc(u.code)}" maxlength="32" required
+              pattern="[A-Za-z0-9._-]{2,32}" placeholder="VD: 10A1-05">
+          </label>
+          <label>Họ và tên *
+            <input id="editUserName" value="${esc(u.name)}" maxlength="120" required>
+          </label>
+          <label>Vai trò
+            <select id="editUserRole">
+              <option value="student" ${u.role==="student"?"selected":""}>Học sinh</option>
+              <option value="monitor" ${u.role==="monitor"?"selected":""}>Cán sự lớp</option>
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px">
+            <input id="editUserActive" type="checkbox" style="width:auto" ${u.active?"checked":""}>
+            Tài khoản đang hoạt động
+          </label>
+          <div class="toolbar">
+            <button class="btn btn-ghost" type="button" id="cancelEditUser">Hủy</button>
+            <button class="btn btn-primary right" type="submit">Lưu tài khoản</button>
+          </div>
+        </form>`);
+      $("#cancelEditUser").onclick=closeModal;
+      $("#editUserForm").onsubmit=async e=>{
+        e.preventDefault();
+        const changes={
+          code:$("#editUserCode").value.trim().toUpperCase(),
+          fullName:$("#editUserName").value.trim(),
+          role:$("#editUserRole").value,
+          active:$("#editUserActive").checked
+        };
+        if(!/^[A-Z0-9._-]{2,32}$/.test(changes.code)){
+          toast("Mã chỉ dùng chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.","warn");return;
+        }
+        try{
+          if(isProd){
+            await prod.teacherUpdateUser(u.id,changes);
+            closeModal();
+            toast(`Đã cập nhật ${changes.code}.`,"success");
+            await refreshFromServer(false);
+          }else{
+            if(state.users.some(x=>x.id!==u.id&&x.code.toUpperCase()===changes.code)){
+              toast("Mã đăng nhập đã tồn tại.","warn");return;
+            }
+            Object.assign(u,{code:changes.code,name:changes.fullName,role:changes.role,active:changes.active});
+            audit("Sửa tài khoản",u.id,changes.code);saveState();closeModal();render();
+            toast("Đã cập nhật tài khoản demo.","success");
+          }
+        }catch(err){
+          console.error(err);toast("Không cập nhật được tài khoản: "+(err.message||err),"warn");
+        }
+      };
+    }));
+
     content.querySelectorAll(".reset-password-btn").forEach(btn=>btn.addEventListener("click",()=>{
       const u=state.users.find(x=>x.id===btn.dataset.id); if(!u)return;
       openModal("Đặt lại mật khẩu",`
@@ -394,7 +485,7 @@
         if(p1!==p2){toast("Hai mật khẩu chưa khớp.","warn");return;}
         try{
           await prod.teacherResetPassword(u.id,p1);
-          closeModal(); audit("Đặt lại mật khẩu",u.id,u.code); saveState();
+          closeModal();
           toast(`Đã đặt lại mật khẩu cho ${u.code}.`,"success");
         }catch(err){console.error(err);toast("Không đặt lại được mật khẩu: "+(err.message||err),"warn");}
       };
@@ -446,8 +537,10 @@
       else html=studentDashboard();
     }else if(currentUser.role==="monitor"){
       if(route==="dashboard"||route==="class")html=classOverview();
+      else if(route==="register")html=studentDashboard();
       else if(route==="missing")html=missingPage();
       else if(route==="history")html=historyPage();
+      else if(route==="comments")html=commentsPage();
       else html=classOverview();
     }else{
       if(route==="dashboard")html=teacherDashboard();
@@ -493,6 +586,9 @@
     }
     return;
   }
+
+  // Demo cũng chọn tuần theo ngày khi vừa mở trang, thay vì cố định w1.
+  const demoWeek=actualWeek(); if(demoWeek) state.currentWeekId=demoWeek.id;
 
   if(currentUser){
     const live=state.users.find(u=>u.id===currentUser.id&&u.active); if(live){currentUser=live;sessionStorage.setItem("soTuHocUser",JSON.stringify(live));renderShell();render();}else logout();
