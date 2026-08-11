@@ -12,9 +12,9 @@
       TUYỆT ĐỐI KHÔNG đưa Secret key/service_role key vào file này.
 */
 window.APP_CONFIG = {
-  mode: "demo",
-  projectUrl: "https://YOUR_PROJECT.supabase.co",
-  publishableKey: "YOUR_PUBLISHABLE_KEY",
+  mode: "supabase",
+  projectUrl: "https://qhqqujozpqopahxscpks.supabase.co",
+  publishableKey: "sb_publishable_iIrcm25VPzeURIKYTU1nlQ_QEvbZiCT",
   appName: "Sổ Tự Học",
   // Học sinh chỉ nhập mã. App ánh xạ 10A1-01 -> 10a1-01@users.example.com.
   // Domain này chỉ là định danh nội bộ, không dùng để nhận thư.
