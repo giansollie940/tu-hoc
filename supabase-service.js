@@ -77,6 +77,57 @@
     return data;
   }
 
+  async function edgeFunctionErrorMessage(error,fallback="Edge Function bị lỗi"){
+    if(!error) return fallback;
+    let message=String(error?.message||fallback);
+
+    try{
+      const ctx=error?.context;
+      if(ctx){
+        const response=typeof ctx.clone==="function" ? ctx.clone() : ctx;
+        let body=null;
+
+        try{
+          body=await response.json();
+        }catch(_){
+          try{
+            const text=await response.text();
+            if(text) body={message:text};
+          }catch(__){}
+        }
+
+        const detail=body?.error||body?.message||body?.msg||body?.code;
+        if(detail) message=String(detail);
+
+        const status=response?.status;
+        const sbCode=response?.headers?.get?.("sb-error-code");
+        const parts=[];
+        if(status) parts.push(`HTTP ${status}`);
+        if(sbCode) parts.push(sbCode);
+        if(parts.length) message+=` [${parts.join(" · ")}]`;
+      }
+    }catch(parseError){
+      console.warn("Không đọc được nội dung lỗi Edge Function",parseError);
+    }
+    return message;
+  }
+
+  async function teacherListUsers(){
+    const sb=requireClient();
+    const {data,error}=await sb.functions.invoke("admin-list-users",{body:{}});
+
+    if(error){
+      const detail=await edgeFunctionErrorMessage(error,"Không tải được mã đăng nhập học sinh");
+      throw new Error(detail);
+    }
+
+    if(!data?.ok){
+      throw new Error(data?.error||data?.message||"Không tải được danh sách học sinh.");
+    }
+
+    return data;
+  }
+
   async function teacherUpdateUser(userId,changes){
     const sb=requireClient();
     const payload={
@@ -87,9 +138,17 @@
       role:String(changes?.role||"student"),
       active:changes?.active!==false
     };
-    const { data,error }=await sb.functions.invoke("admin-update-user",{body:payload});
-    if(error) throw error;
-    if(!data?.ok) throw new Error(data?.error||"Không cập nhật được tài khoản.");
+
+    const {data,error}=await sb.functions.invoke("admin-update-user",{body:payload});
+
+    if(error){
+      const detail=await edgeFunctionErrorMessage(error,"Không gọi được admin-update-user");
+      throw new Error(detail);
+    }
+
+    if(!data?.ok){
+      throw new Error(data?.error||data?.message||"Không cập nhật được tài khoản.");
+    }
     return data;
   }
 
@@ -320,8 +379,23 @@
     const { data:profile, error:profileErr } = await sb.from("profiles").select(safeProfileColumns).eq("id",user.id).single();
     if (profileErr) throw profileErr;
 
-    // Danh bạ an toàn: không bao giờ lấy email nội bộ về frontend.
-    const membersQuery = sb.from("class_members").select("*").order("full_name");
+    // Danh bạ an toàn:
+    // - HS/cán sự: đọc class_members như cũ.
+    // - GV: gọi Edge Function server-side để có thể suy ra login code từ Auth email
+    //   khi profiles.student_code còn trống. Frontend KHÔNG nhận email Auth.
+    const membersQuery = profile.role==="teacher"
+      ? teacherListUsers().then(result=>({
+          data:(result.users||[]).map(u=>({
+            id:u.id,
+            student_code:u.code||"",
+            full_name:u.fullName||"",
+            role:u.role,
+            class_name:u.className||profile.class_name||"",
+            active:u.active!==false
+          })),
+          error:null
+        })).catch(error=>({data:null,error}))
+      : sb.from("class_members").select("*").order("full_name");
 
     const [
       profilesRes, yearsRes, periodsRes, scheduleRes, overridesRes, regsRes, settingsRes, notificationsRes
@@ -530,7 +604,7 @@
 
   window.SupabaseService={
     enabled,init,signInCode,signOut,authUser,loadState,syncState,resetSnapshot,
-    codeToEmail,changeOwnPassword,teacherResetPassword,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
+    codeToEmail,changeOwnPassword,teacherResetPassword,teacherListUsers,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
     teacherRebaseWeeks,requestAiReview,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
     get client(){return client;}
   };

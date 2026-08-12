@@ -1073,14 +1073,14 @@
 
     return head(
       "Quản lý học sinh",
-      "Bản 8.1: sắp theo mã đăng nhập, tìm kiếm nhanh, lọc theo vai trò/trạng thái và sao chép mã chỉ với 1 chạm.",
+      "Bản 8.1.4: mã đăng nhập được lấy tự động từ hồ sơ hoặc phần trước @ của email Auth ở server; app chỉ hiển thị mã, không hiển thị email nội bộ.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary glossy-action" id="addStudentBtn">🌟 Thêm học sinh</button>
       </div>`
     )+
       `<div class="card">
         <div class="callout" style="margin-bottom:12px">
-          Khi đổi <b>mã đăng nhập</b>, hệ thống sẽ đổi đồng thời thông tin đăng nhập của HS. Nếu chỉ đổi <b>vai trò / trạng thái / họ tên</b> thì không cần nhập lại mã. <b>Khóa tài khoản</b> sẽ vô hiệu hóa đăng nhập nhưng vẫn giữ lịch sử tự học của HS.
+          <b>Mã đăng nhập</b> được tự động lấy từ hồ sơ; nếu hồ sơ cũ thiếu mã, server sẽ lấy phần trước dấu <b>@</b> của email Auth rồi tự đồng bộ lại. App không tải/hiển thị email nội bộ. Nếu chỉ đổi <b>vai trò / trạng thái / họ tên</b> thì không cần nhập lại mã.
         </div>
 
         <div class="summary-pills">
