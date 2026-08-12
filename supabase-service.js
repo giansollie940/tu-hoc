@@ -82,6 +82,113 @@
     return data;
   }
 
+  async function teacherCreateUser(changes){
+    const sb=requireClient();
+    const payload={
+      code:String(changes?.code||"").trim().toUpperCase(),
+      fullName:String(changes?.fullName||"").trim(),
+      role:String(changes?.role||"student"),
+      className:String(changes?.className||"").trim(),
+      password:String(changes?.password||"")
+    };
+    const {data,error}=await sb.functions.invoke("admin-create-user",{body:payload});
+    if(error) throw error;
+    if(!data?.ok) throw new Error(data?.error||"Không tạo được tài khoản.");
+    return data;
+  }
+
+  async function teacherRebaseWeeks(firstWeekStart, deadlineTime="20:00"){
+    const sb=requireClient();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(firstWeekStart||""))) throw new Error("Ngày bắt đầu tuần 1 không hợp lệ.");
+    if(!/^\d{2}:\d{2}$/.test(String(deadlineTime||""))) throw new Error("Giờ deadline không hợp lệ.");
+
+    const {data:years,error:yearErr}=await sb.from("school_years")
+      .select("id,name,start_date,end_date,is_active").eq("is_active",true).limit(1);
+    if(yearErr) throw yearErr;
+    const year=years?.[0];
+    if(!year) throw new Error("Chưa có năm học đang hoạt động.");
+
+    const {data:weekRows,error:weekErr}=await sb.from("weeks")
+      .select("*").eq("school_year_id",year.id).order("week_number");
+    if(weekErr) throw weekErr;
+    if(!weekRows?.length) throw new Error("Năm học chưa có tuần nào.");
+
+    const today=dateISOInTimeZone();
+    const startMs=Date.parse(`${firstWeekStart}T00:00:00Z`);
+    const endMs=Date.parse(`${year.end_date}T00:00:00Z`);
+    const desiredCount=Math.max(1,Math.floor((endMs-startMs)/(7*86400000))+1);
+    const byNumber=new Map(weekRows.map(w=>[Number(w.week_number),w]));
+
+    const planned=Array.from({length:desiredCount},(_,i)=>{
+      const number=i+1;
+      const old=byNumber.get(number)||null;
+      const start=addDaysISO(firstWeekStart,i*7);
+      const naturalEnd=addDaysISO(start,4);
+      const end=naturalEnd>year.end_date ? year.end_date : naturalEnd;
+      const deadlineDate=addDaysISO(start,-1);
+      const mode=old?.deadline_mode || "week_before_20";
+      return {
+        id:old?.id||null,
+        school_year_id:year.id,
+        week_number:number,
+        start_date:start,
+        end_date:end,
+        status:old?.status||"upcoming",
+        deadline_mode:mode,
+        registration_deadline:mode==="specific" && old?.registration_deadline
+          ? old.registration_deadline
+          : `${deadlineDate}T${deadlineTime}:00+07:00`,
+        note:old?.note||null
+      };
+    });
+
+    const chosen=planned.find(w=>w.start_date<=today&&w.end_date>=today)
+      || planned.find(w=>w.start_date>today)
+      || planned[planned.length-1];
+
+    const normalized=planned.map(w=>({
+      ...w,
+      status:w.status==="holiday" ? "holiday" :
+        (w.week_number===chosen?.week_number ? "open" : (w.end_date<today ? "locked" : "upcoming"))
+    }));
+
+    let q=await sb.from("school_years").update({start_date:firstWeekStart}).eq("id",year.id);
+    if(q.error) throw q.error;
+
+    const existingRows=normalized.filter(w=>w.id).map(w=>({
+      id:w.id,school_year_id:w.school_year_id,week_number:w.week_number,
+      start_date:w.start_date,end_date:w.end_date,status:w.status,
+      deadline_mode:w.deadline_mode,
+      registration_deadline:w.registration_deadline,note:w.note
+    }));
+    if(existingRows.length){
+      q=await sb.from("weeks").upsert(existingRows,{onConflict:"id"});
+      if(q.error) throw q.error;
+    }
+
+    const newRows=normalized.filter(w=>!w.id).map(w=>({
+      school_year_id:w.school_year_id,week_number:w.week_number,
+      start_date:w.start_date,end_date:w.end_date,status:w.status,
+      deadline_mode:w.deadline_mode,
+      registration_deadline:w.registration_deadline,note:w.note
+    }));
+    if(newRows.length){
+      q=await sb.from("weeks").insert(newRows);
+      if(q.error) throw q.error;
+    }
+
+    snapshot=null;
+    return {ok:true,currentWeekNumber:chosen?.week_number||1,createdWeeks:newRows.length};
+  }
+
+  async function markNotificationsRead(ids){
+    const list=(ids||[]).filter(Boolean);
+    if(!list.length) return;
+    const sb=requireClient();
+    const {error}=await sb.from("teacher_notifications").update({is_read:true}).in("id",list);
+    if(error) throw error;
+  }
+
   async function signOut(){
     const sb = requireClient();
     const { error } = await sb.auth.signOut();
@@ -109,7 +216,9 @@
   function mapWeek(w){
     return {
       id:w.id, number:w.week_number, startDate:w.start_date, endDate:w.end_date,
-      status:w.status, deadline:toLocalInput(w.registration_deadline),
+      status:w.status,
+      deadlineMode:w.deadline_mode || "week_before_20",
+      deadline:toLocalInput(w.registration_deadline),
       note:w.note || ""
     };
   }
@@ -118,6 +227,8 @@
       id:r.id, studentId:r.student_id, weekId:r.week_id, dow:Number(r.weekday)-1,
       period:r.period_number, content:r.content, note:r.note || "", status:r.status,
       teacherComment:r.teacher_comment || "",
+      approvalSource:r.approval_source || "manual",
+      autoReviewReason:r.auto_review_reason || "",
       updatedAt:r.updated_at ? new Date(r.updated_at).getTime() : Date.now(),
       approvedAt:r.approved_at ? new Date(r.approved_at).getTime() : null
     };
@@ -133,6 +244,12 @@
     if (r.approvedAt) out.approved_at = new Date(r.approvedAt).toISOString();
     if (isUuid(r.id)) out.id = r.id;
     return out;
+  }
+
+  function addDaysISO(iso,n){
+    const d=new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate()+Number(n||0));
+    return d.toISOString().slice(0,10);
   }
 
   function dateISOInTimeZone(date=new Date()){
@@ -178,7 +295,7 @@
     const membersQuery = sb.from("class_members").select("*").order("full_name");
 
     const [
-      profilesRes, yearsRes, periodsRes, scheduleRes, overridesRes, regsRes, settingsRes
+      profilesRes, yearsRes, periodsRes, scheduleRes, overridesRes, regsRes, settingsRes, notificationsRes
     ] = await Promise.all([
       membersQuery,
       sb.from("school_years").select("*").order("start_date",{ascending:false}),
@@ -186,9 +303,12 @@
       sb.from("study_schedule").select("*").eq("is_study_period",true),
       sb.from("week_schedule_overrides").select("*"),
       sb.from("registrations").select("*").eq("is_deleted",false),
-      sb.from("app_settings").select("*")
+      sb.from("app_settings").select("*"),
+      profile.role==="teacher"
+        ? sb.from("teacher_notifications").select("*").order("created_at",{ascending:false}).limit(100)
+        : Promise.resolve({data:[],error:null})
     ]);
-    for (const r of [profilesRes,yearsRes,periodsRes,scheduleRes,overridesRes,regsRes,settingsRes]){
+    for (const r of [profilesRes,yearsRes,periodsRes,scheduleRes,overridesRes,regsRes,settingsRes,notificationsRes]){
       if (r.error) throw r.error;
     }
 
@@ -210,8 +330,9 @@
       settings:{
         className: settingsObj.class_name || profile.class_name || "10A1",
         schoolYear: activeYear?.name || "",
-        announcement: settingsObj.announcement || "Chuẩn bị nội dung tự học trước hạn của tuần.",
-        teacherName: settingsObj.teacher_name || ""
+        announcement: settingsObj.announcement || "Chuẩn bị nội dung tự học trước hạn.",
+        teacherName: settingsObj.teacher_name || "",
+        smartApprovalEnabled: settingsObj.smart_approval_enabled !== false
       },
       users:(profilesRes.data || []).map(mapProfile),
       weeks,
@@ -223,6 +344,17 @@
         id:o.id,weekId:o.week_id,dow:Number(o.weekday)-1,period:o.period_number,active:o.is_study_period,reason:o.reason||""
       })),
       registrations:(regsRes.data || []).map(mapReg),
+      notifications:(notificationsRes.data || []).map(n=>({
+        id:n.id,
+        registrationId:n.registration_id,
+        studentId:n.student_id,
+        weekId:n.week_id,
+        type:n.notification_type,
+        title:n.title,
+        message:n.message || "",
+        isRead:n.is_read === true,
+        createdAt:n.created_at
+      })),
       currentWeekId:currentWeek?.id || weeks[0]?.id || null,
       audit:[]
     };
@@ -279,8 +411,9 @@
         } else {
           const payload=dbReg(r); delete payload.id; delete payload.student_id; delete payload.week_id;
           delete payload.weekday; delete payload.period_number;
-          const { error }=await sb.from("registrations").update(payload).eq("id",r.id);
+          const { data,error }=await sb.from("registrations").update(payload).eq("id",r.id).select().single();
           if(error) throw error;
+          Object.assign(r,mapReg(data));
         }
       }
     }
@@ -317,7 +450,10 @@
         const old=oldWeeks.get(w.id);
         if(old && stable(w)!==stable(old)){
           const { error }=await sb.from("weeks").update({
-            status:w.status,registration_deadline:w.deadline?new Date(w.deadline).toISOString():null,note:w.note||null
+            status:w.status,
+            deadline_mode:w.deadlineMode || "week_before_20",
+            registration_deadline:w.deadline?new Date(w.deadline).toISOString():null,
+            note:w.note||null
           }).eq("id",w.id);
           if(error) throw error;
         }
@@ -325,12 +461,19 @@
 
       // Thông tin tài khoản được cập nhật qua Edge Function admin-update-user.
 
+      // Tên năm học nếu GV thay đổi trong Cài đặt.
+      if(state.activeSchoolYearId && state.settings?.schoolYear !== before.settings?.schoolYear){
+        const {error}=await sb.from("school_years").update({name:state.settings.schoolYear}).eq("id",state.activeSchoolYearId);
+        if(error) throw error;
+      }
+
       // App settings.
       if(stable(state.settings||{})!==stable(before.settings||{})){
         const rows=[
           {key:"class_name",value:state.settings.className},
           {key:"announcement",value:state.settings.announcement},
-          {key:"teacher_name",value:state.settings.teacherName||currentUser.name}
+          {key:"teacher_name",value:state.settings.teacherName||currentUser.name},
+          {key:"smart_approval_enabled",value:state.settings.smartApprovalEnabled!==false}
         ];
         const { error }=await sb.from("app_settings").upsert(rows,{onConflict:"key"});
         if(error) throw error;
@@ -354,8 +497,8 @@
 
   window.SupabaseService={
     enabled,init,signInCode,signOut,authUser,loadState,syncState,resetSnapshot,
-    codeToEmail,changeOwnPassword,teacherResetPassword,teacherUpdateUser,
-    chooseCurrentWeek,dateISOInTimeZone,
+    codeToEmail,changeOwnPassword,teacherResetPassword,teacherUpdateUser,teacherCreateUser,
+    teacherRebaseWeeks,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
     get client(){return client;}
   };
 })();

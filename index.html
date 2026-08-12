@@ -66,11 +66,11 @@
         </div>
         <div class="top-actions">
           <label class="week-picker">
-            <span>Tuần</span>
-            <select id="globalWeekSelect" aria-label="Chọn tuần học"></select>
+            <span>Chọn tuần đăng ký</span>
+            <select id="globalWeekSelect" aria-label="Chọn tuần đăng ký theo ngày"></select>
           </label>
           <button id="syncBtn" class="icon-btn hidden" title="Đồng bộ dữ liệu từ máy chủ" aria-label="Đồng bộ dữ liệu">↻</button>
-          <button class="icon-btn" title="Thông báo">🔔<span class="badge-dot"></span></button>
+          <button id="notificationBtn" class="icon-btn hidden" title="Thông báo cần GV xử lý" aria-label="Thông báo">🔔<span id="notificationBadge" class="notification-count hidden">0</span></button>
           <button id="profileBtn" class="profile-chip">
             <span id="profileAvatar" class="avatar">HS</span>
             <span><b id="profileName">Người dùng</b><small id="profileRole">Vai trò</small></span>

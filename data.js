@@ -7,16 +7,19 @@ const DemoData = (() => {
   const DOW = ["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6"];
 
   function iso(d){ return d.toISOString().slice(0,10); }
-  function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+  function addDays(d,n){ const x=new Date(d); x.setUTCDate(x.getUTCDate()+n); return x; }
   function buildWeeks(){
-    const start = new Date("2026-08-24T00:00:00");
-    const end = new Date("2027-05-31T00:00:00");
+    const start = new Date("2026-08-03T00:00:00Z");
+    const end = new Date("2027-05-31T00:00:00Z");
     const weeks=[]; let i=1, cursor=start;
+    const today=iso(new Date());
     while(cursor<=end){
       const friday=addDays(cursor,4);
+      const startDate=iso(cursor), endDate=iso(friday);
       weeks.push({
-        id:"w"+i, number:i, startDate:iso(cursor), endDate:iso(friday),
-        status:i===1?"open":"upcoming",
+        id:"w"+i, number:i, startDate, endDate,
+        status:startDate<=today&&endDate>=today?"open":(endDate<today?"locked":"upcoming"),
+        deadlineMode:"week_before_20",
         deadline:iso(addDays(cursor,-1))+"T20:00",
         note:""
       });
@@ -56,8 +59,9 @@ const DemoData = (() => {
     ];
     return {
       version:1,
-      settings:{className:"10A1",schoolYear:"2026–2027",announcement:"Chuẩn bị nội dung tự học trước 20:00 Chủ nhật hằng tuần.",teacherName:"Nguyễn Văn An"},
+      settings:{className:"10A1",schoolYear:"2026–2027",announcement:"Chuẩn bị nội dung tự học trước deadline của từng tuần/buổi.",teacherName:"Nguyễn Văn An",smartApprovalEnabled:true},
       users, weeks:buildWeeks(), periods:PERIODS, schedule, overrides:[], registrations:regs,
+      notifications:[],
       currentWeekId:"w1",
       audit:[]
     };
