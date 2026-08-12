@@ -26,6 +26,188 @@
     ]
   };
 
+  const OWL_QUOTE_SOURCE="https://www.tudiendanhngon.vn/danhngon/ds/strcats/180";
+  const OWL_QUOTES=[
+    {text:"“Trong cách học, phải lấy tự học làm cốt.”",author:"Hồ Chí Minh"},
+    {text:"“Học tập không bao giờ làm trí tuệ kiệt sức.”",author:"Leonardo da Vinci"}
+  ];
+  let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1;
+
+  function setupWiseOwl(){
+    if(owlReady)return;
+    const pet=$("#wiseOwlPet"), body=$("#owlBody"), speech=$("#owlSpeech"), closeBtn=$("#owlMuteBtn");
+    if(!pet||!body||!speech)return;
+    owlReady=true;
+
+    let raf=0, px=0, py=0;
+    const updateLook=()=>{
+      raf=0;
+      const r=body.getBoundingClientRect();
+      const cx=r.left+r.width/2, cy=r.top+r.height/2;
+      const dx=px-cx, dy=py-cy;
+      const len=Math.max(1,Math.hypot(dx,dy));
+      const max=4.3;
+      const x=Math.max(-max,Math.min(max,dx/len*max));
+      const y=Math.max(-max,Math.min(max,dy/len*max));
+      body.style.setProperty("--look-x",`${x.toFixed(2)}px`);
+      body.style.setProperty("--look-y",`${y.toFixed(2)}px`);
+      body.style.setProperty("--owl-tilt",`${Math.max(-7,Math.min(7,dx/70)).toFixed(2)}deg`);
+    };
+    document.addEventListener("pointermove",e=>{
+      if(e.pointerType==="touch")return;
+      px=e.clientX; py=e.clientY;
+      if(!raf)raf=requestAnimationFrame(updateLook);
+    },{passive:true});
+
+    body.addEventListener("click",()=>{
+      owlMessageCursor++;
+      showOwlMessage({preferQuote:owlMessageCursor%3===0,force:true});
+    });
+    closeBtn?.addEventListener("click",e=>{
+      e.stopPropagation();
+      speech.classList.add("hidden");
+      clearTimeout(owlHideTimer);
+    });
+
+    setInterval(()=>{
+      if(currentUser&&!document.hidden&&!modal.classList.contains("hidden"))return;
+      if(currentUser&&!document.hidden)showOwlMessage({preferQuote:true,quiet:true});
+    },95000);
+  }
+
+  function owlDeadlineTime(iso){
+    if(!iso)return Infinity;
+    const full=iso.length===16?`${iso}:00+07:00`:iso;
+    const t=new Date(full).getTime();
+    return Number.isFinite(t)?t:Infinity;
+  }
+
+  function owlContextMessages(){
+    if(!currentUser||!state)return [];
+    const messages=[];
+    const w=week();
+
+    if(currentUser.role==="teacher"){
+      const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
+      const aiPending=(state.registrations||[]).filter(r=>r.aiReviewStatus==="pending"||r.aiReviewStatus==="processing").length;
+      const manual=(state.registrations||[]).filter(r=>r.weekId===state.currentWeekId&&(r.status==="submitted"||r.status==="needs_revision")).length;
+      if(unread)messages.push({urgent:true,text:`🔔 Thầy/cô có ${unread} thông báo mới cần xem. Cú đã đánh dấu chuông ở góc trên.`});
+      if(aiPending)messages.push({text:`🤖 AI đang phân loại ${aiPending} đăng ký. Trường hợp chưa đủ chắc chắn sẽ tự chuyển sang thầy/cô.`});
+      if(manual)messages.push({urgent:true,text:`📋 Tuần ${w.number} còn ${manual} đăng ký cần giáo viên xử lý.`});
+    }else{
+      const mine=(state.registrations||[]).filter(r=>r.studentId===currentUser.id&&r.weekId===state.currentWeekId);
+      const needs=mine.filter(r=>r.status==="needs_revision").length;
+      const pending=mine.filter(r=>r.status==="submitted").length;
+      if(needs)messages.push({urgent:true,text:`📝 Bạn có ${needs} đăng ký được giáo viên yêu cầu chỉnh sửa. Hãy mở “Nhận xét của GV”.`});
+      if(pending)messages.push({text:`⏳ Bạn có ${pending} đăng ký đang chờ duyệt. Cú sẽ báo khi trạng thái thay đổi.`});
+
+      const slots=effectiveSchedule();
+      const missing=slots.filter(sl=>!regFor(currentUser.id,sl.dow,sl.period));
+      const candidates=missing.map(sl=>({
+        sl,
+        deadline:deadlineForSlot(w,sl.dow),
+        t:owlDeadlineTime(deadlineForSlot(w,sl.dow))
+      })).filter(x=>Number.isFinite(x.t)&&x.t>Date.now()).sort((a,b)=>a.t-b.t);
+
+      if(candidates.length){
+        const next=candidates[0];
+        const hours=(next.t-Date.now())/3600000;
+        const urgency=hours<=24;
+        messages.push({
+          urgent:urgency,
+          text:`${urgency?"⏰":"📅"} Tiết ${next.sl.period} ${DemoData.DOW[next.sl.dow]} chưa đăng ký. Hạn: ${fmtDeadline(next.deadline)}.`
+        });
+      }else if(missing.length&&w.status==="open"){
+        messages.push({urgent:true,text:`⚠️ Tuần ${w.number} còn ${missing.length} tiết của bạn chưa có nội dung đăng ký.`});
+      }
+
+      if(currentUser.role==="monitor"){
+        const st=statsForWeek();
+        if(st.missing>0)messages.push({text:`👥 Với vai trò cán sự, bạn có thể theo dõi lớp: hiện còn ${st.missing} lượt tự học chưa đăng ký.`});
+      }
+    }
+
+    return messages;
+  }
+
+  function showOwlMessage({preferQuote=false,force=false,quiet=false,text=null,urgent=false}={}){
+    if(!currentUser)return;
+    setupWiseOwl();
+    const pet=$("#wiseOwlPet"), speech=$("#owlSpeech"), textEl=$("#owlSpeechText"), source=$("#owlQuoteSource"), alertDot=$("#owlAlertDot");
+    if(!pet||!speech||!textEl)return;
+    pet.classList.remove("hidden");
+
+    let item=null, quote=false;
+    if(text){
+      item={text,urgent};
+    }else{
+      const context=owlContextMessages();
+      if(!preferQuote&&context.length){
+        item=context[owlMessageCursor%context.length];
+      }else{
+        const q=OWL_QUOTES[owlMessageCursor%OWL_QUOTES.length];
+        item={text:`📚 ${q.text} — ${q.author}`,urgent:false};
+        quote=true;
+      }
+    }
+
+    if(quiet&&!force&&item?.urgent)return;
+    textEl.textContent=item?.text||"Cú Thông Thái chúc bạn một buổi tự học hiệu quả.";
+    source?.classList.toggle("hidden",!quote);
+    if(source)source.href=OWL_QUOTE_SOURCE;
+    speech.classList.remove("hidden");
+    pet.classList.toggle("owl-alert",!!item?.urgent);
+    alertDot?.classList.toggle("hidden",!item?.urgent);
+
+    clearTimeout(owlHideTimer);
+    owlHideTimer=setTimeout(()=>{
+      speech.classList.add("hidden");
+      pet.classList.remove("owl-alert");
+    }, item?.urgent?12500:9000);
+  }
+
+  function setOwlThinking(on,message="🤖 Cú đang nhờ Groq AI đọc ngữ cảnh đăng ký của bạn..."){
+    const pet=$("#wiseOwlPet");
+    if(!pet)return;
+    pet.classList.toggle("owl-thinking",!!on);
+    if(on)showOwlMessage({text:message,force:true});
+  }
+
+  function refreshWiseOwl(){
+    if(!currentUser||!state){
+      $("#wiseOwlPet")?.classList.add("hidden");
+      return;
+    }
+    setupWiseOwl();
+    $("#wiseOwlPet")?.classList.remove("hidden");
+
+    let urgentCount=0;
+    if(currentUser.role==="teacher"){
+      urgentCount=(state.notifications||[]).filter(n=>!n.isRead).length;
+    }else{
+      urgentCount=(state.registrations||[]).filter(r=>
+        r.studentId===currentUser.id&&
+        r.weekId===state.currentWeekId&&
+        r.status==="needs_revision"
+      ).length;
+    }
+    $("#owlAlertDot")?.classList.toggle("hidden",urgentCount===0);
+
+    if(owlLastUrgentCount>=0&&urgentCount>owlLastUrgentCount){
+      setTimeout(()=>showOwlMessage({force:true}),500);
+    }
+    owlLastUrgentCount=urgentCount;
+
+    const greetKey=`wiseOwlGreeted:${currentUser.id}`;
+    if(!sessionStorage.getItem(greetKey)){
+      sessionStorage.setItem(greetKey,"1");
+      setTimeout(()=>showOwlMessage({
+        text:`🦉 Xin chào ${currentUser.name}! Cú Thông Thái sẽ nhắc deadline, thông báo và thỉnh thoảng kể bạn một câu danh ngôn.`,
+        force:true
+      }),700);
+    }
+  }
+
   function loadState(){
     try{ return JSON.parse(localStorage.getItem(KEY)) || DemoData.defaultState(); }
     catch(e){ return DemoData.defaultState(); }
@@ -168,15 +350,16 @@
   function statsForWeek(){
     const students=studentUsers(), slots=effectiveSchedule();
     const total=students.length*slots.length;
-    let submitted=0,approved=0,needs=0,autoApproved=0;
+    let submitted=0,approved=0,needs=0,autoApproved=0,aiApproved=0;
     students.forEach(s=>slots.forEach(sl=>{
       const r=regFor(s.id,sl.dow,sl.period);
       if(r && r.status!=="draft"){submitted++;}
       if(r?.status==="approved")approved++;
-      if(r?.status==="approved"&&r?.approvalSource==="auto_rule")autoApproved++;
+      if(r?.status==="approved"&&["auto_rule","ai"].includes(r?.approvalSource))autoApproved++;
+      if(r?.status==="approved"&&r?.approvalSource==="ai")aiApproved++;
       if(r?.status==="needs_revision")needs++;
     }));
-    return {students:students.length,slots:slots.length,total,submitted,approved,autoApproved,needs,missing:Math.max(0,total-submitted),rate:total?Math.round(submitted/total*100):0};
+    return {students:students.length,slots:slots.length,total,submitted,approved,autoApproved,aiApproved,needs,missing:Math.max(0,total-submitted),rate:total?Math.round(submitted/total*100):0};
   }
 
   function login(user){
@@ -188,7 +371,10 @@
     if(isProd){
       try{ await prod.signOut(); }catch(err){ console.error(err); }
     }else sessionStorage.removeItem("soTuHocUser");
-    currentUser=null; appView.classList.add("hidden"); loginView.classList.remove("hidden");
+    currentUser=null;
+    $("#wiseOwlPet")?.classList.add("hidden");
+    $("#owlSpeech")?.classList.add("hidden");
+    appView.classList.add("hidden"); loginView.classList.remove("hidden");
   }
   function findLogin(id){
     const q=id.trim().toLowerCase();
@@ -231,7 +417,12 @@
   }));
 
   function renderShell(){
-    if(!currentUser){ loginView.classList.remove("hidden"); appView.classList.add("hidden"); return; }
+    if(!currentUser){
+      loginView.classList.remove("hidden");
+      appView.classList.add("hidden");
+      $("#wiseOwlPet")?.classList.add("hidden");
+      return;
+    }
     loginView.classList.add("hidden"); appView.classList.remove("hidden");
     $("#profileName").textContent=currentUser.name; $("#profileRole").textContent=roleLabel[currentUser.role]; $("#profileAvatar").textContent=initials(currentUser.name);
     $("#sideNav").innerHTML=navs[currentUser.role].map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}"><span class="nav-icon">${n[1]}</span>${n[2]}</button>`).join("");
@@ -250,6 +441,8 @@
       notifBtn?.classList.add("hidden");
       notifBadge?.classList.add("hidden");
     }
+
+    refreshWiseOwl();
   }
   $("#globalWeekSelect").addEventListener("change",e=>{state.currentWeekId=e.target.value;saveState();render();});
   $("#profileBtn").addEventListener("click",()=>openModal("Tài khoản",`
@@ -355,7 +548,10 @@
       <div class="study-icon">${icon}</div>
       <div class="study-main"><h3>${DemoData.DOW[sl.dow]} · ${fmtDate(dateForDow(w,sl.dow))} · Tiết ${sl.period}</h3><p>🕘 ${pe.start} – ${pe.end}</p>
       <p class="slot-deadline ${deadlinePassed(w,sl.dow)?"expired":""}">⏰ Hạn: <b>${fmtDeadline(deadlineForSlot(w,sl.dow))}</b>${deadlinePassed(w,sl.dow)?" · Đã qua":""}</p>
-      <p><b>${r?esc(r.content):"Chưa đăng ký"}</b></p>${r?.note?`<p>${esc(r.note)}</p>`:""}${r?.teacherComment?`<p style="color:#7c3aed">💬 GV: ${esc(r.teacherComment)}</p>`:""}${r?.approvalSource==="auto_rule"?`<p class="tiny auto-approved-note">✨ Đã được duyệt nhanh tự động</p>`:""}</div>
+      <p><b>${r?esc(r.content):"Chưa đăng ký"}</b></p>${r?.note?`<p>${esc(r.note)}</p>`:""}${r?.teacherComment?`<p style="color:#7c3aed">💬 GV: ${esc(r.teacherComment)}</p>`:""}${r?.approvalSource==="auto_rule"?`<p class="tiny auto-approved-note">✨ Đã được duyệt nhanh theo quy tắc</p>`:""}
+      ${r?.approvalSource==="ai"?`<p class="tiny auto-approved-note">🤖 AI đã duyệt${r.aiConfidence==null?"":` · ${Math.round(r.aiConfidence*100)}%`}</p>`:""}
+      ${["pending","processing"].includes(r?.aiReviewStatus)?`<p class="tiny ai-review-badge">🤖 AI đang đánh giá...</p>`:""}
+      </div>
       <div class="study-actions">${statusBadge(r?.status||"missing")}<button class="btn ${r?"btn-ghost":"btn-primary"} reg-btn" data-dow="${sl.dow}" data-period="${sl.period}" ${noNewRegistration?"disabled":""}>${actionText}</button></div>
     </div>`;
   }
@@ -415,17 +611,53 @@
 
       try{
         await saveState();
+
+        if(status==="submitted" && isProd && rr.aiReviewStatus==="pending"){
+          setOwlThinking(true,"🤖 Cú Thông Thái đang nhờ Groq AI đọc ngữ cảnh đăng ký này...");
+          toast("AI đang đánh giá trường hợp chưa rõ...","success");
+          try{
+            await prod.requestAiReview(rr.id);
+            await refreshFromServer(false);
+            const fresh=state.registrations.find(x=>x.id===rr.id);
+            closeModal();
+            setOwlThinking(false);
+
+            if(fresh?.status==="approved"&&fresh?.approvalSource==="ai"){
+              const pct=fresh.aiConfidence==null?"":` (${Math.round(fresh.aiConfidence*100)}%)`;
+              toast(`AI đã duyệt${pct}: nội dung phù hợp cho tự học.`,"success");
+              showOwlMessage({text:`🤖 AI đã duyệt đăng ký này${pct}. ${fresh.aiReason||"Mục đích học tập đủ rõ."}`,force:true});
+            }else{
+              toast("AI chưa đủ chắc chắn — đã chuyển giáo viên duyệt.","success");
+              showOwlMessage({text:`🔔 AI chưa đủ chắc chắn nên Cú đã chuyển đăng ký này cho giáo viên xem.`,force:true});
+            }
+            render();
+            return;
+          }catch(aiErr){
+            console.error("AI review",aiErr);
+            setOwlThinking(false);
+            closeModal();
+            toast("Đã gửi đăng ký; AI tạm thời chưa phản hồi nên GV sẽ duyệt.","warn");
+            try{await refreshFromServer(false);}catch{}
+            render();
+            return;
+          }
+        }
+
         closeModal();
         if(status==="draft"){
           toast("Đã lưu nháp.","success");
         }else if(rr.status==="approved"&&rr.approvalSource==="auto_rule"){
-          toast("Đã gửi và được duyệt nhanh vì nội dung học tập phù hợp.","success");
+          toast("Đã gửi và được duyệt nhanh theo quy tắc.","success");
+          showOwlMessage({text:"✨ Cú đã kiểm tra: nội dung học tập đủ rõ nên được duyệt nhanh theo quy tắc.",force:true});
+        }else if(rr.status==="approved"&&rr.approvalSource==="ai"){
+          toast("Đã gửi và được AI duyệt.","success");
         }else{
           toast("Đã gửi. Nội dung này đang chờ giáo viên duyệt.","success");
         }
         render();
       }catch(err){
         console.error(err);
+        setOwlThinking(false);
         toast("Không lưu được đăng ký: "+(err.message||err),"warn");
       }
     };
@@ -473,7 +705,11 @@
     html+=`<div class="grid grid-5" style="margin-bottom:16px">${kpi("👥",st.students,"Thành viên")}${kpi("✨",st.autoApproved,"Duyệt nhanh")}${kpi("⌛",st.missing,"Chưa gửi")}${kpi("🔔",unread||pendingAll.length,"Cần GV xem")}${kpi("📈",st.rate+"%","Tỷ lệ hoàn thành")}</div>`;
     html+=`<div class="smart-approval-banner ${state.settings.smartApprovalEnabled===false?"off":"on"}">
       <div><b>${state.settings.smartApprovalEnabled===false?"⏸ Duyệt nhanh đang tắt":"✨ Duyệt nhanh đang bật"}</b>
-      <span>${state.settings.smartApprovalEnabled===false?"Mọi đăng ký gửi mới sẽ chờ GV duyệt.":"Nội dung học tập rõ ràng được tự duyệt; nội dung còn lại báo chuông cho GV."}</span></div>
+      <span>${state.settings.smartApprovalEnabled===false
+        ?"Mọi đăng ký gửi mới sẽ chờ GV duyệt."
+        :state.settings.aiReviewEnabled===false
+          ?"Rule rõ ràng được tự duyệt; trường hợp còn lại chuyển GV."
+          :`Rule xử lý trường hợp rõ; AI đọc trường hợp mơ hồ và chỉ tự duyệt từ ${Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100)}% tin cậy.`}</span></div>
       <button class="btn btn-ghost" data-route-settings="1">Cài đặt</button>
     </div>`;
     html+=`<div class="grid grid-2"><div class="card"><h3>🔔 Cần giáo viên xử lý</h3>${pending.length?pending.map(approvalItem).join(""):empty("✅","Không còn đăng ký chờ xử lý.")}</div>
@@ -485,7 +721,7 @@
   function approvalItem(r){
     const s=state.users.find(u=>u.id===r.studentId);
     return `<div class="approval-item manual-review-item"><div class="approval-content"><div class="person"><span class="avatar">${initials(s?.name||"?")}</span><div><b>${esc(s?.name||"")}</b><div class="tiny muted">${slotLabel(r.dow,r.period)}</div></div></div><p><b>${esc(r.content)}</b></p><p>${esc(r.note||"")}</p>
-      ${r.autoReviewReason?`<div class="review-reason">🧠 <b>Lý do cần GV xem:</b> ${esc(r.autoReviewReason)}</div>`:""}
+      ${(r.aiReason||r.autoReviewReason)?`<div class="review-reason">🧠 <b>Lý do cần GV xem:</b> ${esc(r.aiReason||r.autoReviewReason)}${r.aiConfidence==null?"":` <b>(${Math.round(r.aiConfidence*100)}%)</b>`}</div>`:""}
       ${r.teacherComment?`<p style="color:#7c3aed">💬 ${esc(r.teacherComment)}</p>`:""}</div>
       <div class="approval-actions">${statusBadge(r.status)}<button class="btn btn-success approve-btn" data-id="${r.id}">✓ Duyệt</button><button class="btn btn-warning revise-btn" data-id="${r.id}">↩ Yêu cầu sửa</button><button class="btn btn-ghost comment-btn" data-id="${r.id}">💬 Nhận xét</button><button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button></div></div>`;
   }
@@ -493,6 +729,37 @@
     content.querySelectorAll(".approve-btn").forEach(b=>b.onclick=()=>{const r=state.registrations.find(x=>x.id===b.dataset.id);if(r){r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);audit("Phê duyệt đăng ký",r.id);saveState();toast("Đã phê duyệt.","success");render();}});
     content.querySelectorAll(".revise-btn").forEach(b=>b.onclick=()=>teacherComment(b.dataset.id,true));
     content.querySelectorAll(".comment-btn").forEach(b=>b.onclick=()=>teacherComment(b.dataset.id,false));
+    content.querySelectorAll(".ai-wrong-btn").forEach(b=>b.onclick=()=>{
+      const r=state.registrations.find(x=>x.id===b.dataset.id);
+      if(!r)return;
+      const s=state.users.find(u=>u.id===r.studentId);
+      openModal("AI duyệt chưa đúng",`
+        <div class="callout warning">
+          <b>${esc(s?.name||"Học sinh")}</b> · ${slotLabel(r.dow,r.period)}<br>
+          ${esc(r.content)}
+        </div>
+        <form id="aiWrongForm">
+          <label>GV muốn học sinh chỉnh gì?
+            <textarea id="aiWrongComment" required placeholder="VD: Cần ghi rõ thiết bị được dùng để làm bài nào/môn nào."></textarea>
+          </label>
+          <button class="btn btn-warning btn-block" type="submit">Chuyển sang “Cần chỉnh sửa”</button>
+        </form>`);
+      $("#aiWrongForm").onsubmit=async e=>{
+        e.preventDefault();
+        r.teacherComment=$("#aiWrongComment").value.trim();
+        r.status="needs_revision";
+        r.approvalSource="manual";
+        markLocalNotificationReadByReg(r.id);
+        audit("GV sửa quyết định AI",r.id,r.teacherComment);
+        try{
+          await saveState();
+          closeModal();
+          toast("Đã hủy duyệt AI và yêu cầu học sinh chỉnh sửa.","success");
+          if(isProd)await refreshFromServer(false);else render();
+        }catch{}
+      };
+    });
+
     content.querySelectorAll(".delete-reg-btn").forEach(b=>b.onclick=()=>{
       const r=state.registrations.find(x=>x.id===b.dataset.id);
       if(!r) return;
@@ -512,13 +779,45 @@
   function approvalsPage(){
     const pending=state.registrations.filter(r=>r.weekId===state.currentWeekId&&(r.status==="submitted"||r.status==="needs_revision"));
     const allWeek=state.registrations.filter(r=>r.weekId===state.currentWeekId);
+
+    const sourceBadge=r=>{
+      if(r.approvalSource==="ai"){
+        const pct=r.aiConfidence==null?"":` ${Math.round(r.aiConfidence*100)}%`;
+        return `<span class="ai-review-badge">🤖 AI${pct}</span>`;
+      }
+      if(r.approvalSource==="auto_rule")return '<span class="auto-review-badge">✨ Rule</span>';
+      return '<span class="manual-review-badge">👤 GV</span>';
+    };
+
     const allTable=allWeek.length?`<div class="card" style="margin-top:16px"><h3>Tất cả đăng ký tuần ${week().number}</h3>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>Trạng thái</th><th>Cách duyệt</th><th>Thao tác</th></tr></thead><tbody>
-      ${allWeek.map(r=>{const s=state.users.find(u=>u.id===r.studentId);return `<tr><td>${esc(s?.name||"")}</td><td>${slotLabel(r.dow,r.period)}</td><td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div></td><td>${statusBadge(r.status)}</td><td>${r.approvalSource==="auto_rule"?'<span class="auto-review-badge">✨ Tự động</span>':'<span class="manual-review-badge">👤 GV</span>'}</td><td><button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button></td></tr>`}).join("")}
+      <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>Trạng thái</th><th>Cách duyệt</th><th>Thao tác</th></tr></thead><tbody>
+      ${allWeek.map(r=>{
+        const s=state.users.find(u=>u.id===r.studentId);
+        return `<tr>
+          <td>${esc(s?.name||"")}</td>
+          <td>${slotLabel(r.dow,r.period)}</td>
+          <td>
+            <b>${esc(r.content)}</b>
+            <div class="tiny muted">${esc(r.note||"")}</div>
+            ${r.approvalSource==="ai"&&r.aiReason?`<div class="ai-review-details">🤖 ${esc(r.aiReason)}</div>`:""}
+          </td>
+          <td>${statusBadge(r.status)}</td>
+          <td>${sourceBadge(r)}</td>
+          <td>
+            <div class="toolbar" style="gap:5px">
+              ${r.status==="approved"&&r.approvalSource==="ai"?`<button class="btn btn-warning ai-wrong-btn" data-id="${r.id}">⚠️ AI chưa đúng</button>`:""}
+              <button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join("")}
       </tbody></table></div></div>`:"";
+
     return head("Duyệt đăng ký",`${pending.length} đăng ký đang cần xử lý`,
       pending.length?`<button class="btn btn-success" id="approveAll">✓ Duyệt tất cả đang chờ</button>`:"")+
-      `<div class="card">${pending.length?pending.map(approvalItem).join(""):empty("🎉","Không có đăng ký cần xử lý.")}</div>`+allTable;
+      `<div class="card">${pending.length?pending.map(approvalItem).join(""):empty("🎉","Không có đăng ký cần xử lý.")}</div>`+
+      allTable;
   }
 
   function schedulePage(){
@@ -938,41 +1237,100 @@
   }
 
   function settingsPage(){
-    return head("Cài đặt","Cấu hình lớp học, thông báo và duyệt nhanh.")+`<div class="grid grid-2">
+    const threshold=Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100);
+    return head("Cài đặt","Cấu hình lớp học, duyệt nhanh và AI.")+`<div class="grid grid-2">
       <div class="card"><h3>Thông tin lớp</h3><form id="settingsForm" class="form-grid">
         <label>Tên lớp<input id="setClass" value="${esc(state.settings.className)}"></label>
         <label>Năm học<input id="setYear" value="${esc(state.settings.schoolYear)}"></label>
         <label style="grid-column:1/-1">Thông báo tuần<textarea id="setAnnouncement">${esc(state.settings.announcement)}</textarea></label>
+
         <div class="smart-approval-setting" style="grid-column:1/-1">
           <label class="toggle-row">
             <input id="smartApprovalEnabled" type="checkbox" ${state.settings.smartApprovalEnabled!==false?"checked":""}>
-            <span><b>✨ Duyệt nhanh thông minh</b><small>Tự duyệt nội dung học tập rõ ràng và việc dùng thiết bị điện tử cho mục đích học.</small></span>
+            <span>
+              <b>✨ Duyệt nhanh thông minh</b>
+              <small>Bật luồng Rule → AI → GV. Tắt mục này thì mọi đăng ký đều chờ GV.</small>
+            </span>
           </label>
-          <div class="callout" style="margin-top:10px">
-            <b>Nguyên tắc:</b> nội dung học tập rõ ràng → tự duyệt; thiết bị điện tử + mục đích học rõ ràng → tự duyệt;
-            giải trí/mạng xã hội, dùng thiết bị nhưng mục đích chưa rõ, hoặc nội dung mơ hồ → giữ <b>Chờ duyệt</b> và báo chuông cho GV.
+
+          <div class="ai-settings-card">
+            <label class="toggle-row">
+              <input id="aiReviewEnabled" type="checkbox" ${state.settings.aiReviewEnabled!==false?"checked":""}>
+              <span>
+                <b>🤖 Dùng AI cho trường hợp mơ hồ</b>
+                <small>Rule rõ ràng vẫn xử lý trước; AI chỉ nhận các câu mà rule chưa đủ chắc chắn.</small>
+              </span>
+            </label>
+
+            <div class="ai-threshold-row">
+              <span><b>Ngưỡng AI được tự duyệt</b><br><small>AI dưới ngưỡng này luôn chuyển GV.</small></span>
+              <span id="aiThresholdValue" class="ai-threshold-value">${threshold}%</span>
+              <input id="aiAutoApproveThreshold" type="range" min="80" max="99" step="1" value="${threshold}">
+            </div>
+
+            <div class="callout" style="margin-top:10px">
+              <b>Mặc định V7:</b> rule chặn giải trí/mạng xã hội; nội dung học tập cực rõ có thể được rule duyệt;
+              trường hợp còn lại gửi AI. AI chỉ tự duyệt nếu kết luận là <b>học tập</b> hoặc <b>dùng thiết bị cho học tập</b>
+              và độ tin cậy đạt ngưỡng trên. Nếu AI lỗi hoặc chưa chắc → <b>GV duyệt</b>.
+            </div>
+
+            <div class="tiny muted" style="margin-top:8px">
+              Model mặc định phía server: <b>openai/gpt-oss-120b trên Groq</b>. API key không nằm trong trình duyệt.
+            </div>
           </div>
         </div>
+
         <button class="btn btn-primary" style="grid-column:1/-1">Lưu cài đặt</button>
       </form></div>
-      <div class="card"><h3>Khung giờ chuẩn</h3><div class="table-wrap"><table class="data-table" style="min-width:0"><thead><tr><th>Tiết</th><th>Giờ học</th></tr></thead><tbody>${state.periods.map(p=>`<tr><td><b>Tiết ${p.n}</b></td><td>${p.start} – ${p.end}</td></tr>`).join("")}</tbody></table></div><div class="callout" style="margin-top:12px">Nghỉ 15 phút giữa tiết 2–3 và 7–8. Nghỉ trưa 11:30–13:15.</div></div>
-      </div>`;
+
+      <div class="card">
+        <h3>Khung giờ chuẩn</h3>
+        <div class="table-wrap"><table class="data-table" style="min-width:0">
+          <thead><tr><th>Tiết</th><th>Giờ học</th></tr></thead>
+          <tbody>${state.periods.map(p=>`<tr><td><b>Tiết ${p.n}</b></td><td>${p.start} – ${p.end}</td></tr>`).join("")}</tbody>
+        </table></div>
+        <div class="callout" style="margin-top:12px">Nghỉ 15 phút giữa tiết 2–3 và 7–8. Nghỉ trưa 11:30–13:15.</div>
+        <div class="callout" style="margin-top:12px">
+          🦉 <b>Cú Thông Thái</b> hoạt động cho HS, cán sự và GV: nhìn theo chuột, nhắc deadline/thông báo và đưa danh ngôn học tập.
+        </div>
+      </div>
+    </div>`;
   }
+
   function bindSettings(){
+    $("#aiAutoApproveThreshold")?.addEventListener("input",e=>{
+      $("#aiThresholdValue").textContent=`${e.target.value}%`;
+    });
+
     $("#settingsForm")?.addEventListener("submit",async e=>{
       e.preventDefault();
       state.settings.className=$("#setClass").value.trim();
       state.settings.schoolYear=$("#setYear").value.trim();
       state.settings.announcement=$("#setAnnouncement").value.trim();
       state.settings.smartApprovalEnabled=$("#smartApprovalEnabled").checked;
-      state.audit.unshift({at:new Date().toISOString(),userId:currentUser?.id,action:"Cập nhật cài đặt",entityId:"settings",detail:""});
+      state.settings.aiReviewEnabled=$("#aiReviewEnabled").checked;
+      state.settings.aiAutoApproveThreshold=Number($("#aiAutoApproveThreshold").value)/100;
+
+      state.audit.unshift({
+        at:new Date().toISOString(),userId:currentUser?.id,
+        action:"Cập nhật cài đặt",entityId:"settings",
+        detail:`AI=${state.settings.aiReviewEnabled}; threshold=${state.settings.aiAutoApproveThreshold}`
+      });
+
       try{
         await saveState();
-        toast("Đã lưu cài đặt duyệt nhanh.","success");
+        toast("Đã lưu cài đặt Rule + AI.","success");
+        showOwlMessage({
+          text:state.settings.aiReviewEnabled
+            ? `🤖 AI review đang bật với ngưỡng tự duyệt ${Math.round(state.settings.aiAutoApproveThreshold*100)}%.`
+            : "👤 AI review đang tắt; các trường hợp rule không tự duyệt sẽ chuyển giáo viên.",
+          force:true
+        });
         if(isProd)await refreshFromServer(false);else{renderShell();render();}
       }catch{}
     });
   }
+
   function empty(icon,text){return `<div class="empty"><img class="empty-image" src="assets/images/empty-state.svg" alt=""><div class="tiny muted">${icon}</div><b>${text}</b></div>`;}
 
   function render(){

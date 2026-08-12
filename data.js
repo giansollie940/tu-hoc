@@ -59,7 +59,7 @@ const DemoData = (() => {
     ];
     return {
       version:1,
-      settings:{className:"10A1",schoolYear:"2026–2027",announcement:"Chuẩn bị nội dung tự học trước deadline của từng tuần/buổi.",teacherName:"Nguyễn Văn An",smartApprovalEnabled:true},
+      settings:{className:"10A1",schoolYear:"2026–2027",announcement:"Chuẩn bị nội dung tự học trước deadline của từng tuần/buổi.",teacherName:"Nguyễn Văn An",smartApprovalEnabled:true,aiReviewEnabled:true,aiAutoApproveThreshold:0.90},
       users, weeks:buildWeeks(), periods:PERIODS, schedule, overrides:[], registrations:regs,
       notifications:[],
       currentWeekId:"w1",

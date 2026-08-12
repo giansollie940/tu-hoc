@@ -191,6 +191,16 @@
     return {ok:true,currentWeekNumber:chosen?.week_number||1,createdWeeks:newRows.length};
   }
 
+  async function requestAiReview(registrationId){
+    const sb=requireClient();
+    const {data,error}=await sb.functions.invoke("ai-review-registration",{
+      body:{registrationId}
+    });
+    if(error) throw error;
+    if(!data?.ok) throw new Error(data?.error||"AI không xử lý được đăng ký.");
+    return data;
+  }
+
   async function markNotificationsRead(ids){
     const list=(ids||[]).filter(Boolean);
     if(!list.length) return;
@@ -239,6 +249,14 @@
       teacherComment:r.teacher_comment || "",
       approvalSource:r.approval_source || "manual",
       autoReviewReason:r.auto_review_reason || "",
+      aiReviewStatus:r.ai_review_status || "not_needed",
+      aiDecision:r.ai_decision || "",
+      aiCategory:r.ai_category || "",
+      aiConfidence:r.ai_confidence==null?null:Number(r.ai_confidence),
+      aiReason:r.ai_reason || "",
+      aiModel:r.ai_model || "",
+      aiReviewedAt:r.ai_reviewed_at || null,
+      aiReviewCount:Number(r.ai_review_count||0),
       updatedAt:r.updated_at ? new Date(r.updated_at).getTime() : Date.now(),
       approvedAt:r.approved_at ? new Date(r.approved_at).getTime() : null
     };
@@ -342,7 +360,9 @@
         schoolYear: activeYear?.name || "",
         announcement: settingsObj.announcement || "Chuẩn bị nội dung tự học trước hạn.",
         teacherName: settingsObj.teacher_name || "",
-        smartApprovalEnabled: settingsObj.smart_approval_enabled !== false
+        smartApprovalEnabled: settingsObj.smart_approval_enabled !== false,
+        aiReviewEnabled: settingsObj.ai_review_enabled !== false,
+        aiAutoApproveThreshold: Math.max(0.50,Math.min(0.99,Number(settingsObj.ai_auto_approve_threshold ?? 0.90)))
       },
       users:(profilesRes.data || []).map(mapProfile),
       weeks,
@@ -483,7 +503,9 @@
           {key:"class_name",value:state.settings.className},
           {key:"announcement",value:state.settings.announcement},
           {key:"teacher_name",value:state.settings.teacherName||currentUser.name},
-          {key:"smart_approval_enabled",value:state.settings.smartApprovalEnabled!==false}
+          {key:"smart_approval_enabled",value:state.settings.smartApprovalEnabled!==false},
+          {key:"ai_review_enabled",value:state.settings.aiReviewEnabled!==false},
+          {key:"ai_auto_approve_threshold",value:Number(state.settings.aiAutoApproveThreshold||0.90)}
         ];
         const { error }=await sb.from("app_settings").upsert(rows,{onConflict:"key"});
         if(error) throw error;
@@ -508,7 +530,7 @@
   window.SupabaseService={
     enabled,init,signInCode,signOut,authUser,loadState,syncState,resetSnapshot,
     codeToEmail,changeOwnPassword,teacherResetPassword,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
-    teacherRebaseWeeks,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
+    teacherRebaseWeeks,requestAiReview,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
     get client(){return client;}
   };
 })();
