@@ -67,6 +67,16 @@
     return data;
   }
 
+  async function teacherDeleteUser(userId,confirmCode){
+    const sb=requireClient();
+    const {data,error}=await sb.functions.invoke("admin-delete-user",{
+      body:{userId,confirmCode:String(confirmCode||"").trim().toUpperCase()}
+    });
+    if(error) throw error;
+    if(!data?.ok) throw new Error(data?.error||"Không xóa được tài khoản.");
+    return data;
+  }
+
   async function teacherUpdateUser(userId,changes){
     const sb=requireClient();
     const payload={
@@ -497,7 +507,7 @@
 
   window.SupabaseService={
     enabled,init,signInCode,signOut,authUser,loadState,syncState,resetSnapshot,
-    codeToEmail,changeOwnPassword,teacherResetPassword,teacherUpdateUser,teacherCreateUser,
+    codeToEmail,changeOwnPassword,teacherResetPassword,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
     teacherRebaseWeeks,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
     get client(){return client;}
   };

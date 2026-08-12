@@ -538,3 +538,21 @@ input:focus,select:focus,textarea:focus{
 .slot-deadline.expired{background:#ffe8ec;color:#a9344b!important;border-color:#fecdd3}
 .study-card.closed-slot{opacity:.78;background:linear-gradient(135deg,#f8fafc,#fff)}
 .reg-btn:disabled{cursor:not-allowed;opacity:.58;transform:none!important;filter:none!important}
+
+
+/* V6 — delete account */
+.danger-zone-card{
+  text-align:center;
+  padding:4px;
+}
+.danger-zone-icon{
+  font-size:46px;
+  margin-bottom:4px;
+}
+.danger-zone-card .callout{
+  text-align:left;
+  margin:12px 0;
+}
+.danger-zone-card form{
+  text-align:left;
+}

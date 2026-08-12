@@ -689,7 +689,7 @@
   function weekStatus(x){return {open:"🟢 Đang mở",locked:"🔒 Đã khóa",upcoming:"🕒 Sắp tới",holiday:"🏖️ Nghỉ"}[x]||x;}
 
   function studentsPage(){
-    const rows=state.users.filter(u=>u.role!=="teacher").map(u=>`
+    const rows=state.users.filter(u=>u.role!=="teacher"&&!String(u.code||"").startsWith("__deleted__")).map(u=>`
       <tr>
         <td><b>${esc(u.code)}</b></td>
         <td><div class="person"><span class="avatar">${initials(u.name)}</span><b>${esc(u.name)}</b></div></td>
@@ -698,7 +698,7 @@
         <td>
           <div class="toolbar" style="gap:6px">
             <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">✏️ Sửa tài khoản</button>
-            ${isProd?`<button class="btn btn-ghost reset-password-btn" data-id="${u.id}">🔑 Đặt lại MK</button>`:""}
+            ${isProd?`<button class="btn btn-ghost reset-password-btn" data-id="${u.id}">🔑 Đặt lại MK</button><button class="btn btn-danger delete-user-btn" data-id="${u.id}">🗑 Xóa tài khoản</button>`:`<button class="btn btn-danger delete-user-btn" data-id="${u.id}">🗑 Xóa tài khoản</button>`}
           </div>
         </td>
       </tr>`).join("");
@@ -707,7 +707,7 @@
       `<button class="btn btn-primary glossy-action" id="addStudentBtn">➕ Thêm học sinh</button>`)+
       `<div class="card">
         <div class="callout" style="margin-bottom:12px">
-          Khi đổi <b>mã đăng nhập</b>, hệ thống sẽ đổi đồng thời định danh Auth nội bộ. Học sinh dùng mã mới từ lần đăng nhập tiếp theo.
+          Khi đổi <b>mã đăng nhập</b>, hệ thống sẽ đổi đồng thời định danh Auth nội bộ. Nút <b>Xóa tài khoản</b> sẽ vô hiệu hóa đăng nhập nhưng vẫn giữ lịch sử tự học của HS.
         </div>
         <div class="table-wrap">
           <table class="data-table">
@@ -843,6 +843,55 @@
           }
         }catch(err){
           console.error(err);toast("Không cập nhật được tài khoản: "+(err.message||err),"warn");
+        }
+      };
+    }));
+
+    content.querySelectorAll(".delete-user-btn").forEach(btn=>btn.addEventListener("click",()=>{
+      const u=state.users.find(x=>x.id===btn.dataset.id); if(!u)return;
+      openModal("Xóa tài khoản học sinh",`
+        <div class="danger-zone-card">
+          <div class="danger-zone-icon">🗑️</div>
+          <h3>${esc(u.name)}</h3>
+          <p>Mã đăng nhập: <b>${esc(u.code)}</b></p>
+          <div class="callout warning">
+            <b>Thao tác này không thể hoàn tác.</b><br>
+            Tài khoản đăng nhập sẽ bị xóa/không thể dùng lại, nhưng lịch sử đăng ký tự học của học sinh vẫn được giữ để GV tra cứu.
+            Mã <b>${esc(u.code)}</b> sẽ được giải phóng để có thể cấp lại cho tài khoản mới.
+          </div>
+          <form id="deleteUserForm">
+            <label>Nhập lại mã <b>${esc(u.code)}</b> để xác nhận
+              <input id="deleteUserConfirmCode" autocomplete="off" required placeholder="${esc(u.code)}">
+            </label>
+            <div class="toolbar">
+              <button class="btn btn-ghost" type="button" id="cancelDeleteUser">Hủy</button>
+              <button class="btn btn-danger right" type="submit">Xóa tài khoản</button>
+            </div>
+          </form>
+        </div>`);
+      $("#cancelDeleteUser").onclick=closeModal;
+      $("#deleteUserForm").onsubmit=async e=>{
+        e.preventDefault();
+        const confirmCode=$("#deleteUserConfirmCode").value.trim().toUpperCase();
+        if(confirmCode!==String(u.code||"").toUpperCase()){
+          toast("Mã xác nhận chưa đúng.","warn");return;
+        }
+        try{
+          if(isProd){
+            await prod.teacherDeleteUser(u.id,confirmCode);
+            closeModal();
+            toast(`Đã xóa tài khoản ${u.code}; lịch sử được giữ lại.`,"success");
+            await refreshFromServer(false);
+          }else{
+            const oldCode=u.code;
+            u.active=false;
+            u.code=`__deleted__${Date.now()}__${oldCode}`;
+            audit("Xóa tài khoản demo",u.id,oldCode);
+            await saveState();
+            closeModal();toast("Đã xóa tài khoản demo; lịch sử được giữ.","success");render();
+          }
+        }catch(err){
+          console.error(err);toast("Không xóa được tài khoản: "+(err.message||err),"warn");
         }
       };
     }));
