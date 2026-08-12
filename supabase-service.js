@@ -379,28 +379,20 @@
     const { data:profile, error:profileErr } = await sb.from("profiles").select(safeProfileColumns).eq("id",user.id).single();
     if (profileErr) throw profileErr;
 
-    // Danh bạ an toàn:
-    // - HS/cán sự: đọc class_members như cũ.
-    // - GV: gọi Edge Function server-side để có thể suy ra login code từ Auth email
-    //   khi profiles.student_code còn trống. Frontend KHÔNG nhận email Auth.
-    const membersQuery = profile.role==="teacher"
-      ? teacherListUsers().then(result=>({
-          data:(result.users||[]).map(u=>({
-            id:u.id,
-            student_code:u.code||"",
-            full_name:u.fullName||"",
-            role:u.role,
-            class_name:u.className||profile.class_name||"",
-            active:u.active!==false
-          })),
-          error:null
-        })).catch(error=>({data:null,error}))
-      : sb.from("class_members").select("*").order("full_name");
+    // V8.1.5:
+    // class_members tiếp tục là nguồn CHÍNH cho tên, vai trò, lớp và trạng thái.
+    // admin-list-users chỉ bổ sung mã đăng nhập từ Auth email cho GV.
+    // Nhờ vậy tên HS không bị mất nếu Auth metadata/fullName trống.
+    const membersQuery = sb.from("class_members").select("*").order("full_name");
+    const loginCodesQuery = profile.role==="teacher"
+      ? teacherListUsers().catch(error=>({ok:false,users:[],error}))
+      : Promise.resolve({ok:true,users:[]});
 
     const [
-      profilesRes, yearsRes, periodsRes, scheduleRes, overridesRes, regsRes, settingsRes, notificationsRes
+      profilesRes, loginCodesRes, yearsRes, periodsRes, scheduleRes, overridesRes, regsRes, settingsRes, notificationsRes
     ] = await Promise.all([
       membersQuery,
+      loginCodesQuery,
       sb.from("school_years").select("*").order("start_date",{ascending:false}),
       sb.from("periods").select("*").order("period_number"),
       sb.from("study_schedule").select("*").eq("is_study_period",true),
@@ -413,6 +405,10 @@
     ]);
     for (const r of [profilesRes,yearsRes,periodsRes,scheduleRes,overridesRes,regsRes,settingsRes,notificationsRes]){
       if (r.error) throw r.error;
+    }
+
+    if(profile.role==="teacher" && loginCodesRes?.error){
+      console.warn("Không tải được mã đăng nhập từ Auth; vẫn giữ danh sách tên HS từ class_members.",loginCodesRes.error);
     }
 
     const activeYear = yearsRes.data.find(y=>y.is_active) || yearsRes.data[0];
@@ -439,7 +435,20 @@
         aiReviewEnabled: settingsObj.ai_review_enabled !== false,
         aiAutoApproveThreshold: Math.max(0.50,Math.min(0.99,Number(settingsObj.ai_auto_approve_threshold ?? 0.90)))
       },
-      users:(profilesRes.data || []).map(mapProfile),
+      users:(()=>{
+        const codeById=new Map(
+          (loginCodesRes?.users||[])
+            .filter(u=>u?.id)
+            .map(u=>[u.id,String(u.code||"").trim().toUpperCase()])
+        );
+
+        return (profilesRes.data||[]).map(p=>{
+          const mapped=mapProfile(p);
+          const derivedCode=codeById.get(p.id);
+          if(derivedCode) mapped.code=derivedCode;
+          return mapped;
+        });
+      })(),
       weeks,
       periods:(periodsRes.data || []).map(p=>({
         n:p.period_number,start:String(p.start_time).slice(0,5),end:String(p.end_time).slice(0,5)
