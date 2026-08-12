@@ -14,24 +14,58 @@
   const statusLabel={approved:"Đã duyệt",submitted:"Chờ duyệt",needs_revision:"Cần chỉnh sửa",draft:"Bản nháp",missing:"Chưa đăng ký"};
   const navs={
     student:[
-      ["dashboard","🏠","Trang chủ"],["register","📝","Đăng ký tự học"],["history","🕘","Lịch sử của tôi"],["comments","💬","Nhận xét của GV"]
+      ["dashboard","🌟","Trang chủ"],["register","🪄","Đăng ký tự học"],["history","📚","Lịch sử của tôi"],["comments","💎","Nhận xét của GV"]
     ],
     monitor:[
-      ["dashboard","🏠","Tổng quan"],["register","📝","Đăng ký của tôi"],["class","👥","Theo dõi cả lớp"],
-      ["missing","⚠️","Danh sách thiếu"],["history","🕘","Lịch sử của tôi"],["comments","💬","Nhận xét của GV"]
+      ["dashboard","🌈","Tổng quan"],["register","✨","Đăng ký của tôi"],["class","🫶","Theo dõi cả lớp"],
+      ["missing","🚨","Danh sách thiếu"],["history","📚","Lịch sử của tôi"],["comments","💎","Nhận xét của GV"]
     ],
     teacher:[
-      ["dashboard","▦","Dashboard"],["approvals","✅","Duyệt đăng ký"],["class","👥","Theo dõi cả lớp"],["schedule","📅","TKB tự học"],
-      ["weeks","🗓️","Quản lý tuần"],["students","🎓","Quản lý học sinh"],["stats","📊","Thống kê"],["settings","⚙️","Cài đặt"]
+      ["dashboard","🌠","Dashboard"],["approvals","🪄","Duyệt đăng ký"],["class","🫶","Theo dõi cả lớp"],["schedule","🗓️","TKB tự học"],
+      ["weeks","📆","Quản lý tuần"],["students","🧑‍🎓","Quản lý học sinh"],["stats","📈","Thống kê"],["settings","🦄","Cài đặt"]
     ]
   };
 
   const OWL_QUOTE_SOURCE="https://www.tudiendanhngon.vn/danhngon/ds/strcats/180";
   const OWL_QUOTES=[
-    {text:"“Trong cách học, phải lấy tự học làm cốt.”",author:"Hồ Chí Minh"},
-    {text:"“Học tập không bao giờ làm trí tuệ kiệt sức.”",author:"Leonardo da Vinci"}
+    {text:"Hãy xây dựng niềm đam mê học tập. Nếu bạn làm được, bạn sẽ không ngừng tiến bộ.",author:"Anthony J. D'Angelo"},
+    {text:"Tôi học được rằng chìa khóa dẫn đến sự khôn ngoan là khiêm tốn, bởi vì đó là trạng thái cho phép bạn có thể học hỏi và thay đổi.",author:"Joseph K. Chan"},
+    {text:"Một số người học hỏi nhanh hơn người khác đôi chút. Học nhanh thì tốt, nhưng học từ tốn cũng hay.",author:"James Agee"},
+    {text:"Học từ ngày hôm qua, sống ngày hôm nay, hi vọng cho ngày mai. Điều quan trọng nhất là không ngừng đặt câu hỏi.",author:"Albert Einstein"},
+    {text:"Chuyến phiêu lưu của đời là học hỏi. Mục đích của đời là trưởng thành.",author:"William Arthur Ward"},
+    {text:"Hãy học khi người khác ngủ; lao động khi người khác lười nhác; chuẩn bị khi người khác chơi bời; và có giấc mơ khi người khác chỉ ao ước.",author:"William Arthur Ward"},
+    {text:"Kẻ ngu dốt có học ngu dốt hơn người vô học nhiều.",author:"Benjamin Franklin"},
+    {text:"Trong cách học, phải lấy tự học làm cốt.",author:"Hồ Chí Minh"},
+    {text:"Đầu tư vào tri thức đem lại lợi nhuận cao nhất.",author:"Benjamin Franklin"},
+    {text:"Nếu ta không gieo trồng tri thức khi còn trẻ, nó sẽ không cho ta bóng râm khi ta về già.",author:"Lãnh chúa Chesterfield"},
+    {text:"Sự tò mò là ngọn bấc trong cây nến học hỏi.",author:"William Arthur Ward"},
+    {text:"Lạc thú lớn nhất trong mọi lạc thú là học hỏi.",author:"Aristotle"},
+    {text:"Tất cả chúng ta đều là người mới học. Chỉ có người chết mới không còn gì để học.",author:"Khuyết danh"},
+    {text:"Qua tìm kiếm và vấp váp mà chúng ta học hỏi.",author:"Johann Wolfgang von Goethe"},
+    {text:"Không phải là tri thức, mà chính sự học mới đem lại niềm vui lớn nhất.",author:"Carl Friedrich Gauss"},
+    {text:"Ngọc không mài dũa thì không thể trở thành khí dụng; người ta không học thì không hiểu được lẽ phải.",author:"Tam Tự Kinh"},
+    {text:"Học hỏi trong tuổi trẻ sẽ đánh đuổi cái không tốt của tuổi già.",author:"Leonardo da Vinci"},
+    {text:"Thật sai lầm khi nghĩ rằng một khi rời khỏi trường học, bạn không bao giờ cần học thêm điều mới nữa.",author:"Sophia Loren"}
   ];
-  let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1;
+  let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1, owlQuoteBag=[];
+
+  function shuffleOwlQuotes(list){
+    const arr=[...list];
+    for(let i=arr.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    return arr;
+  }
+
+  function nextOwlQuote(){
+    if(!owlQuoteBag.length) owlQuoteBag=shuffleOwlQuotes(OWL_QUOTES);
+    const next=owlQuoteBag.shift() || OWL_QUOTES[0];
+    if(owlQuoteBag.length && owlQuoteBag[0]?.text===next?.text){
+      owlQuoteBag=shuffleOwlQuotes(owlQuoteBag);
+    }
+    return next;
+  }
 
   function setupWiseOwl(){
     if(owlReady)return;
@@ -145,7 +179,7 @@
       if(!preferQuote&&context.length){
         item=context[owlMessageCursor%context.length];
       }else{
-        const q=OWL_QUOTES[owlMessageCursor%OWL_QUOTES.length];
+        const q=nextOwlQuote();
         item={text:`📚 ${q.text} — ${q.author}`,urgent:false};
         quote=true;
       }
@@ -331,7 +365,18 @@
   }
   function period(n){ return state.periods.find(p=>p.n===Number(n)); }
   function slotLabel(dow,p){ const pe=period(p); return `${DemoData.DOW[dow]} · Tiết ${p}${pe?` (${pe.start}–${pe.end})`:""}`; }
-  function studentUsers(){ return state.users.filter(u=>u.active && (u.role==="student"||u.role==="monitor")); }
+  function sortKeyCode(code=""){
+    return String(code||"").toUpperCase().match(/[A-Z]+|\d+/g)?.map(part=>/^\d+$/.test(part)?part.padStart(8,"0"):part).join("|")
+      || String(code||"").toUpperCase();
+  }
+  function compareByCode(a,b){
+    return sortKeyCode(a?.code).localeCompare(sortKeyCode(b?.code),undefined,{numeric:true,sensitivity:"base"});
+  }
+  function studentUsers(){
+    return state.users
+      .filter(u=>u.active && (u.role==="student"||u.role==="monitor"))
+      .sort(compareByCode);
+  }
   function initials(name){ return name.split(" ").slice(-2).map(x=>x[0]).join("").toUpperCase(); }
   function statusBadge(status){ return `<span class="status ${status||"missing"}">${statusLabel[status]||"Chưa đăng ký"}</span>`; }
   function toast(msg,type=""){ const el=document.createElement("div"); el.className=`toast ${type}`; el.textContent=msg; $("#toastHost").appendChild(el); setTimeout(()=>el.remove(),2800); }
@@ -988,26 +1033,87 @@
   function weekStatus(x){return {open:"🟢 Đang mở",locked:"🔒 Đã khóa",upcoming:"🕒 Sắp tới",holiday:"🏖️ Nghỉ"}[x]||x;}
 
   function studentsPage(){
-    const rows=state.users.filter(u=>u.role!=="teacher"&&!String(u.code||"").startsWith("__deleted__")).map(u=>`
+    state.studentsUi=state.studentsUi||{query:"",role:"all",status:"all"};
+    const ui=state.studentsUi;
+    const allUsers=state.users
+      .filter(u=>u.role!=="teacher" && !String(u.code||"").startsWith("__deleted__"))
+      .sort(compareByCode);
+
+    const q=(ui.query||"").trim().toLowerCase();
+    const filtered=allUsers.filter(u=>{
+      const hitText=!q || String(u.code||"").toLowerCase().includes(q) || String(u.name||"").toLowerCase().includes(q);
+      const hitRole=ui.role==="all" || u.role===ui.role;
+      const hitStatus=ui.status==="all" || (ui.status==="active"?!!u.active:!u.active);
+      return hitText && hitRole && hitStatus;
+    });
+
+    const countStudent=allUsers.filter(u=>u.role==="student").length;
+    const countMonitor=allUsers.filter(u=>u.role==="monitor").length;
+    const countLocked=allUsers.filter(u=>!u.active).length;
+
+    const rows=filtered.map(u=>`
       <tr>
-        <td><b>${esc(u.code)}</b></td>
+        <td>
+          <div class="code-cell">
+            <b class="code-badge">${esc(u.code)}</b>
+            <button class="mini-icon-btn copy-code-btn" data-code="${esc(u.code)}" title="Sao chép mã đăng nhập">📋</button>
+          </div>
+        </td>
         <td><div class="person"><span class="avatar">${initials(u.name)}</span><b>${esc(u.name)}</b></div></td>
         <td>${roleLabel[u.role]||esc(u.role)}</td>
         <td>${u.active?'<span class="status approved">Hoạt động</span>':'<span class="status missing">Đã khóa</span>'}</td>
         <td>
-          <div class="toolbar" style="gap:6px">
+          <div class="toolbar" style="gap:6px;flex-wrap:wrap">
             <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">✏️ Sửa tài khoản</button>
-            ${isProd?`<button class="btn btn-ghost reset-password-btn" data-id="${u.id}">🔑 Đặt lại MK</button><button class="btn btn-danger delete-user-btn" data-id="${u.id}">🗑 Xóa tài khoản</button>`:`<button class="btn btn-danger delete-user-btn" data-id="${u.id}">🗑 Xóa tài khoản</button>`}
+            ${isProd?`<button class="btn btn-ghost reset-password-btn" data-id="${u.id}">🔐 Đặt lại mật khẩu</button>`:""}
+            ${isProd?`<button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">🗑 Xóa tài khoản</button>`:""}
           </div>
         </td>
-      </tr>`).join("");
+      </tr>`).join("") || `<tr><td colspan="5" class="center muted" style="padding:18px">Không có học sinh phù hợp bộ lọc hiện tại.</td></tr>`;
 
-    return head("Quản lý học sinh","Thêm mới, sửa mã đăng nhập, họ tên, vai trò, trạng thái và mật khẩu.",
-      `<button class="btn btn-primary glossy-action" id="addStudentBtn">➕ Thêm học sinh</button>`)+
+    return head(
+      "Quản lý học sinh",
+      "Bản 8.1: sắp theo mã đăng nhập, tìm kiếm nhanh, lọc theo vai trò/trạng thái và sao chép mã chỉ với 1 chạm.",
+      `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary glossy-action" id="addStudentBtn">🌟 Thêm học sinh</button>
+      </div>`
+    )+
       `<div class="card">
         <div class="callout" style="margin-bottom:12px">
-          Khi đổi <b>mã đăng nhập</b>, hệ thống sẽ đổi đồng thời định danh Auth nội bộ. Nút <b>Xóa tài khoản</b> sẽ vô hiệu hóa đăng nhập nhưng vẫn giữ lịch sử tự học của HS.
+          Khi đổi <b>mã đăng nhập</b>, hệ thống sẽ đổi đồng thời thông tin đăng nhập của HS. Nếu chỉ đổi <b>vai trò / trạng thái / họ tên</b> thì không cần nhập lại mã. <b>Khóa tài khoản</b> sẽ vô hiệu hóa đăng nhập nhưng vẫn giữ lịch sử tự học của HS.
         </div>
+
+        <div class="summary-pills">
+          <span class="summary-pill">👨‍🎓 Học sinh: <b>${countStudent}</b></span>
+          <span class="summary-pill">💼 Cán sự: <b>${countMonitor}</b></span>
+          <span class="summary-pill">🔒 Đã khóa: <b>${countLocked}</b></span>
+          <span class="summary-pill">📋 Đang hiển thị: <b>${filtered.length}/${allUsers.length}</b></span>
+        </div>
+
+        <div class="students-toolbar">
+          <label class="search-box">
+            <span>🔎</span>
+            <input id="studentSearch" value="${esc(ui.query||"")}" placeholder="Tìm theo mã hoặc họ tên">
+          </label>
+          <label>
+            Vai trò
+            <select id="studentRoleFilter">
+              <option value="all" ${ui.role==="all"?"selected":""}>Tất cả</option>
+              <option value="student" ${ui.role==="student"?"selected":""}>Học sinh</option>
+              <option value="monitor" ${ui.role==="monitor"?"selected":""}>Cán sự lớp</option>
+            </select>
+          </label>
+          <label>
+            Trạng thái
+            <select id="studentStatusFilter">
+              <option value="all" ${ui.status==="all"?"selected":""}>Tất cả</option>
+              <option value="active" ${ui.status==="active"?"selected":""}>Đang hoạt động</option>
+              <option value="locked" ${ui.status==="locked"?"selected":""}>Đã khóa</option>
+            </select>
+          </label>
+          <button class="btn btn-ghost" id="clearStudentFilters">🫧 Xóa lọc</button>
+        </div>
+
         <div class="table-wrap">
           <table class="data-table">
             <thead><tr><th>Mã đăng nhập</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
@@ -1018,6 +1124,41 @@
   }
 
   function bindStudents(){
+    state.studentsUi=state.studentsUi||{query:"",role:"all",status:"all"};
+
+    $("#studentSearch")?.addEventListener("input",e=>{
+      state.studentsUi.query=e.target.value;
+      render();
+    });
+    $("#studentRoleFilter")?.addEventListener("change",e=>{
+      state.studentsUi.role=e.target.value;
+      render();
+    });
+    $("#studentStatusFilter")?.addEventListener("change",e=>{
+      state.studentsUi.status=e.target.value;
+      render();
+    });
+    $("#clearStudentFilters")?.addEventListener("click",()=>{
+      state.studentsUi={query:"",role:"all",status:"all"};
+      render();
+    });
+    content.querySelectorAll(".copy-code-btn").forEach(btn=>btn.addEventListener("click",async()=>{
+      const code=btn.dataset.code||"";
+      try{
+        if(navigator.clipboard?.writeText){
+          await navigator.clipboard.writeText(code);
+        }else{
+          const tmp=document.createElement("input");
+          tmp.value=code; document.body.appendChild(tmp); tmp.select();
+          document.execCommand("copy"); tmp.remove();
+        }
+        toast(`Đã sao chép mã ${code}.`,"success");
+      }catch(err){
+        console.error(err);
+        toast("Không sao chép được mã đăng nhập.","warn");
+      }
+    }));
+
     $("#addStudentBtn")?.addEventListener("click",()=>{
       openModal("Thêm học sinh",`
         <form id="addStudentForm">
@@ -1092,10 +1233,19 @@
       openModal("Sửa tài khoản học sinh",`
         <form id="editUserForm">
           <div class="callout">Mã hiện tại: <b>${esc(u.code)}</b></div>
-          <label>Mã đăng nhập *
-            <input id="editUserCode" value="${esc(u.code)}" maxlength="32" required
-              pattern="[A-Za-z0-9._-]{2,32}" placeholder="VD: 10A1-05">
+          <label class="toggle-row">
+            <input id="changeCodeToggle" type="checkbox">
+            <span>
+              <b>Đổi mã đăng nhập</b>
+              <small>Nếu chỉ đổi vai trò, trạng thái hoặc họ tên thì không cần nhập lại mã.</small>
+            </span>
           </label>
+          <div id="editCodeWrap" class="hidden">
+            <label>Mã đăng nhập mới *
+              <input id="editUserCode" value="${esc(u.code)}" maxlength="32"
+                pattern="[A-Za-z0-9._-]{2,32}" placeholder="VD: 10A1-05">
+            </label>
+          </div>
           <label>Họ và tên *
             <input id="editUserName" value="${esc(u.name)}" maxlength="120" required>
           </label>
@@ -1115,15 +1265,25 @@
           </div>
         </form>`);
       $("#cancelEditUser").onclick=closeModal;
+      $("#changeCodeToggle")?.addEventListener("change",e=>{
+        const on=e.target.checked;
+        $("#editCodeWrap")?.classList.toggle("hidden",!on);
+        const input=$("#editUserCode");
+        if(input){
+          input.required=on;
+          if(on) setTimeout(()=>input.focus(),20);
+        }
+      });
       $("#editUserForm").onsubmit=async e=>{
         e.preventDefault();
+        const changeCode=$("#changeCodeToggle")?.checked;
         const changes={
-          code:$("#editUserCode").value.trim().toUpperCase(),
+          code:changeCode ? $("#editUserCode").value.trim().toUpperCase() : u.code,
           fullName:$("#editUserName").value.trim(),
           role:$("#editUserRole").value,
           active:$("#editUserActive").checked
         };
-        if(!/^[A-Z0-9._-]{2,32}$/.test(changes.code)){
+        if(changeCode && !/^[A-Z0-9._-]{2,32}$/.test(changes.code)){
           toast("Mã chỉ dùng chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.","warn");return;
         }
         try{
