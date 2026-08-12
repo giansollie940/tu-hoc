@@ -1278,6 +1278,7 @@
         e.preventDefault();
         const changeCode=$("#changeCodeToggle")?.checked;
         const changes={
+          changeCode:!!changeCode,
           code:changeCode ? $("#editUserCode").value.trim().toUpperCase() : u.code,
           fullName:$("#editUserName").value.trim(),
           role:$("#editUserRole").value,

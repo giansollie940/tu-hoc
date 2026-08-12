@@ -81,6 +81,7 @@
     const sb=requireClient();
     const payload={
       userId,
+      changeCode:changes?.changeCode===true,
       code:String(changes?.code||"").trim(),
       fullName:String(changes?.fullName||"").trim(),
       role:String(changes?.role||"student"),
