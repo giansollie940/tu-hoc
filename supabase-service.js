@@ -112,6 +112,22 @@
     return message;
   }
 
+  async function getWiseOwlQuote(seenIds=[]){
+    const sb=requireClient();
+    const {data,error}=await sb.functions.invoke("quote-feed",{
+      body:{seenIds:Array.isArray(seenIds)?seenIds.slice(-500):[]}
+    });
+
+    if(error){
+      const detail=await edgeFunctionErrorMessage(error,"Không tải được danh ngôn trực tuyến");
+      throw new Error(detail);
+    }
+    if(!data?.ok||!data?.quote?.text){
+      throw new Error(data?.error||"Nguồn danh ngôn chưa trả về câu phù hợp.");
+    }
+    return data;
+  }
+
   async function teacherListUsers(){
     const sb=requireClient();
     const {data,error}=await sb.functions.invoke("admin-list-users",{body:{}});
@@ -379,20 +395,24 @@
     const { data:profile, error:profileErr } = await sb.from("profiles").select(safeProfileColumns).eq("id",user.id).single();
     if (profileErr) throw profileErr;
 
-    // V8.1.5:
-    // class_members tiếp tục là nguồn CHÍNH cho tên, vai trò, lớp và trạng thái.
-    // admin-list-users chỉ bổ sung mã đăng nhập từ Auth email cho GV.
-    // Nhờ vậy tên HS không bị mất nếu Auth metadata/fullName trống.
-    const membersQuery = sb.from("class_members").select("*").order("full_name");
-    const loginCodesQuery = profile.role==="teacher"
-      ? teacherListUsers().catch(error=>({ok:false,users:[],error}))
-      : Promise.resolve({ok:true,users:[]});
+    // V8.1.6:
+    // GV đồng bộ Auth users -> profiles TRƯỚC, rồi mới đọc class_members.
+    // Nhờ vậy 32 Auth users đã có từ trước schema cũng xuất hiện ngay.
+    let loginCodesRes={ok:true,users:[],createdProfiles:0,repairedProfiles:0};
+    if(profile.role==="teacher"){
+      try{
+        loginCodesRes=await teacherListUsers();
+      }catch(error){
+        console.warn("Không đồng bộ được Auth users sang profiles.",error);
+      }
+    }
+
+    const membersQuery=sb.from("class_members").select("*").order("full_name");
 
     const [
-      profilesRes, loginCodesRes, yearsRes, periodsRes, scheduleRes, overridesRes, regsRes, settingsRes, notificationsRes
+      profilesRes, yearsRes, periodsRes, scheduleRes, overridesRes, regsRes, settingsRes, notificationsRes
     ] = await Promise.all([
       membersQuery,
-      loginCodesQuery,
       sb.from("school_years").select("*").order("start_date",{ascending:false}),
       sb.from("periods").select("*").order("period_number"),
       sb.from("study_schedule").select("*").eq("is_study_period",true),
@@ -405,10 +425,6 @@
     ]);
     for (const r of [profilesRes,yearsRes,periodsRes,scheduleRes,overridesRes,regsRes,settingsRes,notificationsRes]){
       if (r.error) throw r.error;
-    }
-
-    if(profile.role==="teacher" && loginCodesRes?.error){
-      console.warn("Không tải được mã đăng nhập từ Auth; vẫn giữ danh sách tên HS từ class_members.",loginCodesRes.error);
     }
 
     const activeYear = yearsRes.data.find(y=>y.is_active) || yearsRes.data[0];
@@ -436,18 +452,36 @@
         aiAutoApproveThreshold: Math.max(0.50,Math.min(0.99,Number(settingsObj.ai_auto_approve_threshold ?? 0.90)))
       },
       users:(()=>{
-        const codeById=new Map(
+        const dirById=new Map(
           (loginCodesRes?.users||[])
             .filter(u=>u?.id)
-            .map(u=>[u.id,String(u.code||"").trim().toUpperCase()])
+            .map(u=>[u.id,u])
         );
 
-        return (profilesRes.data||[]).map(p=>{
+        const rows=(profilesRes.data||[]).map(p=>{
           const mapped=mapProfile(p);
-          const derivedCode=codeById.get(p.id);
-          if(derivedCode) mapped.code=derivedCode;
+          const extra=dirById.get(p.id);
+          if(!mapped.code && extra?.code) mapped.code=String(extra.code).toUpperCase();
+          if(!mapped.name && extra?.fullName) mapped.name=extra.fullName;
           return mapped;
         });
+
+        // Safety fallback: if RLS/view lags behind a just-created profile,
+        // include server directory without exposing email.
+        const seen=new Set(rows.map(u=>u.id));
+        for(const extra of loginCodesRes?.users||[]){
+          if(!seen.has(extra.id)){
+            rows.push({
+              id:extra.id,
+              code:String(extra.code||"").toUpperCase(),
+              name:extra.fullName||extra.code||"",
+              email:"",
+              role:extra.role||"student",
+              active:extra.active!==false
+            });
+          }
+        }
+        return rows;
       })(),
       weeks,
       periods:(periodsRes.data || []).map(p=>({
@@ -613,7 +647,7 @@
 
   window.SupabaseService={
     enabled,init,signInCode,signOut,authUser,loadState,syncState,resetSnapshot,
-    codeToEmail,changeOwnPassword,teacherResetPassword,teacherListUsers,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
+    codeToEmail,changeOwnPassword,getWiseOwlQuote,teacherResetPassword,teacherListUsers,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
     teacherRebaseWeeks,requestAiReview,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
     get client(){return client;}
   };

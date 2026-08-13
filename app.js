@@ -67,6 +67,74 @@
     return next;
   }
 
+  function owlSeenStorageKey(){
+    return `wiseOwlSeenQuotes:${currentUser?.id||"guest"}`;
+  }
+
+  function readSeenOwlQuoteIds(){
+    try{
+      const value=JSON.parse(localStorage.getItem(owlSeenStorageKey())||"[]");
+      return Array.isArray(value)?value.map(String).slice(-500):[];
+    }catch{
+      return [];
+    }
+  }
+
+  function writeSeenOwlQuoteIds(ids){
+    try{
+      localStorage.setItem(
+        owlSeenStorageKey(),
+        JSON.stringify([...new Set((ids||[]).map(String))].slice(-500))
+      );
+    }catch{}
+  }
+
+  function fallbackQuoteId(q){
+    const raw=`${q?.author||""}|${q?.text||""}`;
+    let h=2166136261;
+    for(let i=0;i<raw.length;i++){
+      h^=raw.charCodeAt(i);
+      h=Math.imul(h,16777619);
+    }
+    return `fallback-${(h>>>0).toString(16)}`;
+  }
+
+  async function nextWiseOwlQuote(){
+    const seen=readSeenOwlQuoteIds();
+
+    if(isProd && prod?.getWiseOwlQuote){
+      try{
+        const result=await prod.getWiseOwlQuote(seen);
+        const q=result?.quote;
+
+        if(q?.text){
+          const nextSeen=result.cycleReset?[]:[...seen];
+          nextSeen.push(String(q.id||fallbackQuoteId(q)));
+          writeSeenOwlQuoteIds(nextSeen);
+
+          return {
+            text:String(q.text),
+            author:String(q.author||"Khuyết danh"),
+            url:String(q.url||result.sourceUrl||OWL_QUOTE_SOURCE),
+            online:true,
+            poolSize:Number(result.poolSize||0)
+          };
+        }
+      }catch(err){
+        console.warn("Danh ngôn trực tuyến tạm thời không dùng được; chuyển sang kho dự phòng.",err);
+      }
+    }
+
+    // Offline / source unavailable fallback.
+    const q=nextOwlQuote();
+    return {
+      ...q,
+      url:OWL_QUOTE_SOURCE,
+      online:false,
+      poolSize:OWL_QUOTES.length
+    };
+  }
+
   function setupWiseOwl(){
     if(owlReady)return;
     const pet=$("#wiseOwlPet"), body=$("#owlBody"), speech=$("#owlSpeech"), closeBtn=$("#owlMuteBtn");
@@ -86,6 +154,14 @@
       body.style.setProperty("--look-x",`${x.toFixed(2)}px`);
       body.style.setProperty("--look-y",`${y.toFixed(2)}px`);
       body.style.setProperty("--owl-tilt",`${Math.max(-7,Math.min(7,dx/70)).toFixed(2)}deg`);
+
+      const pupilMax=Math.max(2.2,Math.min(5.2,r.width*0.045));
+      const eyeX=Math.max(-pupilMax,Math.min(pupilMax,dx/len*pupilMax));
+      const eyeY=Math.max(-pupilMax,Math.min(pupilMax,dy/len*pupilMax));
+      body.querySelectorAll(".owl-live-pupil").forEach(pupil=>{
+        pupil.style.setProperty("--eye-x",`${eyeX.toFixed(2)}px`);
+        pupil.style.setProperty("--eye-y",`${eyeY.toFixed(2)}px`);
+      });
     };
     document.addEventListener("pointermove",e=>{
       if(e.pointerType==="touch")return;
@@ -95,6 +171,10 @@
 
     body.addEventListener("click",()=>{
       owlMessageCursor++;
+      pet.classList.remove("owl-flap");
+      void pet.offsetWidth;
+      pet.classList.add("owl-flap");
+      setTimeout(()=>pet.classList.remove("owl-flap"),1550);
       showOwlMessage({preferQuote:owlMessageCursor%3===0,force:true});
     });
     closeBtn?.addEventListener("click",e=>{
@@ -164,7 +244,7 @@
     return messages;
   }
 
-  function showOwlMessage({preferQuote=false,force=false,quiet=false,text=null,urgent=false}={}){
+  async function showOwlMessage({preferQuote=false,force=false,quiet=false,text=null,urgent=false}={}){
     if(!currentUser)return;
     setupWiseOwl();
     const pet=$("#wiseOwlPet"), speech=$("#owlSpeech"), textEl=$("#owlSpeechText"), source=$("#owlQuoteSource"), alertDot=$("#owlAlertDot");
@@ -179,8 +259,12 @@
       if(!preferQuote&&context.length){
         item=context[owlMessageCursor%context.length];
       }else{
-        const q=nextOwlQuote();
-        item={text:`📚 ${q.text} — ${q.author}`,urgent:false};
+        const q=await nextWiseOwlQuote();
+        item={
+          text:`📚 ${q.text} — ${q.author}`,
+          urgent:false,
+          quoteUrl:q.url||OWL_QUOTE_SOURCE
+        };
         quote=true;
       }
     }
@@ -188,8 +272,14 @@
     if(quiet&&!force&&item?.urgent)return;
     textEl.textContent=item?.text||"Cú Thông Thái chúc bạn một buổi tự học hiệu quả.";
     source?.classList.toggle("hidden",!quote);
-    if(source)source.href=OWL_QUOTE_SOURCE;
+    if(source)source.href=item?.quoteUrl||OWL_QUOTE_SOURCE;
     speech.classList.remove("hidden");
+    if(force&&!item?.urgent){
+      pet.classList.remove("owl-flap");
+      void pet.offsetWidth;
+      pet.classList.add("owl-flap");
+      setTimeout(()=>pet.classList.remove("owl-flap"),1550);
+    }
     pet.classList.toggle("owl-alert",!!item?.urgent);
     alertDot?.classList.toggle("hidden",!item?.urgent);
 
@@ -1073,7 +1163,7 @@
 
     return head(
       "Quản lý học sinh",
-      "Bản 8.1.7: giữ cơ chế đồng bộ học sinh ổn định và dùng Cú Thông Thái dạng ảnh chibi mới, không kèm tên trên hình.",
+      "Bản 8.1.9: giữ cơ chế đồng bộ học sinh ổn định và dùng Cú Thông Thái dạng ảnh chibi mới, không kèm tên trên hình.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary glossy-action" id="addStudentBtn">🌟 Thêm học sinh</button>
       </div>`
