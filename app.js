@@ -1073,7 +1073,7 @@
 
     return head(
       "Quản lý học sinh",
-      "Bản 8.1.4: mã đăng nhập được lấy tự động từ hồ sơ hoặc phần trước @ của email Auth ở server; app chỉ hiển thị mã, không hiển thị email nội bộ.",
+      "Bản 8.1.7: giữ cơ chế đồng bộ học sinh ổn định và dùng Cú Thông Thái dạng ảnh chibi mới, không kèm tên trên hình.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary glossy-action" id="addStudentBtn">🌟 Thêm học sinh</button>
       </div>`
