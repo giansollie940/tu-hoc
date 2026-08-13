@@ -26,6 +26,54 @@
     ]
   };
 
+
+  const uiIcons={
+    dashboard:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1v-9.5Z" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    approvals:`<svg viewBox="0 0 24 24" fill="none"><path d="M8 3h8l5 5v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke-width="2"/><path d="m9 13 2 2 4-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    class:`<svg viewBox="0 0 24 24" fill="none"><path d="M6 17c0-2.2 2.7-4 6-4s6 1.8 6 4" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="8" r="3.2" stroke-width="2"/><path d="M3 17c0-1.6 1.4-3 3.4-3.6M21 17c0-1.6-1.4-3-3.4-3.6" stroke-width="2" stroke-linecap="round"/></svg>`,
+    schedule:`<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16" stroke-width="2" stroke-linecap="round"/></svg>`,
+    weeks:`<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="2"/><path d="M8 3v4M16 3v4M8 13h3M13 13h3M8 17h3" stroke-width="2" stroke-linecap="round"/></svg>`,
+    students:`<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke-width="2"/><path d="M5 19c1.1-3 4-4.8 7-4.8s5.9 1.8 7 4.8" stroke-width="2" stroke-linecap="round"/><path d="M4 10.5V7.5l8-3 8 3v3" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    stats:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 19V9M12 19V5M19 19v-7" stroke-width="2" stroke-linecap="round"/><path d="M4 19h16" stroke-width="2" stroke-linecap="round"/></svg>`,
+    settings:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Z" stroke-width="2"/><path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.7-.9 1 1 0 0 0-1 .2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .7.9 1 1 0 0 0 1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.7Z" stroke-width="1.7" stroke-linejoin="round"/></svg>`,
+    register:`<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="4" width="12" height="16" rx="3" stroke-width="2"/><path d="M9 9h6M9 13h6M9 17h4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    history:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 1 0 2.3-5.7" stroke-width="2" stroke-linecap="round"/><path d="M4 4v5h5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4l3 2" stroke-width="2" stroke-linecap="round"/></svg>`,
+    comments:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 6h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    missing:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 4 3.5 19h17L12 4Z" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4.5M12 17h.01" stroke-width="2" stroke-linecap="round"/></svg>`,
+    add:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>`,
+    edit:`<svg viewBox="0 0 24 24" fill="none"><path d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" stroke-width="2" stroke-linejoin="round"/><path d="m13.5 6.5 4 4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    lock:`<svg viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2.5" stroke-width="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3" stroke-width="2" stroke-linecap="round"/></svg>`,
+    delete:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5h6v2M8 7l1 12h6l1-12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    search:`<svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6" stroke-width="2"/><path d="m20 20-4.2-4.2" stroke-width="2" stroke-linecap="round"/></svg>`,
+    filter:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    copy:`<svg viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="10" height="12" rx="2" stroke-width="2"/><path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" stroke-width="2" stroke-linecap="round"/></svg>`,
+    user:`<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke-width="2"/><path d="M5 19c1.2-2.9 4-4.7 7-4.7s5.8 1.8 7 4.7" stroke-width="2" stroke-linecap="round"/></svg>`,
+    shield:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 3 5 6v5c0 5.1 2.8 8 7 10 4.2-2 7-4.9 7-10V6l-7-3Z" stroke-width="2" stroke-linejoin="round"/><path d="m9.5 12 1.7 1.7 3.3-4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  };
+
+  function uiIcon(name, extraClass=""){
+    const svg=uiIcons[name]||uiIcons.dashboard;
+    return `<span class="ui-icon ${extraClass||""}" aria-hidden="true">${svg}</span>`;
+  }
+
+  function navIconFor(route){
+    const map={
+      dashboard:"dashboard",
+      approvals:"approvals",
+      class:"class",
+      schedule:"schedule",
+      weeks:"weeks",
+      students:"students",
+      stats:"stats",
+      settings:"settings",
+      register:"register",
+      history:"history",
+      comments:"comments",
+      missing:"missing"
+    };
+    return uiIcon(map[route]||"dashboard","nav-icon");
+  }
+
   const OWL_QUOTE_SOURCE="https://www.tudiendanhngon.vn/danhngon/ds/strcats/180";
   const OWL_QUOTES=[
     {text:"Hãy xây dựng niềm đam mê học tập. Nếu bạn làm được, bạn sẽ không ngừng tiến bộ.",author:"Anthony J. D'Angelo"},
@@ -1154,18 +1202,18 @@
         <td>${u.active?'<span class="status approved">Hoạt động</span>':'<span class="status missing">Đã khóa</span>'}</td>
         <td>
           <div class="toolbar" style="gap:6px;flex-wrap:wrap">
-            <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">✏️ Sửa tài khoản</button>
-            ${isProd?`<button class="btn btn-ghost reset-password-btn" data-id="${u.id}">🔐 Đặt lại mật khẩu</button>`:""}
-            ${isProd?`<button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">🗑 Xóa tài khoản</button>`:""}
+            <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">${uiIcon('edit')}<span>Sửa tài khoản</span></button>
+            ${isProd?`<button class="btn btn-ghost reset-password-btn" data-id="${u.id}">${uiIcon('lock')}<span>Đặt lại mật khẩu</span></button>`:""}
+            ${isProd?`<button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">${uiIcon('delete')}<span>Xóa tài khoản</span></button>`:""}
           </div>
         </td>
       </tr>`).join("") || `<tr><td colspan="5" class="center muted" style="padding:18px">Không có học sinh phù hợp bộ lọc hiện tại.</td></tr>`;
 
     return head(
       "Quản lý học sinh",
-      "Bản 8.1.9: giữ cơ chế đồng bộ học sinh ổn định và dùng Cú Thông Thái dạng ảnh chibi mới, không kèm tên trên hình.",
+      "Bản 8.2.0: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary glossy-action" id="addStudentBtn">🌟 Thêm học sinh</button>
+        <button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>
       </div>`
     )+
       `<div class="card">
@@ -1174,9 +1222,9 @@
         </div>
 
         <div class="summary-pills">
-          <span class="summary-pill">👨‍🎓 Học sinh: <b>${countStudent}</b></span>
-          <span class="summary-pill">💼 Cán sự: <b>${countMonitor}</b></span>
-          <span class="summary-pill">🔒 Đã khóa: <b>${countLocked}</b></span>
+          <span class="summary-pill">${uiIcon("user")}Học sinh: <b>${countStudent}</b></span>
+          <span class="summary-pill">${uiIcon("students")}Cán sự: <b>${countMonitor}</b></span>
+          <span class="summary-pill">${uiIcon("lock")}Đã khóa: <b>${countLocked}</b></span>
           <span class="summary-pill">📋 Đang hiển thị: <b>${filtered.length}/${allUsers.length}</b></span>
         </div>
 

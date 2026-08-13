@@ -1350,3 +1350,146 @@ tbody tr:hover{ background:#fbfdff; }
   }
   .owl-live-pupil{transition:none !important}
 }
+
+
+/* =========================
+   V8.2.0 — CHIBI SVG OWL + TEACHER ICON REFRESH + SECURITY
+   ========================= */
+
+/* Shared vector icon system */
+.ui-icon{
+  width:1.15em;
+  height:1.15em;
+  display:inline-grid;
+  place-items:center;
+  color:currentColor;
+  flex:0 0 auto;
+}
+.ui-icon svg{
+  width:100%;
+  height:100%;
+  display:block;
+  stroke:currentColor;
+}
+.ui-icon-btn{
+  width:20px;
+  height:20px;
+}
+.icon-label{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+}
+.icon-label .ui-icon{
+  opacity:.95;
+}
+.nav-icon{
+  width:28px !important;
+  height:28px;
+  border-radius:12px;
+  display:inline-grid !important;
+  place-items:center;
+  background:linear-gradient(135deg,#eff6ff,#ede9fe);
+  color:#3359cc;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.8),0 6px 12px rgba(99,102,241,.10);
+  margin-right:2px;
+}
+.nav-icon svg{
+  width:16px;
+  height:16px;
+}
+.side-nav button{
+  align-items:center;
+  gap:10px;
+}
+.side-nav button.active .nav-icon{
+  background:linear-gradient(135deg,#dbeafe,#ddd6fe);
+  color:#1d4ed8;
+}
+.icon-btn{
+  display:inline-grid;
+  place-items:center;
+}
+.icon-btn .ui-icon{
+  color:#3554c7;
+}
+
+/* Teacher page buttons & summary icons */
+.summary-pill .ui-icon{
+  margin-right:7px;
+  color:#4f46e5;
+}
+.copy-code-btn,.edit-user-btn,.reset-password-btn,.delete-user-btn,#addStudentBtn,#clearStudentFilters{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+}
+
+/* SVG Owl (no PNG) */
+.owl-image-button{
+  width:var(--owl-size) !important;
+  height:var(--owl-size) !important;
+  min-width:0 !important;
+  min-height:0 !important;
+  aspect-ratio:1/1;
+  position:relative !important;
+  border:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  overflow:visible !important;
+}
+.owl-svg-mascot{
+  width:100%;
+  height:100%;
+  display:block;
+  overflow:visible;
+  filter:drop-shadow(0 8px 16px rgba(66,103,210,.14));
+}
+.owl-live-pupil{
+  --eye-x:0px;
+  --eye-y:0px;
+  transform:translate(var(--eye-x),var(--eye-y));
+  transform-box:fill-box;
+  transform-origin:center;
+  transition:transform .07s linear;
+}
+.owl-live-wing-left{
+  transform-origin:85px 132px;
+}
+.owl-live-wing-right{
+  transform-origin:155px 132px;
+}
+.wise-owl-pet.owl-flap .owl-live-wing-left,
+.wise-owl-pet.owl-alert .owl-live-wing-left{
+  animation:owlWingLeftSvg .36s ease-in-out 4;
+}
+.wise-owl-pet.owl-flap .owl-live-wing-right,
+.wise-owl-pet.owl-alert .owl-live-wing-right{
+  animation:owlWingRightSvg .36s ease-in-out 4;
+}
+@keyframes owlWingLeftSvg{
+  0%,100%{transform:rotate(0deg)}
+  50%{transform:rotate(-24deg) translateY(-4px)}
+}
+@keyframes owlWingRightSvg{
+  0%,100%{transform:rotate(0deg)}
+  50%{transform:rotate(24deg) translateY(-4px)}
+}
+.wise-owl-pet.owl-alert .owl-svg-mascot{
+  animation:owlSvgNudge .5s ease-in-out 3;
+}
+@keyframes owlSvgNudge{
+  0%,100%{transform:rotate(0deg) scale(1)}
+  25%{transform:rotate(-2deg) scale(1.02)}
+  75%{transform:rotate(2deg) scale(1.02)}
+}
+@media(prefers-reduced-motion:reduce){
+  .owl-live-pupil{transition:none !important}
+  .wise-owl-pet.owl-flap .owl-live-wing-left,
+  .wise-owl-pet.owl-flap .owl-live-wing-right,
+  .wise-owl-pet.owl-alert .owl-live-wing-left,
+  .wise-owl-pet.owl-alert .owl-live-wing-right,
+  .wise-owl-pet.owl-alert .owl-svg-mascot{
+    animation:none !important;
+  }
+}
