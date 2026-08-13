@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#2563eb">
   <meta name="description" content="Sổ Tự Học - đăng ký, theo dõi và phê duyệt nội dung tự học theo tuần.">
 
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://*.supabase.in; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://*.supabase.in https://*.supabase.net; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; upgrade-insecure-requests; block-all-mixed-content">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
 
@@ -101,91 +101,9 @@
     </div>
 
     
+    
     <button id="owlBody" class="owl-body owl-image-button" type="button" aria-label="Cú Thông Thái — bấm để nhận lời nhắc">
-      <svg class="owl-svg-mascot" viewBox="0 0 240 240" aria-hidden="true" focusable="false">
-        <defs>
-          <linearGradient id="owlBodyGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#8ed7ff"/>
-            <stop offset="55%" stop-color="#5f90ff"/>
-            <stop offset="100%" stop-color="#7861f0"/>
-          </linearGradient>
-          <linearGradient id="owlBellyGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#fffdf6"/>
-            <stop offset="100%" stop-color="#ffeec6"/>
-          </linearGradient>
-          <linearGradient id="owlWingGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#75d4ff"/>
-            <stop offset="100%" stop-color="#5a74ef"/>
-          </linearGradient>
-          <filter id="owlShadow" x="-40%" y="-40%" width="180%" height="180%">
-            <feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#6b7bd7" flood-opacity=".20"/>
-          </filter>
-        </defs>
-
-        <ellipse cx="120" cy="212" rx="54" ry="10" fill="#6b7bd71f"/>
-        <g class="owl-live-wing owl-live-wing-left">
-          <path d="M63 114c-20 12-29 27-31 45 2 16 13 26 27 26 17 0 28-14 31-34 2-13-2-27-10-37-4-5-10-5-17 0Z"
-                fill="url(#owlWingGrad)" stroke="#4d6ae8" stroke-width="3" stroke-linejoin="round"/>
-          <path d="M49 130c10 5 18 14 23 25" stroke="#ffffff85" stroke-width="4" stroke-linecap="round"/>
-        </g>
-        <g class="owl-live-wing owl-live-wing-right">
-          <path d="M177 114c20 12 29 27 31 45-2 16-13 26-27 26-17 0-28-14-31-34-2-13 2-27 10-37 4-5 10-5 17 0Z"
-                fill="url(#owlWingGrad)" stroke="#4d6ae8" stroke-width="3" stroke-linejoin="round"/>
-          <path d="M191 130c-10 5-18 14-23 25" stroke="#ffffff85" stroke-width="4" stroke-linecap="round"/>
-        </g>
-
-        <g filter="url(#owlShadow)">
-          <path d="M120 41c47 0 81 37 81 85 0 41-21 69-48 83-8 4-16 6-25 7-3 0-6 1-8 1s-5-1-8-1c-9-1-17-3-25-7-27-14-48-42-48-83 0-48 34-85 81-85Z"
-                fill="url(#owlBodyGrad)"/>
-          <path d="M83 80c0-7 6-13 13-13h48c7 0 13 6 13 13v4H83v-4Z" fill="#d5efff" opacity=".65"/>
-          <ellipse cx="120" cy="148" rx="43" ry="50" fill="url(#owlBellyGrad)" stroke="#f4d98e" stroke-width="3"/>
-          <path d="M93 103c-8 5-12 14-12 24 0 15 10 27 23 27 14 0 25-12 25-27 0-10-4-19-12-24h-24Z"
-                fill="#fff"/>
-          <path d="M147 103c8 5 12 14 12 24 0 15-10 27-23 27-14 0-25-12-25-27 0-10 4-19 12-24h24Z"
-                fill="#fff"/>
-
-          <g class="owl-eye-ring">
-            <circle cx="104" cy="126" r="24" fill="none" stroke="#3257b6" stroke-width="5"/>
-            <circle cx="136" cy="126" r="24" fill="none" stroke="#3257b6" stroke-width="5"/>
-          </g>
-
-          <circle class="owl-live-pupil" cx="104" cy="126" r="9.5" fill="#12213f"/>
-          <circle class="owl-live-pupil" cx="136" cy="126" r="9.5" fill="#12213f"/>
-          <circle cx="100.5" cy="122.5" r="2.1" fill="#fff"/>
-          <circle cx="132.5" cy="122.5" r="2.1" fill="#fff"/>
-
-          <path d="M120 136l-10 11h20l-10-11Z" fill="#f4ad2d" stroke="#cf8b18" stroke-width="2" stroke-linejoin="round"/>
-          <path d="M104 155c8 8 24 8 32 0" fill="none" stroke="#d6922e" stroke-width="3" stroke-linecap="round"/>
-
-          <path d="M91 176c8 7 19 11 29 11s21-4 29-11" fill="none" stroke="#eccb83" stroke-width="3" stroke-linecap="round"/>
-          <path d="M80 89c5-15 21-28 40-28s35 13 40 28" fill="none" stroke="#ffffff80" stroke-width="6" stroke-linecap="round"/>
-
-          <g class="owl-cap">
-            <path d="M118 32 64 54l56 23 56-23-58-22Z" fill="#20376f"/>
-            <path d="M86 50h68v10c-11 9-22 13-34 13S97 69 86 60V50Z" fill="#27448f"/>
-            <path d="M171 54v33" stroke="#20376f" stroke-width="4" stroke-linecap="round"/>
-            <circle cx="171" cy="89" r="5.5" fill="#ffd86a"/>
-            <path d="M171 89c-3 8-7 13-13 17" stroke="#ffd86a" stroke-width="3" stroke-linecap="round"/>
-          </g>
-
-          <g class="owl-pointer">
-            <rect x="169" y="134" width="8" height="50" rx="4" fill="#7b4f2d" transform="rotate(18 169 134)"/>
-            <path d="M183 129l14-11-6 17-8-6Z" fill="#ef6a64"/>
-          </g>
-
-          <g class="owl-book">
-            <path d="M90 168c10-5 20-7 30-7s20 2 30 7v19c-10-5-20-7-30-7s-20 2-30 7v-19Z" fill="#ffffff" stroke="#5a74ef" stroke-width="3" stroke-linejoin="round"/>
-            <path d="M120 161v25" stroke="#5a74ef" stroke-width="3"/>
-            <path d="M97 171c7-2 14-4 21-4" stroke="#b5c2ff" stroke-width="2" stroke-linecap="round"/>
-            <path d="M123 167c7 0 14 2 20 4" stroke="#b5c2ff" stroke-width="2" stroke-linecap="round"/>
-          </g>
-
-          <g class="owl-feet">
-            <path d="M100 202c-5 0-9 4-9 8h18c0-4-4-8-9-8Z" fill="#f4ad2d"/>
-            <path d="M140 202c-5 0-9 4-9 8h18c0-4-4-8-9-8Z" fill="#f4ad2d"/>
-          </g>
-        </g>
-      </svg>
+      <img class="owl-user-svg" src="assets/images/wise-owl-user.svg" alt="" aria-hidden="true">
       <span id="owlAlertDot" class="owl-alert-dot hidden"></span>
     </button>
 

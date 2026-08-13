@@ -28,27 +28,26 @@
 
 
   const uiIcons={
-    dashboard:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1v-9.5Z" stroke-width="2" stroke-linejoin="round"/></svg>`,
-    approvals:`<svg viewBox="0 0 24 24" fill="none"><path d="M8 3h8l5 5v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" stroke-width="2"/><path d="m9 13 2 2 4-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    class:`<svg viewBox="0 0 24 24" fill="none"><path d="M6 17c0-2.2 2.7-4 6-4s6 1.8 6 4" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="8" r="3.2" stroke-width="2"/><path d="M3 17c0-1.6 1.4-3 3.4-3.6M21 17c0-1.6-1.4-3-3.4-3.6" stroke-width="2" stroke-linecap="round"/></svg>`,
-    schedule:`<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16" stroke-width="2" stroke-linecap="round"/></svg>`,
-    weeks:`<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="2"/><path d="M8 3v4M16 3v4M8 13h3M13 13h3M8 17h3" stroke-width="2" stroke-linecap="round"/></svg>`,
-    students:`<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke-width="2"/><path d="M5 19c1.1-3 4-4.8 7-4.8s5.9 1.8 7 4.8" stroke-width="2" stroke-linecap="round"/><path d="M4 10.5V7.5l8-3 8 3v3" stroke-width="2" stroke-linejoin="round"/></svg>`,
-    stats:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 19V9M12 19V5M19 19v-7" stroke-width="2" stroke-linecap="round"/><path d="M4 19h16" stroke-width="2" stroke-linecap="round"/></svg>`,
-    settings:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Z" stroke-width="2"/><path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.7-.9 1 1 0 0 0-1 .2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .7.9 1 1 0 0 0 1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.7Z" stroke-width="1.7" stroke-linejoin="round"/></svg>`,
-    register:`<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="4" width="12" height="16" rx="3" stroke-width="2"/><path d="M9 9h6M9 13h6M9 17h4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    dashboard:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 13.2 12 5l8 8.2V20a1 1 0 0 1-1 1h-4.8v-5.3H9.8V21H5a1 1 0 0 1-1-1v-6.8Z" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    approvals:`<svg viewBox="0 0 24 24" fill="none"><path d="M8 4h8l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke-width="2" stroke-linejoin="round"/><path d="M9 13.5l2 2 4-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    class:`<svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="2.8" stroke-width="2"/><circle cx="16.5" cy="8" r="2.2" stroke-width="2"/><path d="M4.5 18c.9-2.6 3.2-4.2 5.8-4.2s4.9 1.6 5.8 4.2" stroke-width="2" stroke-linecap="round"/><path d="M14.7 17.6c.6-1.8 2.1-2.9 4-2.9 1.1 0 2.1.4 2.8 1.1" stroke-width="2" stroke-linecap="round"/></svg>`,
+    schedule:`<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="15" rx="3" stroke-width="2"/><path d="M7.5 3v4M16.5 3v4M3.5 10h17M7 13h4M13 13h4M7 17h4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    weeks:`<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14h3M13 14h3M8 17.5h8" stroke-width="2" stroke-linecap="round"/></svg>`,
+    students:`<svg viewBox="0 0 24 24" fill="none"><path d="M3.5 8 12 4l8.5 4-8.5 4-8.5-4Z" stroke-width="2" stroke-linejoin="round"/><path d="M6.5 10.8V15c0 1.9 2.5 3.5 5.5 3.5s5.5-1.6 5.5-3.5v-4.2" stroke-width="2" stroke-linejoin="round"/><path d="M20.5 8v5" stroke-width="2" stroke-linecap="round"/></svg>`,
+    stats:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 19V11M12 19V6M19 19v-8" stroke-width="2" stroke-linecap="round"/><path d="M4 19h16" stroke-width="2" stroke-linecap="round"/></svg>`,
+    settings:`<svg viewBox="0 0 24 24" fill="none"><path d="M10 4h4M6 12h12M8.5 20h7" stroke-width="2" stroke-linecap="round"/><circle cx="15.5" cy="4" r="2.5" stroke-width="2"/><circle cx="8.5" cy="12" r="2.5" stroke-width="2"/><circle cx="13.5" cy="20" r="2.5" stroke-width="2"/></svg>`,
+    register:`<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="4" width="12" height="16" rx="3" stroke-width="2"/><path d="M9 8.5h6M9 12.5h6M9 16.5h4" stroke-width="2" stroke-linecap="round"/></svg>`,
     history:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 1 0 2.3-5.7" stroke-width="2" stroke-linecap="round"/><path d="M4 4v5h5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4l3 2" stroke-width="2" stroke-linecap="round"/></svg>`,
-    comments:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 6h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    comments:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 6h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" stroke-width="2" stroke-linejoin="round"/><path d="M8.5 11.2h7M8.5 14.2h4.5" stroke-width="2" stroke-linecap="round"/></svg>`,
     missing:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 4 3.5 19h17L12 4Z" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4.5M12 17h.01" stroke-width="2" stroke-linecap="round"/></svg>`,
     add:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>`,
-    edit:`<svg viewBox="0 0 24 24" fill="none"><path d="m4 20 4.5-1 9-9a2.1 2.1 0 0 0-3-3l-9 9L4 20Z" stroke-width="2" stroke-linejoin="round"/><path d="m13.5 6.5 4 4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    edit:`<svg viewBox="0 0 24 24" fill="none"><path d="m4 20 4.7-.9 8.4-8.4a2.1 2.1 0 1 0-3-3l-8.4 8.4L4 20Z" stroke-width="2" stroke-linejoin="round"/><path d="m13.2 6.8 4 4" stroke-width="2" stroke-linecap="round"/></svg>`,
     lock:`<svg viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2.5" stroke-width="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3" stroke-width="2" stroke-linecap="round"/></svg>`,
     delete:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5h6v2M8 7l1 12h6l1-12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
     search:`<svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6" stroke-width="2"/><path d="m20 20-4.2-4.2" stroke-width="2" stroke-linecap="round"/></svg>`,
     filter:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke-width="2" stroke-linecap="round"/></svg>`,
     copy:`<svg viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="10" height="12" rx="2" stroke-width="2"/><path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" stroke-width="2" stroke-linecap="round"/></svg>`,
-    user:`<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke-width="2"/><path d="M5 19c1.2-2.9 4-4.7 7-4.7s5.8 1.8 7 4.7" stroke-width="2" stroke-linecap="round"/></svg>`,
-    shield:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 3 5 6v5c0 5.1 2.8 8 7 10 4.2-2 7-4.9 7-10V6l-7-3Z" stroke-width="2" stroke-linejoin="round"/><path d="m9.5 12 1.7 1.7 3.3-4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    user:`<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke-width="2"/><path d="M5 19c1.2-2.9 4-4.7 7-4.7s5.8 1.8 7 4.7" stroke-width="2" stroke-linecap="round"/></svg>`
   };
 
   function uiIcon(name, extraClass=""){
@@ -71,7 +70,7 @@
       comments:"comments",
       missing:"missing"
     };
-    return uiIcon(map[route]||"dashboard","nav-icon");
+    return uiIcon(map[route]||"dashboard",`nav-icon nav-icon--${route}`);
   }
 
   const OWL_QUOTE_SOURCE="https://www.tudiendanhngon.vn/danhngon/ds/strcats/180";
@@ -1211,7 +1210,7 @@
 
     return head(
       "Quản lý học sinh",
-      "Bản 8.2.0: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
+      "Bản 8.2.1: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>
       </div>`

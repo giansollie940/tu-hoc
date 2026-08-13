@@ -513,13 +513,23 @@
   async function insertAudit(entries){
     if (!entries.length) return;
     const sb=requireClient();
-    const rows=entries.map(a=>({
-      actor_id:a.userId || null, action:a.action || "Thay đổi",
-      entity_type:"web_app", entity_id:String(a.entityId || ""),
-      new_data:{detail:a.detail || ""}, created_at:a.at || new Date().toISOString()
-    }));
-    const { error }=await sb.from("audit_logs").insert(rows);
-    if(error) throw error;
+    const payload={
+      entries:entries.map(a=>({
+        action:a.action || "Thay đổi",
+        entityType:"web_app",
+        entityId:String(a.entityId || ""),
+        detail:a.detail || "",
+        createdAt:a.at || new Date().toISOString()
+      }))
+    };
+    const { data,error }=await sb.functions.invoke("audit-log",{ body: payload });
+    if(error){
+      const detail=await edgeFunctionErrorMessage(error,"Không ghi được nhật ký hệ thống");
+      throw new Error(detail);
+    }
+    if(!data?.ok){
+      throw new Error(data?.error || "Không ghi được nhật ký hệ thống");
+    }
   }
 
   async function syncInternal(state,currentUser){
