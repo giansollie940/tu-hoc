@@ -5,6 +5,7 @@
   let state = loadState();
   let currentUser = isProd ? null : JSON.parse(sessionStorage.getItem("soTuHocUser")||"null");
   let route="dashboard";
+  let weekSelectionTouched=false;
 
   const $ = s => document.querySelector(s);
   const content=$("#content"), loginView=$("#loginView"), appView=$("#appView");
@@ -296,7 +297,7 @@
           urgent:urgency,
           text:`${urgency?"⏰":"📅"} Tiết ${next.sl.period} ${DemoData.DOW[next.sl.dow]} chưa đăng ký. Hạn: ${fmtDeadline(next.deadline)}.`
         });
-      }else if(missing.length&&w.status==="open"){
+      }else if(missing.length&&effectiveWeekStatus(w)==="open"){
         messages.push({urgent:true,text:`⚠️ Tuần ${w.number} còn ${missing.length} tiết của bạn chưa có nội dung đăng ký.`});
       }
 
@@ -435,11 +436,11 @@
       per_session_20:"20:00 tối hôm trước từng buổi",
       week_before_20:"20:00 ngày trước khi tuần bắt đầu",
       specific:"Hạn cụ thể của tuần"
-    }[mode||"week_before_20"] || "Hạn đăng ký";
+    }[mode||"per_session_20"] || "Hạn đăng ký";
   }
   function deadlineForSlot(w,dow=0){
     if(!w)return "";
-    const mode=w.deadlineMode||"week_before_20";
+    const mode=w.deadlineMode||"per_session_20";
     if(mode==="per_session_20"){
       const sessionDate=dateForDow(w,dow);
       return `${addDaysDateISO(sessionDate,-1)}T20:00`;
@@ -457,7 +458,7 @@
     return Number.isFinite(t) && Date.now()>t;
   }
   function deadlineChip(w,dow=null){
-    const mode=w?.deadlineMode||"week_before_20";
+    const mode=w?.deadlineMode||"per_session_20";
     if(mode==="per_session_20" && dow===null){
       return `<span class="deadline-chip ok">⏰ Theo từng buổi: 20:00 tối hôm trước</span>`;
     }
@@ -466,7 +467,7 @@
     return `<span class="deadline-chip ${deadlinePassed(w,dow??0)?"late":"ok"}">⏰ ${fmtDeadline(dl)}${deadlinePassed(w,dow??0)?" · Đã qua hạn":""}</span>`;
   }
   function deadlineSummary(w){
-    const mode=w?.deadlineMode||"week_before_20";
+    const mode=w?.deadlineMode||"per_session_20";
     if(mode==="per_session_20") return "Mỗi buổi: 20:00 tối hôm trước";
     if(mode==="week_before_20") return fmtDeadline(deadlineForSlot(w,0));
     return w?.deadline ? fmtDeadline(w.deadline) : "Chưa chọn hạn cụ thể";
@@ -509,15 +510,42 @@
   }
 
   function week(){ return state.weeks.find(w=>w.id===state.currentWeekId)||state.weeks[0]; }
+  function todayDateISO(){
+    if(isProd&&prod?.dateISOInTimeZone)return prod.dateISOInTimeZone(new Date());
+    const now=new Date();
+    const y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,"0"),d=String(now.getDate()).padStart(2,"0");
+    return `${y}-${m}-${d}`;
+  }
+
   function actualWeek(){
-    if(!state.weeks?.length) return null;
-    if(isProd && prod?.chooseCurrentWeek) return prod.chooseCurrentWeek(state.weeks);
-    const now=new Date(), y=now.getFullYear(), m=String(now.getMonth()+1).padStart(2,"0"), d=String(now.getDate()).padStart(2,"0");
-    const today=`${y}-${m}-${d}`;
-    return state.weeks.find(w=>w.startDate<=today&&w.endDate>=today)
+    if(!state.weeks?.length)return null;
+    const today=todayDateISO();
+
+    // Tuần học được tính từ Thứ Hai đến Chủ nhật để cuối tuần vẫn thuộc tuần hiện tại.
+    return state.weeks.find(w=>w.startDate<=today&&addDaysDateISO(w.startDate,6)>=today)
       || state.weeks.find(w=>w.startDate>today)
       || state.weeks[state.weeks.length-1];
   }
+
+  function automaticWeekStatus(w){
+    if(!w)return "upcoming";
+    const today=todayDateISO();
+    const anchor=state.weeks.find(x=>x.startDate<=today&&addDaysDateISO(x.startDate,6)>=today);
+
+    if(!anchor){
+      if(w.endDate<today)return "locked";
+      return "upcoming";
+    }
+    if(w.number<anchor.number)return "locked";
+    if(w.number===anchor.number||w.number===anchor.number+1)return "open";
+    return "upcoming";
+  }
+
+  function effectiveWeekStatus(w){
+    if(!w)return "upcoming";
+    return w.status==="holiday"?"holiday":automaticWeekStatus(w);
+  }
+
   function period(n){ return state.periods.find(p=>p.n===Number(n)); }
   function slotLabel(dow,p){ const pe=period(p); return `${DemoData.DOW[dow]} · Tiết ${p}${pe?` (${pe.start}–${pe.end})`:""}`; }
   function sortKeyCode(code=""){
@@ -539,10 +567,69 @@
   function closeModal(){ modal.classList.add("hidden"); modalBody.innerHTML=""; }
   function audit(action,entityId,detail=""){ state.audit.unshift({at:new Date().toISOString(),userId:currentUser?.id,action,entityId,detail}); saveState(); }
 
+  function scheduleForWeek(weekId){
+    const overrides=(state.overrides||[]).filter(o=>o.weekId===weekId);
+    if(!overrides.length){
+      return [...(state.schedule||[])].sort((a,b)=>a.dow-b.dow||a.period-b.period);
+    }
+    return overrides
+      .filter(o=>o.active)
+      .map(o=>({dow:o.dow,period:o.period}))
+      .sort((a,b)=>a.dow-b.dow||a.period-b.period);
+  }
+
   function effectiveSchedule(){
-    const overrides=state.overrides.filter(o=>o.weekId===state.currentWeekId);
-    if(!overrides.length) return [...state.schedule].sort((a,b)=>a.dow-b.dow||a.period-b.period);
-    return overrides.filter(o=>o.active).map(o=>({dow:o.dow,period:o.period})).sort((a,b)=>a.dow-b.dow||a.period-b.period);
+    return scheduleForWeek(state.currentWeekId);
+  }
+
+  function sessionStartTime(w,dow,p){
+    const pe=period(p);
+    if(!w||!pe?.start)return NaN;
+    const date=dateForDow(w,dow);
+    return new Date(`${date}T${pe.start}:00+07:00`).getTime();
+  }
+
+  function sessionHasStarted(w,dow,p){
+    const t=sessionStartTime(w,dow,p);
+    return Number.isFinite(t)&&Date.now()>=t;
+  }
+
+  function emergencyRegistrationEligible(w,dow,p,r=null){
+    if(r)return false;
+    if(effectiveWeekStatus(w)!=="open")return false;
+    if(!deadlinePassed(w,dow))return false;
+    const start=sessionStartTime(w,dow,p);
+    return Number.isFinite(start)&&Date.now()<start;
+  }
+
+  function recommendedStudentWeek(){
+    if(!state?.weeks?.length)return null;
+    const openWeeks=state.weeks
+      .filter(w=>effectiveWeekStatus(w)==="open")
+      .sort((a,b)=>a.number-b.number);
+
+    for(const w of openWeeks){
+      const slots=scheduleForWeek(w.id);
+      if(slots.some(sl=>{
+        const start=sessionStartTime(w,sl.dow,sl.period);
+        return Number.isFinite(start)&&Date.now()<start;
+      })){
+        return w;
+      }
+    }
+
+    return actualWeek()||state.weeks[0];
+  }
+
+  function alignStudentWeekToNextAction(force=false){
+    if(!currentUser||!["student","monitor"].includes(currentUser.role))return false;
+    if(weekSelectionTouched&&!force)return false;
+
+    const recommended=recommendedStudentWeek();
+    if(!recommended||recommended.id===state.currentWeekId)return false;
+
+    state.currentWeekId=recommended.id;
+    return true;
   }
   function regFor(studentId,dow,p,weekId=state.currentWeekId){
     return state.registrations.find(r=>r.studentId===studentId&&r.weekId===weekId&&r.dow===dow&&r.period===p);
@@ -644,7 +731,7 @@
 
     refreshWiseOwl();
   }
-  $("#globalWeekSelect").addEventListener("change",e=>{state.currentWeekId=e.target.value;saveState();render();});
+  $("#globalWeekSelect").addEventListener("change",e=>{weekSelectionTouched=true;state.currentWeekId=e.target.value;saveState();render();});
   $("#profileBtn").addEventListener("click",()=>openModal("Tài khoản",`
     <div class="card" style="box-shadow:none">
       <div class="person"><span class="avatar">${initials(currentUser?.name||"")}</span><div><b>${esc(currentUser?.name)}</b><div class="muted tiny">${roleLabel[currentUser?.role]} · ${esc(currentUser?.code)}</div></div></div>
@@ -733,35 +820,136 @@
   function studentDashboard(){
     const slots=effectiveSchedule(), regs=slots.map(sl=>regFor(currentUser.id,sl.dow,sl.period));
     const done=regs.filter(r=>r&&r.status!=="draft").length, total=slots.length, pct=total?Math.round(done/total*100):0;
+    const actual=actualWeek();
+    const viewingNext=actual&&week().number>actual.number;
     let html=head("Trang chủ",`Xin chào ${esc(currentUser.name)} 👋`)+weekBanner();
+    if(viewingNext){
+      html+=`<div class="callout next-action-week"><b>➡ Đã chuyển sang Tuần ${week().number}.</b> Các buổi còn lại của tuần trước đã bắt đầu/đã qua nên app ưu tiên tuần có buổi đăng ký tiếp theo.</div>`;
+    }
     html+=`<div class="card" style="margin-bottom:16px"><div class="toolbar"><b>Tiến độ của bạn</b><span class="right"><b>${done}/${total}</b> tiết</span></div><div class="progress" style="margin-top:10px"><span style="width:${pct}%"></span></div></div>`;
     if(!slots.length) html+=empty("📅","Tuần này chưa có tiết tự học.");
     else html+=`<div class="grid">${slots.map((sl,i)=>studyCard(sl,regs[i])).join("")}</div>`;
     return html;
   }
   function studyCard(sl,r){
-    const w=week(), pe=period(sl.period), icon=r?.status==="approved"?"✅":r?.status==="needs_revision"?"📝":r?"📘":"🗒️";
-    const slotClosed=w.status!=="open"||deadlinePassed(w,sl.dow);
-    const noNewRegistration=slotClosed&&!r;
-    const actionText=noNewRegistration?"Đã quá hạn":r?.status==="approved"?"Xem":r?"Xem / sửa":"+ Đăng ký ngay";
-    return `<div class="card study-card ${noNewRegistration?"closed-slot":""}">
+    const w=week();
+    const pe=period(sl.period);
+    const effectiveStatus=effectiveWeekStatus(w);
+    const started=sessionHasStarted(w,sl.dow,sl.period);
+    const pastDeadline=deadlinePassed(w,sl.dow);
+    const emergency=emergencyRegistrationEligible(w,sl.dow,sl.period,r);
+
+    const icon=r?.status==="approved"
+      ?"✅"
+      :r?.status==="needs_revision"
+        ?"📝"
+        :r
+          ?"📘"
+          :started
+            ?"⌛"
+            :emergency
+              ?"🚨"
+              :"🗒️";
+
+    const regularNewAllowed=!r&&effectiveStatus==="open"&&!pastDeadline&&!started;
+    const approvedEditable=r?.status==="approved"&&effectiveStatus==="open"&&!pastDeadline&&!started;
+    const revisionEditable=r?.status==="needs_revision";
+    const ordinaryEditable=!!r&&["draft","submitted"].includes(r.status)&&effectiveStatus==="open"&&!pastDeadline&&!started;
+    const editable=approvedEditable||revisionEditable||ordinaryEditable;
+
+    let actionHtml="";
+    if(r){
+      const label=approvedEditable
+        ?"Sửa đăng ký"
+        :revisionEditable
+          ?"Sửa theo yêu cầu"
+          :ordinaryEditable
+            ?"Xem / sửa"
+            :"Xem";
+      actionHtml=`<button class="btn ${editable?"btn-ghost":"btn-soft"} reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">${label}</button>`;
+    }else if(regularNewAllowed){
+      actionHtml=`<button class="btn btn-primary reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">+ Đăng ký ngay</button>`;
+    }else if(emergency){
+      actionHtml=`<button class="btn emergency-reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">🚨 Đăng ký bổ sung</button>`;
+    }else{
+      const label=started
+        ?"Đã qua buổi"
+        :effectiveStatus==="upcoming"
+          ?"Chưa mở"
+          :effectiveStatus==="holiday"
+            ?"Tuần nghỉ"
+            :pastDeadline
+              ?"Đã quá hạn"
+              :"Đã khóa";
+      actionHtml=`<button class="btn btn-soft" disabled>${label}</button>`;
+    }
+
+    const cardClass=(!r&&!regularNewAllowed&&!emergency)?"closed-slot":"";
+    return `<div class="card study-card ${cardClass} ${emergency?"emergency-slot":""}">
       <div class="study-icon">${icon}</div>
-      <div class="study-main"><h3>${DemoData.DOW[sl.dow]} · ${fmtDate(dateForDow(w,sl.dow))} · Tiết ${sl.period}</h3><p>🕘 ${pe.start} – ${pe.end}</p>
-      <p class="slot-deadline ${deadlinePassed(w,sl.dow)?"expired":""}">⏰ Hạn: <b>${fmtDeadline(deadlineForSlot(w,sl.dow))}</b>${deadlinePassed(w,sl.dow)?" · Đã qua":""}</p>
-      <p><b>${r?esc(r.content):"Chưa đăng ký"}</b></p>${r?.note?`<p>${esc(r.note)}</p>`:""}${r?.teacherComment?`<p style="color:#7c3aed">💬 GV: ${esc(r.teacherComment)}</p>`:""}${r?.approvalSource==="auto_rule"?`<p class="tiny auto-approved-note">✨ Đã được duyệt nhanh theo quy tắc</p>`:""}
-      ${r?.approvalSource==="ai"?`<p class="tiny auto-approved-note">🤖 AI đã duyệt${r.aiConfidence==null?"":` · ${Math.round(r.aiConfidence*100)}%`}</p>`:""}
-      ${["pending","processing"].includes(r?.aiReviewStatus)?`<p class="tiny ai-review-badge">🤖 AI đang đánh giá...</p>`:""}
+      <div class="study-main">
+        <h3>${DemoData.DOW[sl.dow]} · ${fmtDate(dateForDow(w,sl.dow))} · Tiết ${sl.period}</h3>
+        <p>🕘 ${pe.start} – ${pe.end}</p>
+        <p class="slot-deadline ${pastDeadline?"expired":""}">
+          ⏰ Hạn: <b>${fmtDeadline(deadlineForSlot(w,sl.dow))}</b>
+          ${pastDeadline?" · Đã qua":""}
+        </p>
+        ${started?`<p class="tiny session-passed-note">⌛ Buổi tự học đã bắt đầu/đã qua.</p>`:""}
+        ${emergency?`<p class="tiny emergency-note">🚨 Deadline đã qua nhưng buổi học chưa bắt đầu. Chỉ còn đăng ký bổ sung khẩn cấp và giáo viên sẽ duyệt.</p>`:""}
+        <p><b>${r?esc(r.content):"Chưa đăng ký"}</b></p>
+        ${r?.note?`<p>${esc(r.note)}</p>`:""}
+        ${r?.teacherComment?`<p style="color:#7c3aed">💬 GV: ${esc(r.teacherComment)}</p>`:""}
+        ${r?.isEmergency?`<p class="tiny emergency-badge">🚨 Đăng ký bổ sung · ${esc(r.emergencyReason||"")}</p>`:""}
+        ${r?.approvalSource==="auto_rule"?`<p class="tiny auto-approved-note">✨ Đã được duyệt nhanh theo quy tắc</p>`:""}
+        ${r?.approvalSource==="ai"?`<p class="tiny auto-approved-note">🤖 AI đã duyệt${r.aiConfidence==null?"":` · ${Math.round(r.aiConfidence*100)}%`}</p>`:""}
+        ${["pending","processing"].includes(r?.aiReviewStatus)?`<p class="tiny ai-review-badge">🤖 AI đang đánh giá...</p>`:""}
       </div>
-      <div class="study-actions">${statusBadge(r?.status||"missing")}<button class="btn ${r?"btn-ghost":"btn-primary"} reg-btn" data-dow="${sl.dow}" data-period="${sl.period}" ${noNewRegistration?"disabled":""}>${actionText}</button></div>
+      <div class="study-actions">
+        ${statusBadge(r?.status||"missing")}
+        ${actionHtml}
+      </div>
     </div>`;
   }
+
   function bindRegistrationButtons(){
-    content.querySelectorAll(".reg-btn").forEach(b=>b.onclick=()=>registrationModal(Number(b.dataset.dow),Number(b.dataset.period)));
+    content.querySelectorAll(".reg-btn").forEach(button=>{
+      button.onclick=()=>registrationModal(
+        Number(button.dataset.dow),
+        Number(button.dataset.period)
+      );
+    });
+
+    content.querySelectorAll(".emergency-reg-btn").forEach(button=>{
+      button.onclick=()=>emergencyRegistrationModal(
+        Number(button.dataset.dow),
+        Number(button.dataset.period)
+      );
+    });
   }
+
   function registrationModal(dow,p){
-    const w=week(), r=regFor(currentUser.id,dow,p), pe=period(p);
+    const w=week();
+    const r=regFor(currentUser.id,dow,p);
+    const pe=period(p);
     const pastDeadline=deadlinePassed(w,dow);
-    const locked=w.status!=="open"||r?.status==="approved"||(pastDeadline&&r?.status!=="needs_revision");
+    const started=sessionHasStarted(w,dow,p);
+    const approvedEdit=r?.status==="approved"
+      &&effectiveWeekStatus(w)==="open"
+      &&!pastDeadline
+      &&!started;
+    const needsRevision=r?.status==="needs_revision";
+    const ordinaryEdit=!!r
+      &&["draft","submitted"].includes(r.status)
+      &&effectiveWeekStatus(w)==="open"
+      &&!pastDeadline
+      &&!started;
+    const newAllowed=!r
+      &&effectiveWeekStatus(w)==="open"
+      &&!pastDeadline
+      &&!started;
+    const editable=approvedEdit||needsRevision||ordinaryEdit||newAllowed;
+    const locked=!editable;
+
     openModal(`Đăng ký · ${DemoData.DOW[dow]} · Tiết ${p}`,`
       <div class="registration-summary">
         <div><span>📅 Ngày học</span><b>${DemoData.DOW[dow]}, ${fmtDate(dateForDow(w,dow))}</b></div>
@@ -769,52 +957,112 @@
         <div><span>🗓️ Tuần</span><b>Tuần ${w.number} · ${fmtDate(w.startDate)}–${fmtDate(w.endDate)}</b></div>
         <div><span>⏰ Hạn đăng ký</span><b>${fmtDeadline(deadlineForSlot(w,dow))}</b></div>
       </div>
-      ${pastDeadline&&r?.status!=="needs_revision"?`<div class="callout warning" style="margin-top:10px"><b>Đã qua deadline.</b> Nếu cần đăng ký bổ sung, hãy báo giáo viên gia hạn tuần này.</div>`:""}
-      ${pastDeadline&&r?.status==="needs_revision"?`<div class="callout" style="margin-top:10px"><b>GV đã yêu cầu chỉnh sửa.</b> Bạn vẫn được sửa đăng ký này dù deadline đã qua.</div>`:""}
-      ${r?.teacherComment?`<div class="callout warning" style="margin-top:10px"><b>Nhận xét giáo viên:</b><br>${esc(r.teacherComment)}</div>`:""}
+
+      ${approvedEdit?`<div class="callout re-review-callout"><b>✏️ Sửa đăng ký đã duyệt.</b> Khi bạn lưu thay đổi, đăng ký sẽ được gửi duyệt lại từ đầu.</div>`:""}
+      ${needsRevision?`<div class="callout"><b>GV đã yêu cầu chỉnh sửa.</b> Bạn vẫn được sửa và gửi duyệt lại dù deadline đã qua.</div>`:""}
+      ${r?.isEmergency?`<div class="callout emergency-callout"><b>🚨 Đây là đăng ký bổ sung.</b> Lý do: ${esc(r.emergencyReason||"—")}</div>`:""}
+      ${started?`<div class="callout warning"><b>Buổi tự học đã bắt đầu/đã qua.</b> Không thể tạo đăng ký mới hoặc sửa đăng ký bình thường.</div>`:""}
+      ${pastDeadline&&!needsRevision?`<div class="callout warning"><b>Đã qua deadline.</b> Hạn mặc định là 20:00 tối hôm trước buổi học.</div>`:""}
+      ${r?.teacherComment?`<div class="callout warning"><b>Nhận xét giáo viên:</b><br>${esc(r.teacherComment)}</div>`:""}
+
       <form id="regForm">
         <label>Nội dung tự học *
-          <input id="regContent" maxlength="180" required value="${esc(r?.content||"")}" ${locked?"disabled":""} placeholder="VD: Ôn tập phương trình bậc hai">
+          <input id="regContent" maxlength="180" required value="${esc(r?.content||"")}" ${locked?"disabled":""}
+            placeholder="VD: Ôn tập phương trình bậc hai">
         </label>
         <label>Ghi chú / mục tiêu
-          <textarea id="regNote" maxlength="500" ${locked?"disabled":""} placeholder="Nêu bài, trang hoặc mục tiêu cụ thể...">${esc(r?.note||"")}</textarea>
+          <textarea id="regNote" maxlength="500" ${locked?"disabled":""}
+            placeholder="Nêu bài, trang hoặc mục tiêu cụ thể...">${esc(r?.note||"")}</textarea>
         </label>
-        ${locked?`<p class="muted tiny">Không thể chỉnh sửa vì đăng ký đã duyệt, tuần chưa mở/đã khóa/nghỉ hoặc đã quá deadline.</p>`:
-        `<div class="toolbar"><button type="button" id="saveDraft" class="btn btn-ghost">Lưu nháp</button><button class="btn btn-primary right" type="submit">Gửi đăng ký</button></div>`}
-      </form>`);
+
+        ${locked
+          ?`<p class="muted tiny">Đăng ký này hiện chỉ được xem.</p>`
+          :approvedEdit
+            ?`<div class="toolbar"><button class="btn btn-primary right" type="submit">✏️ Lưu thay đổi & gửi duyệt lại</button></div>`
+            :`<div class="toolbar">
+                ${needsRevision?"":`<button type="button" id="saveDraft" class="btn btn-ghost">Lưu nháp</button>`}
+                <button class="btn btn-primary right" type="submit">${needsRevision?"Gửi lại để duyệt":"Gửi đăng ký"}</button>
+              </div>`
+        }
+      </form>
+    `);
+
     if(locked)return;
-    const save=async(status)=>{
+
+    const save=async(requestedStatus)=>{
       const contentVal=$("#regContent").value.trim();
-      if(!contentVal){toast("Bạn cần nhập nội dung tự học.","warn");return;}
+      if(!contentVal){
+        toast("Bạn cần nhập nội dung tự học.","warn");
+        return;
+      }
+
       let rr=regFor(currentUser.id,dow,p);
+      const wasApproved=rr?.status==="approved";
+      const status=wasApproved?"submitted":requestedStatus;
+
       if(!rr){
-        rr={id:"r"+Date.now(),studentId:currentUser.id,weekId:state.currentWeekId,dow,period:p,teacherComment:"",approvalSource:"manual",autoReviewReason:"",updatedAt:Date.now()};
+        rr={
+          id:"r"+Date.now(),
+          studentId:currentUser.id,
+          weekId:state.currentWeekId,
+          dow,
+          period:p,
+          teacherComment:"",
+          approvalSource:"manual",
+          autoReviewReason:"",
+          updatedAt:Date.now()
+        };
         state.registrations.push(rr);
       }
-      Object.assign(rr,{content:contentVal,note:$("#regNote").value.trim(),status,updatedAt:Date.now()});
+
+      Object.assign(rr,{
+        content:contentVal,
+        note:$("#regNote").value.trim(),
+        status,
+        updatedAt:Date.now()
+      });
+
+      if(wasApproved){
+        rr.approvalSource="manual";
+        rr.approvedAt=null;
+        rr.aiReviewStatus="not_needed";
+        rr.aiDecision="";
+        rr.aiCategory="";
+        rr.aiConfidence=null;
+        rr.aiReason="";
+      }
 
       if(!isProd&&status==="submitted"){
         const decision=state.settings.smartApprovalEnabled===false
-          ? {auto:false,reason:"Duyệt nhanh thông minh đang tắt."}
-          : smartReviewDecision(rr.content,rr.note);
+          ?{auto:false,reason:"Duyệt nhanh thông minh đang tắt."}
+          :smartReviewDecision(rr.content,rr.note);
         rr.autoReviewReason=decision.reason;
         rr.approvalSource=decision.auto?"auto_rule":"manual";
-        if(decision.auto){rr.status="approved";rr.approvedAt=Date.now();}
+        if(decision.auto){
+          rr.status="approved";
+          rr.approvedAt=Date.now();
+        }
         syncDemoNotificationForRegistration(rr);
       }
 
       state.audit.unshift({
-        at:new Date().toISOString(),userId:currentUser?.id,
-        action:status==="draft"?"Lưu nháp":"Gửi đăng ký",
-        entityId:rr.id,detail:rr.content
+        at:new Date().toISOString(),
+        userId:currentUser?.id,
+        action:wasApproved
+          ?"Sửa đăng ký — gửi duyệt lại"
+          :status==="draft"
+            ?"Lưu nháp"
+            :"Gửi đăng ký",
+        entityId:rr.id,
+        detail:rr.content
       });
 
       try{
         await saveState();
 
-        if(status==="submitted" && isProd && rr.aiReviewStatus==="pending"){
+        if(status==="submitted"&&isProd&&rr.aiReviewStatus==="pending"){
           setOwlThinking(true,"🤖 Cú Thông Thái đang nhờ Groq AI đọc ngữ cảnh đăng ký này...");
-          toast("AI đang đánh giá trường hợp chưa rõ...","success");
+          toast(wasApproved?"Đã lưu thay đổi; AI đang duyệt lại...":"AI đang đánh giá trường hợp chưa rõ...","success");
           try{
             await prod.requestAiReview(rr.id);
             await refreshFromServer(false);
@@ -824,11 +1072,9 @@
 
             if(fresh?.status==="approved"&&fresh?.approvalSource==="ai"){
               const pct=fresh.aiConfidence==null?"":` (${Math.round(fresh.aiConfidence*100)}%)`;
-              toast(`AI đã duyệt${pct}: nội dung phù hợp cho tự học.`,"success");
-              showOwlMessage({text:`🤖 AI đã duyệt đăng ký này${pct}. ${fresh.aiReason||"Mục đích học tập đủ rõ."}`,force:true});
+              toast(`AI đã duyệt${pct}.`,"success");
             }else{
-              toast("AI chưa đủ chắc chắn — đã chuyển giáo viên duyệt.","success");
-              showOwlMessage({text:`🔔 AI chưa đủ chắc chắn nên Cú đã chuyển đăng ký này cho giáo viên xem.`,force:true});
+              toast("Đã chuyển giáo viên duyệt.","success");
             }
             render();
             return;
@@ -836,7 +1082,7 @@
             console.error("AI review",aiErr);
             setOwlThinking(false);
             closeModal();
-            toast("Đã gửi đăng ký; AI tạm thời chưa phản hồi nên GV sẽ duyệt.","warn");
+            toast("Đã lưu; AI tạm thời chưa phản hồi nên giáo viên sẽ duyệt.","warn");
             try{await refreshFromServer(false);}catch{}
             render();
             return;
@@ -844,32 +1090,169 @@
         }
 
         closeModal();
-        if(status==="draft"){
+
+        if(wasApproved){
+          toast("Đã sửa đăng ký và gửi duyệt lại.","success");
+        }else if(status==="draft"){
           toast("Đã lưu nháp.","success");
         }else if(rr.status==="approved"&&rr.approvalSource==="auto_rule"){
           toast("Đã gửi và được duyệt nhanh theo quy tắc.","success");
-          showOwlMessage({text:"✨ Cú đã kiểm tra: nội dung học tập đủ rõ nên được duyệt nhanh theo quy tắc.",force:true});
         }else if(rr.status==="approved"&&rr.approvalSource==="ai"){
           toast("Đã gửi và được AI duyệt.","success");
         }else{
-          toast("Đã gửi. Nội dung này đang chờ giáo viên duyệt.","success");
+          toast("Đã gửi. Nội dung đang chờ giáo viên duyệt.","success");
         }
         render();
       }catch(err){
         console.error(err);
         setOwlThinking(false);
-        toast("Không lưu được đăng ký: "+(err.message||err),"warn");
+
+        const message=String(err?.message||err||"");
+        if(isProd){
+          try{await refreshFromServer(false);}catch{}
+        }
+
+        if(/row-level security|security policy|42501|SECURITY_REGISTRATION/i.test(message)){
+          toast("Không thể lưu: quyền, trạng thái tuần hoặc deadline không còn hợp lệ. Dữ liệu đã được tải lại.","warn");
+        }else if(/duplicate|23505|DUPLICATE_REGISTRATION/i.test(message)){
+          toast("Buổi này đã có đăng ký đang hoạt động. Dữ liệu đã được tải lại.","warn");
+        }else{
+          toast("Không lưu được đăng ký: "+message,"warn");
+        }
+        render();
       }
     };
-    $("#saveDraft").onclick=()=>save("draft");
-    $("#regForm").onsubmit=e=>{e.preventDefault();save("submitted");};
+
+    $("#saveDraft")?.addEventListener("click",()=>save("draft"));
+    $("#regForm").onsubmit=event=>{
+      event.preventDefault();
+      save("submitted");
+    };
+  }
+
+  function emergencyRegistrationModal(dow,p){
+    const w=week();
+    const pe=period(p);
+    const existing=regFor(currentUser.id,dow,p);
+
+    if(!emergencyRegistrationEligible(w,dow,p,existing)){
+      toast("Buổi này không còn ở cửa sổ đăng ký bổ sung.","warn");
+      render();
+      return;
+    }
+
+    openModal(`🚨 Đăng ký bổ sung · ${DemoData.DOW[dow]} · Tiết ${p}`,`
+      <div class="callout emergency-callout">
+        <b>Đăng ký bổ sung khẩn cấp</b><br>
+        Deadline đã qua nhưng buổi tự học chưa bắt đầu. Đăng ký này <b>không tự duyệt</b>; giáo viên sẽ nhận thông báo và duyệt thủ công.
+      </div>
+
+      <div class="registration-summary">
+        <div><span>📅 Buổi học</span><b>${DemoData.DOW[dow]}, ${fmtDate(dateForDow(w,dow))}</b></div>
+        <div><span>🕘 Thời gian</span><b>${pe.start} – ${pe.end}</b></div>
+        <div><span>⏰ Deadline đã qua</span><b>${fmtDeadline(deadlineForSlot(w,dow))}</b></div>
+      </div>
+
+      <form id="emergencyRegForm">
+        <label>Nội dung tự học *
+          <input id="emergencyContent" maxlength="180" required
+            placeholder="VD: Hoàn thành bài tập Toán chương 2">
+        </label>
+        <label>Ghi chú / mục tiêu
+          <textarea id="emergencyNote" maxlength="500"
+            placeholder="Nêu bài, trang hoặc mục tiêu cụ thể..."></textarea>
+        </label>
+        <label>Lý do đăng ký bổ sung *
+          <textarea id="emergencyReason" maxlength="300" required
+            placeholder="VD: Em quên xác nhận đăng ký trước deadline."></textarea>
+          <small>Lý do này sẽ được gửi cho giáo viên.</small>
+        </label>
+        <div class="toolbar">
+          <button class="btn emergency-submit-btn right" type="submit">🚨 Gửi đăng ký bổ sung</button>
+        </div>
+      </form>
+    `);
+
+    $("#emergencyRegForm").onsubmit=async event=>{
+      event.preventDefault();
+
+      const contentVal=$("#emergencyContent").value.trim();
+      const noteVal=$("#emergencyNote").value.trim();
+      const reasonVal=$("#emergencyReason").value.trim();
+
+      if(!contentVal){
+        toast("Bạn cần nhập nội dung tự học.","warn");
+        return;
+      }
+      if(reasonVal.length<5){
+        toast("Hãy ghi lý do cần đăng ký bổ sung.","warn");
+        return;
+      }
+
+      const submitBtn=$("#emergencyRegForm button[type='submit']");
+      if(submitBtn){
+        submitBtn.disabled=true;
+        submitBtn.textContent="Đang gửi...";
+      }
+
+      try{
+        if(isProd){
+          await prod.emergencyRegister({
+            weekId:w.id,
+            dow,
+            period:p,
+            content:contentVal,
+            note:noteVal,
+            reason:reasonVal
+          });
+          await refreshFromServer(false);
+        }else{
+          const rr={
+            id:"em"+Date.now(),
+            studentId:currentUser.id,
+            weekId:w.id,
+            dow,
+            period:p,
+            content:contentVal,
+            note:noteVal,
+            status:"submitted",
+            teacherComment:"",
+            approvalSource:"manual",
+            autoReviewReason:"Đăng ký bổ sung khẩn cấp sau deadline; giáo viên cần duyệt.",
+            aiReviewStatus:"not_needed",
+            isEmergency:true,
+            emergencyReason:reasonVal,
+            emergencyRequestedAt:new Date().toISOString(),
+            updatedAt:Date.now()
+          };
+          state.registrations.push(rr);
+          syncDemoNotificationForRegistration(rr);
+          await saveState();
+        }
+
+        closeModal();
+        toast("Đã gửi đăng ký bổ sung. Giáo viên sẽ duyệt thủ công.","success");
+        showOwlMessage({
+          text:"🚨 Cú đã chuyển đăng ký bổ sung của bạn cho giáo viên duyệt.",
+          force:true
+        });
+        render();
+      }catch(error){
+        console.error(error);
+        toast("Không gửi được đăng ký bổ sung: "+(error.message||error),"warn");
+        if(submitBtn){
+          submitBtn.disabled=false;
+          submitBtn.textContent="🚨 Gửi đăng ký bổ sung";
+        }
+      }
+    };
   }
 
   function historyPage(){
     const regs=state.registrations.filter(r=>r.studentId===currentUser.id).sort((a,b)=>b.updatedAt-a.updatedAt);
     return head("Lịch sử của tôi","Xem lại đăng ký ở các tuần trước.")+
       (regs.length?`<div class="card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Tuần</th><th>Tiết</th><th>Nội dung</th><th>Trạng thái</th><th>Nhận xét GV</th></tr></thead><tbody>
-      ${regs.map(r=>{const w=state.weeks.find(x=>x.id===r.weekId);return `<tr><td>Tuần ${w?.number||"?"}</td><td>${slotLabel(r.dow,r.period)}</td><td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div></td><td>${statusBadge(r.status)}</td><td>${esc(r.teacherComment||"—")}</td></tr>`}).join("")}
+      ${regs.map(r=>{const w=state.weeks.find(x=>x.id===r.weekId);return `<tr><td>Tuần ${w?.number||"?"}</td><td>${slotLabel(r.dow,r.period)}</td><td><b>${esc(r.content)}</b>${r.isEmergency?`<div class="tiny emergency-badge">🚨 Bổ sung khẩn cấp</div>`:""}<div class="tiny muted">${esc(r.note||"")}</div></td><td>${statusBadge(r.status)}</td><td>${esc(r.teacherComment||"—")}</td></tr>`}).join("")}
       </tbody></table></div></div>`:empty("🕘","Chưa có lịch sử đăng ký."));
   }
   function commentsPage(){
@@ -913,14 +1296,14 @@
       <button class="btn btn-ghost" data-route-settings="1">Cài đặt</button>
     </div>`;
     html+=`<div class="grid grid-2"><div class="card"><h3>🔔 Cần giáo viên xử lý</h3>${pending.length?pending.map(approvalItem).join(""):empty("✅","Không còn đăng ký chờ xử lý.")}</div>
-      <div class="card"><h3>Tuần hiện tại</h3><p><b>Tuần ${week().number}</b></p><p>${fmtDate(week().startDate)} – ${fmtDate(week().endDate)}</p><p><b>Kiểu deadline:</b> ${deadlineModeLabel(week().deadlineMode)}</p><p>${deadlineChip(week())}</p><p>Trạng thái: ${weekStatus(week().status)}</p>
+      <div class="card"><h3>Tuần hiện tại</h3><p><b>Tuần ${week().number}</b></p><p>${fmtDate(week().startDate)} – ${fmtDate(week().endDate)}</p><p><b>Kiểu deadline:</b> ${deadlineModeLabel(week().deadlineMode)}</p><p>${deadlineChip(week())}</p><p>Trạng thái: ${weekStatus(effectiveWeekStatus(week()))}</p>
       <div class="progress"><span style="width:${st.rate}%"></span></div><p class="muted tiny">${st.submitted}/${st.total} lượt đã đăng ký</p></div></div>`;
     return html;
   }
   function kpi(icon,val,label){return `<div class="card kpi"><div class="kpi-icon">${icon}</div><div><div class="kpi-value">${val}</div><div class="kpi-label">${label}</div></div></div>`;}
   function approvalItem(r){
     const s=state.users.find(u=>u.id===r.studentId);
-    return `<div class="approval-item manual-review-item"><div class="approval-content"><div class="person"><span class="avatar">${initials(s?.name||"?")}</span><div><b>${esc(s?.name||"")}</b><div class="tiny muted">${slotLabel(r.dow,r.period)}</div></div></div><p><b>${esc(r.content)}</b></p><p>${esc(r.note||"")}</p>
+    return `<div class="approval-item manual-review-item"><div class="approval-content"><div class="person"><span class="avatar">${initials(s?.name||"?")}</span><div><b>${esc(s?.name||"")}</b><div class="tiny muted">${slotLabel(r.dow,r.period)}</div></div></div><p><b>${esc(r.content)}</b></p><p>${esc(r.note||"")}</p>${r.isEmergency?`<div class="callout emergency-callout"><b>🚨 Đăng ký bổ sung</b><br>Lý do: ${esc(r.emergencyReason||"—")}</div>`:""}
       ${(r.aiReason||r.autoReviewReason)?`<div class="review-reason">🧠 <b>Lý do cần GV xem:</b> ${esc(r.aiReason||r.autoReviewReason)}${r.aiConfidence==null?"":` <b>(${Math.round(r.aiConfidence*100)}%)</b>`}</div>`:""}
       ${r.teacherComment?`<p style="color:#7c3aed">💬 ${esc(r.teacherComment)}</p>`:""}</div>
       <div class="approval-actions">${statusBadge(r.status)}<button class="btn btn-success approve-btn" data-id="${r.id}">✓ Duyệt</button><button class="btn btn-warning revise-btn" data-id="${r.id}">↩ Yêu cầu sửa</button><button class="btn btn-ghost comment-btn" data-id="${r.id}">💬 Nhận xét</button><button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button></div></div>`;
@@ -1050,20 +1433,29 @@
   function weeksPage(){
     const first=state.weeks[0];
     const rows=state.weeks.map(w=>{
-      const mode=w.deadlineMode||"week_before_20";
+      const mode=w.deadlineMode||"per_session_20";
+      const effective=effectiveWeekStatus(w);
+      const auto=automaticWeekStatus(w);
       return `<div class="week-row v5-week-row ${w.id===state.currentWeekId?"active-week":""}" data-week-id="${w.id}">
-        <div><b>Tuần ${w.number}</b><small>${w.id===state.currentWeekId?" · đang xem":""}</small></div>
-        <div><b>${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</b><small>${w.number===1?" · mốc tuần đầu":""}</small></div>
-        <select class="week-status" data-id="${w.id}" aria-label="Trạng thái tuần ${w.number}">
-          <option value="upcoming" ${w.status==="upcoming"?"selected":""}>Sắp tới</option>
-          <option value="open" ${w.status==="open"?"selected":""}>Đang mở</option>
-          <option value="locked" ${w.status==="locked"?"selected":""}>Đã khóa</option>
-          <option value="holiday" ${w.status==="holiday"?"selected":""}>Nghỉ</option>
-        </select>
+        <div>
+          <b>Tuần ${w.number}</b>
+          <small>${w.id===state.currentWeekId?" · đang xem":""}</small>
+        </div>
+        <div>
+          <b>${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</b>
+          <small>${w.number===1?" · mốc tuần đầu":""}</small>
+        </div>
+        <div class="auto-week-status">
+          <span class="status ${effective==="open"?"approved":effective==="locked"?"missing":"draft"}">${weekStatus(effective)}</span>
+          <label class="week-holiday-toggle">
+            <input class="week-holiday" type="checkbox" data-id="${w.id}" ${w.status==="holiday"?"checked":""}>
+            <span>Tuần nghỉ</span>
+          </label>
+          <small>${w.status==="holiday"?"Đã đặt là tuần nghỉ.":`Tự động: ${weekStatus(auto)}.`}</small>
+        </div>
         <div class="deadline-choice">
           <select class="week-deadline-mode" data-id="${w.id}" aria-label="Chế độ deadline tuần ${w.number}">
-            <option value="per_session_20" ${mode==="per_session_20"?"selected":""}>🕗 20:00 tối hôm trước từng buổi</option>
-            <option value="week_before_20" ${mode==="week_before_20"?"selected":""}>📆 20:00 ngày trước khi tuần bắt đầu</option>
+            <option value="per_session_20" ${mode==="per_session_20"?"selected":""}>🕗 Mặc định · 20:00 tối hôm trước từng buổi</option>
             <option value="specific" ${mode==="specific"?"selected":""}>🎯 Hạn cụ thể của tuần</option>
           </select>
           <input class="week-deadline" data-id="${w.id}" type="datetime-local"
@@ -1074,13 +1466,16 @@
       </div>`;
     }).join("");
 
-    return head("Quản lý tuần","Mỗi tuần có một chế độ deadline riêng; các chế độ loại trừ nhau.",
-      `<div class="toolbar"><button class="btn btn-ghost" id="goCurrentWeek">📍 Tuần theo ngày hôm nay</button><button class="btn btn-primary" id="saveWeeks">💾 Lưu cấu hình tuần</button></div>`)+
+    return head(
+      "Quản lý tuần",
+      "Trạng thái tuần được tính tự động: tuần hiện tại và tuần kế tiếp luôn mở; các tuần cũ tự khóa. Giáo viên chỉ cần đánh dấu tuần nghỉ.",
+      `<div class="toolbar"><button class="btn btn-ghost" id="goCurrentWeek">📍 Tuần theo ngày hôm nay</button><button class="btn btn-primary" id="saveWeeks">💾 Lưu cấu hình</button></div>`
+    )+
       `<div class="card week-setup-card">
         <div>
           <div class="eyebrow-pill">🧭 Mốc năm học</div>
           <h3>Tuần 1 bắt đầu ngày nào?</h3>
-          <p class="muted">Đặt mốc Tuần 1 một lần. Deadline được chọn <b>độc lập cho từng tuần</b> ở danh sách bên dưới.</p>
+          <p class="muted">Trạng thái mở/khóa được tự tính theo ngày. Hạn mặc định là <b>20:00 tối hôm trước từng buổi học</b>.</p>
         </div>
         <div class="week-setup-grid v5-week-setup-grid">
           <label>Ngày bắt đầu Tuần 1
@@ -1088,10 +1483,9 @@
             <small>Phải là ngày Thứ Hai.</small>
           </label>
           <div class="deadline-mode-guide">
-            <b>3 lựa chọn deadline</b>
-            <span>🕗 Theo từng buổi: hạn 20:00 tối hôm trước buổi đó.</span>
-            <span>📆 Trước tuần: hạn 20:00 ngày trước khi tuần bắt đầu.</span>
-            <span>🎯 Hạn cụ thể: GV chọn một ngày/giờ dùng cho cả tuần.</span>
+            <b>Hạn đăng ký</b>
+            <span>🕗 Mặc định: 20:00 tối hôm trước từng buổi.</span>
+            <span>🎯 Khi thật sự cần, GV có thể đặt hạn cụ thể cho cả tuần.</span>
           </div>
           <button class="btn btn-primary glossy-action" id="applyWeekCalendar">✨ Áp dụng mốc tuần</button>
         </div>
@@ -1108,30 +1502,29 @@
       if(d.getUTCDay()!==1){
         toast("Ngày bắt đầu Tuần 1 phải là Thứ Hai.","warn");return;
       }
-      if(!confirm(`Xếp lại lịch với Tuần 1 bắt đầu ${fmtDate(start)}? Chế độ deadline riêng của từng tuần sẽ được giữ lại.`))return;
+      if(!confirm(`Xếp lại lịch với Tuần 1 bắt đầu ${fmtDate(start)}? Trạng thái mở/khóa sẽ được tính tự động.`))return;
 
       try{
         if(isProd){
           await prod.teacherRebaseWeeks(start,"20:00");
-          toast("Đã xếp lại lịch tuần và giữ chế độ deadline từng tuần.","success");
+          toast("Đã xếp lại lịch. Tuần hiện tại và tuần kế tiếp sẽ tự mở.","success");
           await refreshFromServer(false);
         }else{
-          const today=new Date().toISOString().slice(0,10);
           state.weeks.forEach((w,i)=>{
             w.startDate=addDaysDateISO(start,i*7);
             w.endDate=addDaysDateISO(w.startDate,4);
-            if(!w.deadlineMode)w.deadlineMode="week_before_20";
+            if(w.deadlineMode!=="specific")w.deadlineMode="per_session_20";
+            if(w.status!=="holiday")w.status=automaticWeekStatus(w);
           });
           const current=actualWeek();
-          state.weeks.forEach(w=>{
-            if(w.status==="holiday")return;
-            w.status=w.id===current?.id?"open":(w.endDate<today?"locked":"upcoming");
-          });
           if(current)state.currentWeekId=current.id;
-          await saveState();toast("Đã xếp lại lịch tuần demo.","success");renderShell();render();
+          await saveState();
+          toast("Đã xếp lại lịch tuần demo.","success");
+          renderShell();render();
         }
       }catch(err){
-        console.error(err);toast("Không xếp lại được lịch tuần: "+(err.message||err),"warn");
+        console.error(err);
+        toast("Không xếp lại được lịch tuần: "+(err.message||err),"warn");
       }
     });
 
@@ -1149,38 +1542,55 @@
 
     $("#saveWeeks")?.addEventListener("click",async()=>{
       let invalid=false;
-      content.querySelectorAll(".week-status").forEach(el=>{
-        const w=state.weeks.find(x=>x.id===el.dataset.id);if(w)w.status=el.value;
+
+      content.querySelectorAll(".week-holiday").forEach(el=>{
+        const w=state.weeks.find(x=>x.id===el.dataset.id);
+        if(!w)return;
+        w.status=el.checked?"holiday":automaticWeekStatus(w);
       });
+
       content.querySelectorAll(".week-deadline-mode").forEach(el=>{
-        const w=state.weeks.find(x=>x.id===el.dataset.id);if(w)w.deadlineMode=el.value;
+        const w=state.weeks.find(x=>x.id===el.dataset.id);
+        if(w)w.deadlineMode=el.value;
       });
+
       content.querySelectorAll(".week-deadline").forEach(el=>{
         const w=state.weeks.find(x=>x.id===el.dataset.id);
         if(!w)return;
-        if((w.deadlineMode||"week_before_20")==="specific"&&!el.value){
+        if((w.deadlineMode||"per_session_20")==="specific"&&!el.value){
           invalid=true;
           el.focus();
           return;
         }
-        if(el.value)w.deadline=el.value;
+        w.deadline=(w.deadlineMode==="specific")?el.value:"";
       });
-      if(invalid){toast("Tuần dùng “Hạn cụ thể” phải có ngày và giờ.","warn");return;}
+
+      if(invalid){
+        toast("Tuần dùng “Hạn cụ thể” phải có ngày và giờ.","warn");
+        return;
+      }
+
       audit("Cập nhật tuần học","weeks");
       try{
         await saveState();
-        toast("Đã lưu chế độ deadline độc lập cho từng tuần.","success");
+        toast("Đã lưu. Trạng thái tuần sẽ tiếp tục tự động theo ngày.","success");
         if(isProd)await refreshFromServer(false); else render();
       }catch{}
     });
 
-    content.querySelectorAll(".view-week").forEach(b=>b.onclick=()=>{state.currentWeekId=b.dataset.id;saveState();renderShell();render();});
+    content.querySelectorAll(".view-week").forEach(b=>b.onclick=()=>{
+      state.currentWeekId=b.dataset.id;
+      saveState();
+      renderShell();
+      render();
+    });
+
     $("#goCurrentWeek")?.addEventListener("click",()=>{
       const w=actualWeek();
       if(!w){toast("Chưa có tuần học nào.","warn");return;}
       state.currentWeekId=w.id;
-      if(!isProd) saveState();
-      toast(`Hôm nay thuộc/chuẩn bị vào Tuần ${w.number}.`,"success");
+      if(!isProd)saveState();
+      toast(`Đã chuyển đến Tuần ${w.number}.`,"success");
       renderShell();render();
     });
   }
@@ -1228,7 +1638,7 @@
 
     return head(
       "Quản lý học sinh",
-      "Bản 8.2.3: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
+      "Bản 8.2.5: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>
       </div>`
@@ -1688,6 +2098,9 @@
       const loaded=await prod.loadState();
       if(!loaded.currentUser){ await logout(); return; }
       currentUser=loaded.currentUser; state=loaded.state; route=route||"dashboard";
+      if(!weekSelectionTouched&&["dashboard","register"].includes(route)){
+        alignStudentWeekToNextAction();
+      }
       renderShell(); render();
       if(showToast) toast("Đã đồng bộ dữ liệu mới nhất.","success");
     }catch(err){ console.error(err); if(showToast) toast("Không tải được dữ liệu mới: "+(err.message||err),"warn"); }
@@ -1699,7 +2112,11 @@
       await prod.init();
       const loaded=await prod.loadState();
       if(loaded.currentUser){
-        currentUser=loaded.currentUser; state=loaded.state; renderShell(); render();
+        currentUser=loaded.currentUser;
+        state=loaded.state;
+        alignStudentWeekToNextAction(true);
+        renderShell();
+        render();
         const seconds=Math.max(30,Number(window.APP_CONFIG?.refreshSeconds||60));
         setInterval(()=>{ if(currentUser && !document.hidden) refreshFromServer(false); },seconds*1000);
       }else renderShell();
@@ -1712,6 +2129,7 @@
 
   // Demo cũng chọn tuần theo ngày khi vừa mở trang, thay vì cố định w1.
   const demoWeek=actualWeek(); if(demoWeek) state.currentWeekId=demoWeek.id;
+  if(currentUser)alignStudentWeekToNextAction(true);
 
   if(currentUser){
     const live=state.users.find(u=>u.id===currentUser.id&&u.active); if(live){currentUser=live;sessionStorage.setItem("soTuHocUser",JSON.stringify(live));renderShell();render();}else logout();

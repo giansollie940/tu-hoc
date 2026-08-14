@@ -1082,3 +1082,92 @@ tbody tr:hover{ background:#fbfdff; }
 .nav-icon--history{color:#0891b2;background:linear-gradient(135deg,#cffafe,#e0f2fe)}
 .nav-icon--comments{color:#d97706;background:linear-gradient(135deg,#fef3c7,#ffedd5)}
 .nav-icon--missing{color:#dc2626;background:linear-gradient(135deg,#fee2e2,#ffedd5)}
+
+
+/* V8.2.4 — trạng thái tuần tự động */
+.auto-week-status{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:7px;
+  min-width:170px;
+}
+.week-holiday-toggle{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  font-size:12px;
+  font-weight:800;
+  color:#64748b;
+  cursor:pointer;
+}
+.week-holiday-toggle input{
+  width:auto;
+  margin:0;
+}
+.auto-week-status small{
+  color:#7b8aa5;
+  line-height:1.3;
+}
+
+
+/* =========================
+   V8.2.5 — student next-action + emergency registration
+   ========================= */
+.next-action-week{
+  margin:0 0 16px;
+  border-color:#c7d2fe;
+  background:linear-gradient(135deg,#eef2ff,#eff6ff);
+  color:#394a83;
+}
+.emergency-slot{
+  border-color:#fed7aa !important;
+  background:linear-gradient(180deg,#fff,#fffaf5);
+  box-shadow:0 10px 26px rgba(234,88,12,.08) !important;
+}
+.emergency-reg-btn,
+.emergency-submit-btn{
+  border:1px solid #fdba74;
+  background:linear-gradient(135deg,#fff7ed,#ffedd5);
+  color:#c2410c;
+  font-weight:900;
+}
+.emergency-reg-btn:hover,
+.emergency-submit-btn:hover{
+  background:linear-gradient(135deg,#ffedd5,#fed7aa);
+}
+.emergency-reg-btn:focus-visible,
+.emergency-submit-btn:focus-visible{
+  outline:3px solid #fdba74;
+  outline-offset:2px;
+}
+.emergency-note,
+.emergency-badge{
+  color:#c2410c;
+  font-weight:800;
+}
+.session-passed-note{
+  color:#64748b;
+  font-weight:700;
+}
+.emergency-callout{
+  margin:10px 0;
+  border-color:#fed7aa;
+  background:linear-gradient(135deg,#fff7ed,#fffaf5);
+  color:#9a3412;
+}
+.re-review-callout{
+  margin:10px 0;
+  border-color:#bfdbfe;
+  background:linear-gradient(135deg,#eff6ff,#eef2ff);
+  color:#1e40af;
+}
+.btn-soft{
+  background:#f1f5f9;
+  color:#64748b;
+  border:1px solid #e2e8f0;
+}
+.btn-soft:disabled{
+  cursor:not-allowed;
+  opacity:.82;
+}

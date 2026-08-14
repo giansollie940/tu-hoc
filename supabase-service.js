@@ -244,7 +244,7 @@
       const naturalEnd=addDaysISO(start,4);
       const end=naturalEnd>year.end_date ? year.end_date : naturalEnd;
       const deadlineDate=addDaysISO(start,-1);
-      const mode=old?.deadline_mode || "week_before_20";
+      const mode=old?.deadline_mode || "per_session_20";
       return {
         id:old?.id||null,
         school_year_id:year.id,
@@ -260,14 +260,19 @@
       };
     });
 
-    const chosen=planned.find(w=>w.start_date<=today&&w.end_date>=today)
+    const chosen=planned.find(w=>w.start_date<=today&&addDaysISO(w.start_date,6)>=today)
       || planned.find(w=>w.start_date>today)
       || planned[planned.length-1];
 
     const normalized=planned.map(w=>({
       ...w,
-      status:w.status==="holiday" ? "holiday" :
-        (w.week_number===chosen?.week_number ? "open" : (w.end_date<today ? "locked" : "upcoming"))
+      status:w.status==="holiday"
+        ? "holiday"
+        : (
+            chosen && (w.week_number===chosen.week_number || w.week_number===chosen.week_number+1)
+              ? "open"
+              : (w.end_date<today ? "locked" : "upcoming")
+          )
     }));
 
     let q=await sb.from("school_years").update({start_date:firstWeekStart}).eq("id",year.id);
@@ -297,6 +302,26 @@
 
     snapshot=null;
     return {ok:true,currentWeekNumber:chosen?.week_number||1,createdWeeks:newRows.length};
+  }
+
+  async function emergencyRegister({weekId,dow,period,content,note,reason}){
+    const sb=requireClient();
+    const {data,error}=await sb.functions.invoke("emergency-register",{
+      body:{
+        weekId,
+        weekday:Number(dow)+1,
+        periodNumber:Number(period),
+        content:String(content||"").trim(),
+        note:String(note||"").trim(),
+        reason:String(reason||"").trim()
+      }
+    });
+    if(error){
+      const detail=await edgeFunctionErrorMessage(error,"Không đăng ký bổ sung được");
+      throw new Error(detail);
+    }
+    if(!data?.ok)throw new Error(data?.error||"Không đăng ký bổ sung được");
+    return data.registration?mapReg(data.registration):null;
   }
 
   async function requestAiReview(registrationId){
@@ -345,7 +370,7 @@
     return {
       id:w.id, number:w.week_number, startDate:w.start_date, endDate:w.end_date,
       status:w.status,
-      deadlineMode:w.deadline_mode || "week_before_20",
+      deadlineMode:w.deadline_mode || "per_session_20",
       deadline:toLocalInput(w.registration_deadline),
       note:w.note || ""
     };
@@ -365,6 +390,9 @@
       aiModel:r.ai_model || "",
       aiReviewedAt:r.ai_reviewed_at || null,
       aiReviewCount:Number(r.ai_review_count||0),
+      isEmergency:r.is_emergency===true,
+      emergencyReason:r.emergency_reason || "",
+      emergencyRequestedAt:r.emergency_requested_at || null,
       updatedAt:r.updated_at ? new Date(r.updated_at).getTime() : Date.now(),
       approvedAt:r.approved_at ? new Date(r.approved_at).getTime() : null
     };
@@ -403,18 +431,16 @@
   }
 
   function chooseCurrentWeek(weeks){
-    if(!weeks?.length) return null;
+    if(!weeks?.length)return null;
     const today=dateISOInTimeZone();
 
-    // Mon–Fri: đúng tuần chứa hôm nay.
-    const exact=weeks.find(w=>w.startDate<=today && w.endDate>=today);
-    if(exact) return exact;
+    // Tuần học được neo từ Thứ Hai đến Chủ nhật.
+    const exact=weeks.find(w=>w.startDate<=today && addDaysISO(w.startDate,6)>=today);
+    if(exact)return exact;
 
-    // Trước năm học hoặc cuối tuần/khoảng nghỉ: ưu tiên tuần kế tiếp.
     const next=weeks.find(w=>w.startDate>today);
-    if(next) return next;
+    if(next)return next;
 
-    // Sau năm học: giữ tuần cuối cùng thay vì rơi về tuần 1.
     return weeks[weeks.length-1];
   }
 
@@ -593,9 +619,10 @@
       if (!old || stable(r)!==stable(old)){
         if (!isUuid(r.id)){
           const payload=dbReg(r); delete payload.id;
-          const { data,error }=await sb.from("registrations").upsert(payload,{
-            onConflict:"student_id,week_id,weekday,period_number"
-          }).select().single();
+          const { data,error }=await sb.from("registrations")
+            .insert(payload)
+            .select()
+            .single();
           if(error) throw error;
           Object.assign(r,mapReg(data));
         } else {
@@ -641,7 +668,7 @@
         if(old && stable(w)!==stable(old)){
           const { error }=await sb.from("weeks").update({
             status:w.status,
-            deadline_mode:w.deadlineMode || "week_before_20",
+            deadline_mode:w.deadlineMode || "per_session_20",
             registration_deadline:w.deadline?new Date(w.deadline).toISOString():null,
             note:w.note||null
           }).eq("id",w.id);
@@ -679,9 +706,24 @@
     snapshot=deepClone(state);
   }
 
+  function friendlySyncError(error){
+    const message=String(error?.message||error||"");
+    const code=String(error?.code||"");
+    if(code==="42501"||/row-level security|security policy/i.test(message)){
+      return new Error("SECURITY_REGISTRATION: thao tác bị RLS từ chối vì quyền tài khoản, trạng thái tuần hoặc deadline không hợp lệ.");
+    }
+    if(code==="23505"||/duplicate key/i.test(message)){
+      return new Error("DUPLICATE_REGISTRATION: tiết này đã có đăng ký đang hoạt động.");
+    }
+    return error instanceof Error?error:new Error(message||"Không đồng bộ được dữ liệu");
+  }
+
   function syncState(state,currentUser){
     if(!enabled()) return Promise.resolve();
-    syncQueue=syncQueue.then(()=>syncInternal(state,currentUser));
+    syncQueue=syncQueue.then(()=>syncInternal(state,currentUser)).catch(error=>{
+      syncQueue=Promise.resolve();
+      throw friendlySyncError(error);
+    });
     return syncQueue;
   }
 
@@ -690,7 +732,7 @@
   window.SupabaseService={
     enabled,init,signInCode,signOut,authUser,loadState,syncState,resetSnapshot,
     codeToEmail,changeOwnPassword,getWiseOwlQuote,teacherResetPassword,teacherListUsers,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
-    teacherRebaseWeeks,requestAiReview,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
+    teacherRebaseWeeks,emergencyRegister,requestAiReview,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
     get client(){return client;}
   };
 })();
