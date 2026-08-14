@@ -15,12 +15,44 @@
   const stable = v => JSON.stringify(v);
   const isUuid = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v || "");
 
+  const sessionAuthStorage={
+    getItem:key=>window.sessionStorage.getItem(key),
+    setItem:(key,value)=>window.sessionStorage.setItem(key,value),
+    removeItem:key=>window.sessionStorage.removeItem(key)
+  };
+
+  function clearLegacyPersistentAuth(){
+    try{
+      const projectRef=new URL(cfg.projectUrl).hostname.split(".")[0];
+      if(projectRef){
+        localStorage.removeItem(`sb-${projectRef}-auth-token`);
+      }
+    }catch{}
+  }
+
   function requireClient(){
-    if (!enabled()) throw new Error("Supabase mode chưa được cấu hình.");
-    if (!window.supabase) throw new Error("Không tải được thư viện Supabase JS.");
-    if (!client) client = window.supabase.createClient(cfg.projectUrl, cfg.publishableKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-    });
+    if(!enabled()) throw new Error("Supabase mode chưa được cấu hình.");
+    if(!window.supabase) throw new Error("Không tải được thư viện Supabase JS.");
+
+    if(!client){
+      // V8.2.3: không giữ token đăng nhập trong localStorage.
+      // sessionStorage sống qua F5 nhưng bị xóa khi tab/cửa sổ kết thúc.
+      clearLegacyPersistentAuth();
+
+      client=window.supabase.createClient(
+        cfg.projectUrl,
+        cfg.publishableKey,
+        {
+          auth:{
+            storage:sessionAuthStorage,
+            persistSession:true,
+            autoRefreshToken:true,
+            detectSessionInUrl:false
+          }
+        }
+      );
+    }
+
     return client;
   }
 

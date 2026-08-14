@@ -559,178 +559,112 @@ input:focus,select:focus,textarea:focus{
 
 
 /* =========================
-   V7 — CÚ THÔNG THÁI
+   V8.2.3 — CÚ THÔNG THÁI
+   Một nguồn CSS duy nhất cho thú cưng.
    ========================= */
 .wise-owl-pet{
+  --owl-size:clamp(82px,8.8vw,124px);
   position:fixed;
-  right:18px;
-  bottom:18px;
+  right:clamp(10px,1.5vw,22px);
+  bottom:clamp(82px,8vh,118px);
   z-index:70;
   display:flex;
   flex-direction:column;
   align-items:center;
-  gap:5px;
   pointer-events:none;
 }
 .wise-owl-pet.hidden{display:none}
-.owl-body,.owl-speech,.owl-name{pointer-events:auto}
+
+.owl-body,
+.owl-speech{
+  pointer-events:auto;
+}
+
 .owl-body{
-  --look-x:0px;
-  --look-y:0px;
-  --owl-tilt:0deg;
   position:relative;
-  width:104px;
-  height:112px;
-  border:0;
+  width:var(--owl-size);
+  height:var(--owl-size);
+  min-width:0;
+  min-height:0;
   padding:0;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  box-shadow:none;
   cursor:pointer;
-  border-radius:48% 48% 42% 42%;
-  background:
-    radial-gradient(circle at 50% 12%,rgba(255,255,255,.72),transparent 24%),
-    linear-gradient(145deg,#7c5cff 0%,#5067f2 46%,#2e8edb 100%);
-  box-shadow:
-    0 18px 34px rgba(52,86,191,.27),
-    inset 0 2px 0 rgba(255,255,255,.5),
-    inset 0 -8px 16px rgba(26,51,139,.16);
-  transform:rotate(var(--owl-tilt));
-  transition:transform .14s ease,filter .2s ease;
-  animation:owlFloat 3.8s ease-in-out infinite;
+  display:grid;
+  place-items:center;
+  overflow:visible;
+  transform-origin:50% 82%;
+  animation:owlPetFloat 3.8s ease-in-out infinite;
 }
-.owl-body:hover{filter:saturate(1.12) brightness(1.03)}
-.owl-body:active{transform:scale(.96) rotate(var(--owl-tilt))}
-.owl-face{
-  position:absolute;
-  left:13px;
-  top:17px;
-  width:78px;
-  height:64px;
-  border-radius:42% 42% 48% 48%;
-  background:linear-gradient(145deg,#eef9ff,#dff0ff);
-  box-shadow:inset 0 2px 0 #fff,0 5px 12px rgba(26,54,130,.12);
+.owl-body:hover .owl-pet-image{
+  filter:
+    drop-shadow(0 14px 22px rgba(73,95,192,.20))
+    saturate(1.04)
+    brightness(1.02);
 }
-.owl-ear{
-  position:absolute;
-  top:-5px;
-  width:30px;height:34px;
-  background:linear-gradient(145deg,#7255ef,#466bdc);
-  z-index:-1;
+.owl-body:focus-visible{
+  outline:3px solid #60a5fa;
+  outline-offset:4px;
 }
-.owl-ear-left{left:7px;clip-path:polygon(0 0,100% 88%,17% 100%)}
-.owl-ear-right{right:7px;clip-path:polygon(100% 0,83% 100%,0 88%)}
-.owl-eye{
-  position:absolute;
-  top:16px;
-  width:28px;height:28px;
-  overflow:hidden;
-  border-radius:50%;
-  background:#fff;
-  border:2px solid #c8def3;
-  box-shadow:inset 0 1px 2px rgba(35,68,120,.08);
-  animation:owlBlink 7s infinite;
+.owl-body:active{
+  transform:scale(.96);
 }
-.owl-eye-left{left:9px}
-.owl-eye-right{right:9px}
-.owl-pupil{
-  position:absolute;
-  left:8px;top:8px;
-  width:9px;height:9px;
-  border-radius:50%;
-  background:radial-gradient(circle at 35% 30%,#fff 0 13%,#24375b 17% 100%);
-  transform:translate(var(--look-x),var(--look-y));
-  transition:transform .08s linear;
+
+.owl-pet-image{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  display:block;
+  pointer-events:none;
+  user-select:none;
+  -webkit-user-drag:none;
+  filter:drop-shadow(0 12px 18px rgba(73,95,192,.14));
 }
-.owl-brow{
-  position:absolute;
-  top:10px;
-  width:23px;height:4px;
-  border-radius:999px;
-  background:#526a93;
-  opacity:.78;
+
+.wise-owl-pet.owl-flap .owl-body,
+.wise-owl-pet.owl-alert .owl-body{
+  animation:owlPetReact .42s ease-in-out 3;
 }
-.owl-brow-left{left:10px;transform:rotate(8deg)}
-.owl-brow-right{right:10px;transform:rotate(-8deg)}
-.owl-beak{
-  position:absolute;
-  left:33px;top:39px;
-  width:13px;height:13px;
-  background:linear-gradient(135deg,#ffd84d,#f59e0b);
-  clip-path:polygon(50% 100%,0 0,100% 0);
-  filter:drop-shadow(0 2px 2px rgba(170,111,0,.16));
-}
-.owl-belly{
-  position:absolute;
-  left:34px;bottom:13px;
-  width:36px;height:27px;
-  display:grid;place-items:center;
-  border-radius:50%;
-  color:#fff7bd;
-  font-size:14px;
-  background:rgba(255,255,255,.12);
-}
-.owl-wing{
-  position:absolute;
-  top:52px;
-  width:25px;height:47px;
-  z-index:-1;
-  background:linear-gradient(180deg,#5471e8,#306fc4);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
-}
-.owl-wing-left{left:-8px;border-radius:70% 20% 70% 35%;transform:rotate(13deg);transform-origin:80% 20%}
-.owl-wing-right{right:-8px;border-radius:20% 70% 35% 70%;transform:rotate(-13deg);transform-origin:20% 20%}
-.wise-owl-pet.owl-alert .owl-wing-left{animation:owlWingLeft .55s ease-in-out 3}
-.wise-owl-pet.owl-alert .owl-wing-right{animation:owlWingRight .55s ease-in-out 3}
-.owl-foot{
-  position:absolute;
-  bottom:-5px;
-  width:27px;height:10px;
-  border-radius:50%;
-  background:#f7bd34;
-  z-index:-1;
-}
-.owl-foot-left{left:21px}
-.owl-foot-right{right:21px}
+
 .owl-alert-dot{
   position:absolute;
-  top:-4px;right:-4px;
-  width:18px;height:18px;
+  top:3%;
+  right:4%;
+  width:16px;
+  height:16px;
   border-radius:999px;
-  background:#fb3f63;
+  background:linear-gradient(180deg,#fb7185,#f43f5e);
   border:3px solid #fff;
-  box-shadow:0 5px 14px rgba(244,63,94,.35);
-  animation:owlPulse 1.4s infinite;
+  box-shadow:0 5px 14px rgba(244,63,94,.28);
+  animation:owlPetPulse 1.4s ease-in-out infinite;
 }
-.owl-name{
-  padding:4px 8px;
-  border-radius:999px;
-  background:rgba(255,255,255,.88);
-  border:1px solid rgba(207,228,248,.9);
-  color:#526a8b;
-  font-size:10px;
-  font-weight:900;
-  box-shadow:0 6px 15px rgba(43,93,158,.08);
-}
+
 .owl-speech{
   position:absolute;
-  right:74px;
-  bottom:77px;
-  width:min(320px,calc(100vw - 132px));
+  right:calc(var(--owl-size) * .76);
+  bottom:calc(var(--owl-size) * .58);
+  width:min(330px,calc(100vw - var(--owl-size) - 42px));
   padding:13px 34px 12px 14px;
   border-radius:18px 18px 5px 18px;
-  background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(244,251,255,.97));
-  border:1px solid #d5eaff;
+  background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(247,250,255,.97));
+  border:1px solid #dce8ff;
   color:#294d78;
-  box-shadow:0 18px 42px rgba(34,83,150,.18);
+  box-shadow:0 18px 42px rgba(34,83,150,.16);
   transform-origin:bottom right;
-  animation:owlSpeechIn .22s ease-out;
+  animation:owlPetSpeechIn .2s ease-out;
 }
-.owl-speech:after{
+.owl-speech::after{
   content:"";
   position:absolute;
-  right:-10px;bottom:10px;
-  width:19px;height:19px;
-  background:#f7fcff;
-  border-right:1px solid #d5eaff;
-  border-bottom:1px solid #d5eaff;
+  right:-10px;
+  bottom:10px;
+  width:19px;
+  height:19px;
+  background:#f9fbff;
+  border-right:1px solid #dce8ff;
+  border-bottom:1px solid #dce8ff;
   transform:rotate(-45deg);
 }
 .owl-speech.hidden{display:none}
@@ -749,100 +683,62 @@ input:focus,select:focus,textarea:focus{
 .owl-quote-source.hidden{display:none}
 .owl-mute-btn{
   position:absolute;
-  right:7px;top:6px;
-  width:24px;height:24px;
+  top:7px;
+  right:7px;
+  width:26px;
+  height:26px;
+  padding:0;
   border:0;
   border-radius:50%;
-  background:#edf5ff;
-  color:#6e8098;
+  background:#eef5ff;
+  color:#526a8b;
   cursor:pointer;
-  font-size:15px;
+  display:grid;
+  place-items:center;
 }
-.owl-mute-btn:hover{background:#e1edfb}
-@keyframes owlFloat{
-  0%,100%{translate:0 0}
-  50%{translate:0 -6px}
+.owl-mute-btn:focus-visible{
+  outline:2px solid #60a5fa;
+  outline-offset:2px;
 }
-@keyframes owlBlink{
-  0%,44%,48%,100%{transform:scaleY(1)}
-  46%{transform:scaleY(.08)}
+
+@keyframes owlPetFloat{
+  0%,100%{transform:translateY(0) rotate(0deg)}
+  50%{transform:translateY(-5px) rotate(.7deg)}
 }
-@keyframes owlWingLeft{
-  0%,100%{transform:rotate(13deg)}
-  50%{transform:rotate(42deg)}
+@keyframes owlPetReact{
+  0%,100%{transform:translateY(0) scale(1) rotate(0deg)}
+  30%{transform:translateY(-5px) scale(1.035) rotate(-2deg)}
+  65%{transform:translateY(-7px) scale(1.04) rotate(2deg)}
 }
-@keyframes owlWingRight{
-  0%,100%{transform:rotate(-13deg)}
-  50%{transform:rotate(-42deg)}
+@keyframes owlPetPulse{
+  0%,100%{transform:scale(1);opacity:1}
+  50%{transform:scale(1.16);opacity:.76}
 }
-@keyframes owlPulse{
-  0%,100%{transform:scale(1)}
-  50%{transform:scale(1.22)}
-}
-@keyframes owlSpeechIn{
-  from{opacity:0;transform:translateY(8px) scale(.96)}
+@keyframes owlPetSpeechIn{
+  from{opacity:0;transform:translateY(6px) scale(.97)}
   to{opacity:1;transform:translateY(0) scale(1)}
 }
-.wise-owl-pet.owl-thinking .owl-body{
-  animation:owlThinking .7s ease-in-out infinite alternate;
+
+@media(max-width:640px){
+  .wise-owl-pet{
+    --owl-size:92px;
+    right:8px;
+    bottom:82px;
+  }
+  .owl-speech{
+    right:calc(var(--owl-size) * .62);
+    width:min(270px,calc(100vw - 72px));
+  }
 }
-@keyframes owlThinking{
-  from{transform:rotate(-4deg) translateY(0)}
-  to{transform:rotate(4deg) translateY(-4px)}
-}
-.ai-review-badge{
-  display:inline-flex;
-  align-items:center;
-  gap:4px;
-  padding:5px 8px;
-  border-radius:999px;
-  background:#e8e7ff;
-  color:#5745b6;
-  border:1px solid #cbc6ff;
-  font-size:11px;
-  font-weight:900;
-}
-.ai-review-details{
-  margin-top:7px;
-  padding:8px 10px;
-  border-radius:12px;
-  background:linear-gradient(135deg,#f3f0ff,#f7fbff);
-  border:1px solid #ded8ff;
-  color:#5d5682;
-  font-size:11px;
-}
-.ai-settings-card{
-  margin-top:10px;
-  padding:13px;
-  border-radius:15px;
-  background:linear-gradient(135deg,#f1f0ff,#effbff);
-  border:1px solid #dcd8ff;
-}
-.ai-threshold-row{
-  display:grid;
-  grid-template-columns:1fr auto;
-  gap:8px;
-  align-items:center;
-  margin-top:10px;
-}
-.ai-threshold-row input[type=range]{grid-column:1/-1}
-.ai-threshold-value{
-  min-width:54px;
-  padding:5px 8px;
-  text-align:center;
-  border-radius:999px;
-  background:#fff;
-  border:1px solid #d8dcf7;
-  font-weight:900;
-  color:#5b57a8;
-}
-@media(max-width:700px){
-  .wise-owl-pet{right:8px;bottom:9px;transform:scale(.86);transform-origin:bottom right}
-  .owl-speech{right:63px;bottom:78px;width:min(290px,calc(100vw - 90px))}
-}
+
 @media(prefers-reduced-motion:reduce){
-  .owl-body,.owl-eye,.owl-alert-dot,.wise-owl-pet.owl-thinking .owl-body{animation:none!important}
-  .owl-pupil{transition:none}
+  .owl-body,
+  .wise-owl-pet.owl-flap .owl-body,
+  .wise-owl-pet.owl-alert .owl-body,
+  .owl-alert-dot,
+  .owl-speech{
+    animation:none !important;
+  }
 }
 
 
@@ -945,45 +841,6 @@ tbody tr:hover{ background:#fbfdff; }
   color:#1e3a8a;
 }
 
-/* Chibi owl */
-.wise-owl-pet{ right:16px; bottom:108px; gap:4px; }
-.owl-body{
-  width:74px; height:80px; border-radius:52% 52% 44% 44%;
-  box-shadow:0 16px 28px rgba(92,110,255,.24), inset 0 2px 0 rgba(255,255,255,.55), inset 0 -6px 14px rgba(26,51,139,.14);
-}
-.owl-face{
-  left:9px; top:10px; width:56px; height:46px; border-radius:46% 46% 50% 50%;
-}
-.owl-face:before,.owl-face:after{
-  content:""; position:absolute; top:26px; width:7px; height:7px; border-radius:50%;
-  background:rgba(251,113,133,.25);
-}
-.owl-face:before{left:6px}.owl-face:after{right:6px}
-.owl-ear{ top:-4px; width:22px; height:24px; }
-.owl-ear-left{left:6px}.owl-ear-right{right:6px}
-.owl-eye{ top:11px; width:24px; height:24px; }
-.owl-eye-left{left:4px}.owl-eye-right{right:4px}
-.owl-pupil{ left:7px; top:7px; width:8px; height:8px; }
-.owl-brow{ top:7px; width:18px; height:3px; }
-.owl-brow-left{left:7px}.owl-brow-right{right:7px}
-.owl-beak{ left:24px; top:29px; width:10px; height:10px; }
-.owl-belly{ left:25px; bottom:10px; width:24px; height:18px; font-size:11px; }
-.owl-wing{ top:36px; width:18px; height:34px; }
-.owl-wing-left{left:-6px}.owl-wing-right{right:-6px}
-.owl-foot{ bottom:-4px; width:20px; height:7px; }
-.owl-foot-left{left:15px}.owl-foot-right{right:15px}
-.owl-alert-dot{ width:15px; height:15px; top:-2px; right:-2px; }
-.owl-name{ font-size:9px; padding:3px 7px; }
-.owl-speech{
-  right:54px; bottom:54px; width:min(320px,calc(100vw - 110px)); padding:12px 32px 11px 13px;
-}
-.owl-speech-text{ font-size:13px; }
-@media(max-width:700px){
-  .wise-owl-pet{ right:8px; bottom:96px; }
-  .owl-speech{ right:48px; bottom:52px; width:min(280px,calc(100vw - 76px)); }
-}
-
-
 
 /* =========================
    V8.1 — STUDENT TOOLS + OWL COLOR TUNE
@@ -1079,56 +936,6 @@ tbody tr:hover{ background:#fbfdff; }
   font-weight:600;
 }
 
-/* Owl color tuning for 8.1 */
-.owl-body{
-  background:linear-gradient(180deg,#87d8ff 0%,#79b9ff 38%,#8f93ff 100%);
-  border:3px solid rgba(255,255,255,.76);
-  box-shadow:0 18px 32px rgba(106,114,255,.22), inset 0 2px 0 rgba(255,255,255,.58), inset 0 -10px 14px rgba(83,74,190,.22);
-}
-.owl-face{
-  background:linear-gradient(180deg,#fff9ef,#fff2cf);
-}
-.owl-ear{
-  background:linear-gradient(180deg,#96e0ff,#8ca2ff);
-}
-.owl-eye{
-  background:radial-gradient(circle at 45% 40%,#ffffff 0%,#fffef7 55%,#fde68a 100%);
-  border-color:#3456b7;
-}
-.owl-pupil{
-  background:radial-gradient(circle at 35% 35%,#1e293b 0%,#374151 70%,#1e40af 100%);
-}
-.owl-brow{
-  background:#4162ce;
-}
-.owl-beak{
-  background:linear-gradient(180deg,#ffcf70,#f59e0b);
-}
-.owl-belly{
-  background:linear-gradient(180deg,#fff3d8,#ffe7a9);
-  color:#8b5e00;
-}
-.owl-wing{
-  background:linear-gradient(180deg,#73d2ff,#7398ff 50%,#7f6df2 100%);
-}
-.owl-name{
-  background:linear-gradient(135deg,#fffefc,#ffeeb9);
-  color:#7c5b00;
-  border:1px solid rgba(255,214,102,.8);
-}
-.owl-speech{
-  background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(247,250,255,.97));
-  border:1px solid #dce8ff;
-  box-shadow:0 16px 32px rgba(99,102,241,.16);
-}
-.owl-speech:after{
-  border-left-color:#f9fbff;
-}
-.owl-alert-dot{
-  background:linear-gradient(180deg,#fb7185,#f43f5e);
-  box-shadow:0 0 0 3px #fff, 0 8px 18px rgba(244,63,94,.25);
-}
-
 @media(max-width:960px){
   .students-toolbar{
     grid-template-columns:1fr 1fr;
@@ -1153,203 +960,6 @@ tbody tr:hover{ background:#fbfdff; }
   }
 }
 
-
-
-/* =========================
-   V8.1.7 — IMAGE MASCOT OWL
-   ========================= */
-.owl-image-button{
-  width:104px !important;
-  height:104px !important;
-  padding:0 !important;
-  border:0 !important;
-  border-radius:50% !important;
-  background:transparent !important;
-  box-shadow:none !important;
-  overflow:visible !important;
-  display:grid !important;
-  place-items:center !important;
-}
-.owl-mascot-image{
-  width:100%;
-  height:100%;
-  object-fit:contain;
-  display:block;
-  pointer-events:none;
-  user-select:none;
-  -webkit-user-drag:none;
-  filter:drop-shadow(0 12px 18px rgba(66,103,210,.22));
-}
-.owl-image-button:hover .owl-mascot-image{
-  filter:drop-shadow(0 14px 22px rgba(66,103,210,.28)) saturate(1.06) brightness(1.03);
-}
-.owl-name{display:none !important}
-.wise-owl-pet.owl-alert .owl-mascot-image{
-  animation:owlMascotAlert .48s ease-in-out 3;
-}
-@keyframes owlMascotAlert{
-  0%,100%{transform:rotate(0deg) scale(1)}
-  35%{transform:rotate(-5deg) scale(1.05)}
-  70%{transform:rotate(5deg) scale(1.05)}
-}
-.wise-owl-pet.owl-thinking .owl-image-button{
-  animation:owlThinking .7s ease-in-out infinite alternate;
-}
-.owl-image-button .owl-alert-dot{
-  top:4px;
-  right:5px;
-}
-@media(max-width:700px){
-  .owl-image-button{
-    width:92px !important;
-    height:92px !important;
-  }
-}
-@media(prefers-reduced-motion:reduce){
-  .wise-owl-pet.owl-alert .owl-mascot-image{
-    animation:none !important;
-  }
-}
-
-
-
-/* =========================
-   V8.1.8 — RESPONSIVE + LIVE EYES + FLAPPING WINGS
-   ========================= */
-.wise-owl-pet{
-  --owl-size:clamp(78px,8.5vw,118px);
-  right:clamp(8px,1.4vw,22px);
-  bottom:clamp(78px,8vh,118px);
-}
-.owl-image-button{
-  width:var(--owl-size) !important;
-  height:var(--owl-size) !important;
-  min-width:0 !important;
-  min-height:0 !important;
-  aspect-ratio:1/1;
-  position:relative !important;
-  transform-origin:50% 78%;
-}
-.owl-mascot-image{
-  width:100% !important;
-  height:100% !important;
-  object-fit:contain !important;
-}
-.owl-live-eye{
-  position:absolute;
-  width:17.5%;
-  height:17.5%;
-  top:32.5%;
-  border-radius:50%;
-  pointer-events:none;
-  z-index:4;
-}
-.owl-live-eye-left{left:28.4%}
-.owl-live-eye-right{right:28.4%}
-.owl-live-pupil{
-  --eye-x:0px;
-  --eye-y:0px;
-  position:absolute;
-  width:38%;
-  height:38%;
-  left:31%;
-  top:31%;
-  border-radius:50%;
-  background:
-    radial-gradient(circle at 34% 30%,#fff 0 10%,transparent 11%),
-    radial-gradient(circle,#071124 0 56%,#173b82 58% 100%);
-  box-shadow:0 1px 3px rgba(9,30,66,.24);
-  transform:translate(var(--eye-x),var(--eye-y));
-  transition:transform .07s linear;
-}
-.owl-live-wing{
-  position:absolute;
-  top:56%;
-  width:24%;
-  height:35%;
-  z-index:2;
-  pointer-events:none;
-  opacity:.94;
-  background:linear-gradient(180deg,#49b9ff 0%,#4d83f6 56%,#6f5de8 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.42),0 5px 10px rgba(66,103,210,.14);
-}
-.owl-live-wing-left{
-  left:1%;
-  border-radius:75% 20% 70% 35%;
-  transform:rotate(15deg);
-  transform-origin:88% 18%;
-}
-.owl-live-wing-right{
-  right:1%;
-  border-radius:20% 75% 35% 70%;
-  transform:rotate(-15deg);
-  transform-origin:12% 18%;
-}
-.owl-image-button{animation:owlResponsiveFloat 3.6s ease-in-out infinite}
-@keyframes owlResponsiveFloat{
-  0%,100%{transform:translateY(0) rotate(0deg)}
-  50%{transform:translateY(-4%) rotate(.6deg)}
-}
-.wise-owl-pet.owl-flap .owl-live-wing-left,
-.wise-owl-pet.owl-alert .owl-live-wing-left{
-  animation:owlLiveWingLeft .34s ease-in-out 4;
-}
-.wise-owl-pet.owl-flap .owl-live-wing-right,
-.wise-owl-pet.owl-alert .owl-live-wing-right{
-  animation:owlLiveWingRight .34s ease-in-out 4;
-}
-@keyframes owlLiveWingLeft{
-  0%,100%{transform:rotate(15deg)}
-  50%{transform:rotate(-34deg) translateY(-6%)}
-}
-@keyframes owlLiveWingRight{
-  0%,100%{transform:rotate(-15deg)}
-  50%{transform:rotate(34deg) translateY(-6%)}
-}
-.wise-owl-pet.owl-flap .owl-image-button{
-  animation:owlHappyBounce .42s ease-in-out 3;
-}
-@keyframes owlHappyBounce{
-  0%,100%{transform:translateY(0) scale(1)}
-  50%{transform:translateY(-6%) scale(1.035)}
-}
-.owl-speech{
-  right:calc(var(--owl-size) * .72);
-  bottom:calc(var(--owl-size) * .55);
-  max-width:min(330px,calc(100vw - var(--owl-size) - 44px));
-}
-@media(max-width:900px){
-  .wise-owl-pet{
-    --owl-size:clamp(74px,12vw,102px);
-    bottom:clamp(70px,9vh,102px);
-  }
-}
-@media(max-width:600px){
-  .wise-owl-pet{
-    --owl-size:clamp(68px,19vw,92px);
-    right:8px;
-    bottom:82px;
-  }
-  .owl-speech{
-    right:calc(var(--owl-size) * .58);
-    bottom:calc(var(--owl-size) * .58);
-    width:min(270px,calc(100vw - 70px));
-  }
-}
-@media(max-width:390px){
-  .wise-owl-pet{--owl-size:72px}
-}
-@media(prefers-reduced-motion:reduce){
-  .owl-image-button,
-  .wise-owl-pet.owl-flap .owl-image-button,
-  .wise-owl-pet.owl-flap .owl-live-wing-left,
-  .wise-owl-pet.owl-flap .owl-live-wing-right,
-  .wise-owl-pet.owl-alert .owl-live-wing-left,
-  .wise-owl-pet.owl-alert .owl-live-wing-right{
-    animation:none !important;
-  }
-  .owl-live-pupil{transition:none !important}
-}
 
 
 /* =========================
@@ -1425,77 +1035,6 @@ tbody tr:hover{ background:#fbfdff; }
   gap:8px;
 }
 
-/* SVG Owl (no PNG) */
-.owl-image-button{
-  width:var(--owl-size) !important;
-  height:var(--owl-size) !important;
-  min-width:0 !important;
-  min-height:0 !important;
-  aspect-ratio:1/1;
-  position:relative !important;
-  border:0 !important;
-  background:transparent !important;
-  box-shadow:none !important;
-  overflow:visible !important;
-}
-.owl-svg-mascot{
-  width:100%;
-  height:100%;
-  display:block;
-  overflow:visible;
-  filter:drop-shadow(0 8px 16px rgba(66,103,210,.14));
-}
-.owl-live-pupil{
-  --eye-x:0px;
-  --eye-y:0px;
-  transform:translate(var(--eye-x),var(--eye-y));
-  transform-box:fill-box;
-  transform-origin:center;
-  transition:transform .07s linear;
-}
-.owl-live-wing-left{
-  transform-origin:85px 132px;
-}
-.owl-live-wing-right{
-  transform-origin:155px 132px;
-}
-.wise-owl-pet.owl-flap .owl-live-wing-left,
-.wise-owl-pet.owl-alert .owl-live-wing-left{
-  animation:owlWingLeftSvg .36s ease-in-out 4;
-}
-.wise-owl-pet.owl-flap .owl-live-wing-right,
-.wise-owl-pet.owl-alert .owl-live-wing-right{
-  animation:owlWingRightSvg .36s ease-in-out 4;
-}
-@keyframes owlWingLeftSvg{
-  0%,100%{transform:rotate(0deg)}
-  50%{transform:rotate(-24deg) translateY(-4px)}
-}
-@keyframes owlWingRightSvg{
-  0%,100%{transform:rotate(0deg)}
-  50%{transform:rotate(24deg) translateY(-4px)}
-}
-.wise-owl-pet.owl-alert .owl-svg-mascot{
-  animation:owlSvgNudge .5s ease-in-out 3;
-}
-@keyframes owlSvgNudge{
-  0%,100%{transform:rotate(0deg) scale(1)}
-  25%{transform:rotate(-2deg) scale(1.02)}
-  75%{transform:rotate(2deg) scale(1.02)}
-}
-@media(prefers-reduced-motion:reduce){
-  .owl-live-pupil{transition:none !important}
-  .wise-owl-pet.owl-flap .owl-live-wing-left,
-  .wise-owl-pet.owl-flap .owl-live-wing-right,
-  .wise-owl-pet.owl-alert .owl-live-wing-left,
-  .wise-owl-pet.owl-alert .owl-live-wing-right,
-  .wise-owl-pet.owl-alert .owl-svg-mascot{
-    animation:none !important;
-  }
-}
-
-
-
 /* =========================
    V8.2.1 — SERVER AUDIT + RATE LIMIT + USER SVG OWL + MENU ICON REFRESH
    ========================= */
@@ -1543,133 +1082,3 @@ tbody tr:hover{ background:#fbfdff; }
 .nav-icon--history{color:#0891b2;background:linear-gradient(135deg,#cffafe,#e0f2fe)}
 .nav-icon--comments{color:#d97706;background:linear-gradient(135deg,#fef3c7,#ffedd5)}
 .nav-icon--missing{color:#dc2626;background:linear-gradient(135deg,#fee2e2,#ffedd5)}
-
-/* Use the user-provided SVG owl as the mascot */
-.wise-owl-pet{
-  --owl-size:clamp(84px,8.8vw,122px);
-  right:clamp(10px,1.6vw,22px);
-  bottom:clamp(84px,8vh,124px);
-}
-.owl-image-button{
-  width:var(--owl-size) !important;
-  height:var(--owl-size) !important;
-  min-width:0 !important;
-  min-height:0 !important;
-  padding:0 !important;
-  border:0 !important;
-  background:transparent !important;
-  box-shadow:none !important;
-  aspect-ratio:1/1;
-  overflow:visible !important;
-}
-.owl-user-svg{
-  width:100%;
-  height:100%;
-  display:block;
-  object-fit:contain;
-  filter:drop-shadow(0 12px 18px rgba(73,95,192,.14));
-}
-.wise-owl-pet .owl-body{
-  animation:owlFloatUserSvg 3.8s ease-in-out infinite;
-  transform-origin:50% 82%;
-}
-@keyframes owlFloatUserSvg{
-  0%,100%{transform:translateY(0) rotate(0deg)}
-  50%{transform:translateY(-4px) rotate(.8deg)}
-}
-.wise-owl-pet.owl-alert .owl-body,
-.wise-owl-pet.owl-flap .owl-body{
-  animation:owlExcitedUserSvg .45s ease-in-out 3;
-}
-@keyframes owlExcitedUserSvg{
-  0%,100%{transform:translateY(0) scale(1)}
-  20%{transform:translateY(-4px) scale(1.03) rotate(-1deg)}
-  55%{transform:translateY(-7px) scale(1.035) rotate(1deg)}
-}
-.owl-speech{
-  right:calc(var(--owl-size) * .8);
-  bottom:calc(var(--owl-size) * .55);
-  max-width:min(340px,calc(100vw - var(--owl-size) - 48px));
-}
-@media(max-width:640px){
-  .wise-owl-pet{--owl-size:92px;right:8px;bottom:84px}
-  .owl-speech{
-    right:calc(var(--owl-size) * .62);
-    width:min(270px,calc(100vw - 76px));
-  }
-}
-@media(prefers-reduced-motion:reduce){
-  .wise-owl-pet .owl-body,
-  .wise-owl-pet.owl-alert .owl-body,
-  .wise-owl-pet.owl-flap .owl-body{animation:none !important}
-}
-
-
-
-/* =========================
-   V8.2.2 — INSTANT OWL + REAL SVG EYES/WINGS
-   ========================= */
-.owl-user-inline-svg{
-  width:100%;
-  height:100%;
-  display:block;
-  overflow:visible;
-  filter:drop-shadow(0 12px 18px rgba(73,95,192,.14));
-  pointer-events:none;
-}
-
-/* The classes are attached to the actual path pieces from the supplied SVG. */
-.owl-user-eye-piece{
-  transform-box:view-box;
-  transform:translate(var(--owl-eye-x,0px),var(--owl-eye-y,0px));
-  transition:transform 55ms linear;
-  will-change:transform;
-}
-.owl-user-wing-piece{
-  transform-box:view-box;
-  will-change:transform;
-  transition:transform 90ms ease-out;
-}
-.owl-user-wing-left-piece{
-  transform-origin:80px 132px;
-  transform:rotate(var(--owl-wing-left-angle,0deg));
-}
-.owl-user-wing-right-piece{
-  transform-origin:280px 132px;
-  transform:rotate(var(--owl-wing-right-angle,0deg));
-}
-
-/* Click / alert gives a stronger flap, while pointer movement gives subtle live motion. */
-.wise-owl-pet.owl-flap .owl-user-wing-left-piece,
-.wise-owl-pet.owl-alert .owl-user-wing-left-piece{
-  animation:owlUserRealWingLeft .34s ease-in-out 4;
-}
-.wise-owl-pet.owl-flap .owl-user-wing-right-piece,
-.wise-owl-pet.owl-alert .owl-user-wing-right-piece{
-  animation:owlUserRealWingRight .34s ease-in-out 4;
-}
-@keyframes owlUserRealWingLeft{
-  0%,100%{transform:rotate(var(--owl-wing-left-angle,0deg))}
-  50%{transform:rotate(-22deg)}
-}
-@keyframes owlUserRealWingRight{
-  0%,100%{transform:rotate(var(--owl-wing-right-angle,0deg))}
-  50%{transform:rotate(22deg)}
-}
-
-.wise-owl-pet.owl-pointer-near .owl-user-inline-svg{
-  filter:drop-shadow(0 14px 22px rgba(73,95,192,.20));
-}
-
-@media(prefers-reduced-motion:reduce){
-  .owl-user-eye-piece,
-  .owl-user-wing-piece{
-    transition:none !important;
-  }
-  .wise-owl-pet.owl-flap .owl-user-wing-left-piece,
-  .wise-owl-pet.owl-flap .owl-user-wing-right-piece,
-  .wise-owl-pet.owl-alert .owl-user-wing-left-piece,
-  .wise-owl-pet.owl-alert .owl-user-wing-right-piece{
-    animation:none !important;
-  }
-}

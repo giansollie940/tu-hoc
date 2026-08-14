@@ -216,64 +216,41 @@
 
   function setupWiseOwl(){
     if(owlReady)return;
-    const pet=$("#wiseOwlPet"), body=$("#owlBody"), speech=$("#owlSpeech"), closeBtn=$("#owlMuteBtn");
+
+    const pet=$("#wiseOwlPet");
+    const body=$("#owlBody");
+    const speech=$("#owlSpeech");
+    const closeBtn=$("#owlMuteBtn");
     if(!pet||!body||!speech)return;
+
     owlReady=true;
-    // Load the next online quote in the background; never block a click.
     prefetchWiseOwlQuote();
-
-    let raf=0, px=0, py=0;
-    const updateLook=()=>{
-      raf=0;
-      const r=body.getBoundingClientRect();
-      const cx=r.left+r.width/2, cy=r.top+r.height/2;
-      const dx=px-cx, dy=py-cy;
-      const len=Math.max(1,Math.hypot(dx,dy));
-
-      // Real pupils from the supplied SVG.
-      const eyeMax=Math.max(2.2,Math.min(5.4,r.width*0.047));
-      const eyeX=Math.max(-eyeMax,Math.min(eyeMax,dx/len*eyeMax));
-      const eyeY=Math.max(-eyeMax,Math.min(eyeMax,dy/len*eyeMax));
-      body.style.setProperty("--owl-eye-x",`${eyeX.toFixed(2)}px`);
-      body.style.setProperty("--owl-eye-y",`${eyeY.toFixed(2)}px`);
-
-      // Real wing pieces from the supplied SVG react subtly to pointer direction.
-      const nx=Math.max(-1,Math.min(1,dx/Math.max(1,r.width*2.2)));
-      const ny=Math.max(-1,Math.min(1,dy/Math.max(1,r.height*2.2)));
-      const lift=-ny;
-      const leftAngle=(-9*lift)+(3.5*nx);
-      const rightAngle=(9*lift)+(3.5*nx);
-      body.style.setProperty("--owl-wing-left-angle",`${leftAngle.toFixed(2)}deg`);
-      body.style.setProperty("--owl-wing-right-angle",`${rightAngle.toFixed(2)}deg`);
-
-      body.style.setProperty("--owl-tilt",`${Math.max(-5,Math.min(5,dx/85)).toFixed(2)}deg`);
-      pet.classList.toggle("owl-pointer-near",len<Math.max(240,r.width*3));
-    };
-    document.addEventListener("pointermove",e=>{
-      if(e.pointerType==="touch")return;
-      px=e.clientX; py=e.clientY;
-      if(!raf)raf=requestAnimationFrame(updateLook);
-    },{passive:true});
 
     body.addEventListener("click",()=>{
       owlMessageCursor++;
-      // Phản hồi thị giác ngay trong cùng frame.
       speech.classList.remove("hidden");
+
       pet.classList.remove("owl-flap");
       void pet.offsetWidth;
       pet.classList.add("owl-flap");
-      setTimeout(()=>pet.classList.remove("owl-flap"),1550);
-      showOwlMessage({preferQuote:owlMessageCursor%3===0,force:true});
+      setTimeout(()=>pet.classList.remove("owl-flap"),1350);
+
+      showOwlMessage({
+        preferQuote:owlMessageCursor%3===0,
+        force:true
+      });
     });
-    closeBtn?.addEventListener("click",e=>{
-      e.stopPropagation();
+
+    closeBtn?.addEventListener("click",event=>{
+      event.stopPropagation();
       speech.classList.add("hidden");
       clearTimeout(owlHideTimer);
     });
 
     setInterval(()=>{
-      if(currentUser&&!document.hidden&&!modal.classList.contains("hidden"))return;
-      if(currentUser&&!document.hidden)showOwlMessage({preferQuote:true,quiet:true});
+      if(!currentUser||document.hidden)return;
+      if(!modal.classList.contains("hidden"))return;
+      showOwlMessage({preferQuote:true,quiet:true});
     },95000);
   }
 
@@ -1251,7 +1228,7 @@
 
     return head(
       "Quản lý học sinh",
-      "Bản 8.2.2: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
+      "Bản 8.2.3: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>
       </div>`
