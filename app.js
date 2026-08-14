@@ -146,33 +146,65 @@
     return `fallback-${(h>>>0).toString(16)}`;
   }
 
-  async function nextWiseOwlQuote(){
+  let owlPrefetchedQuote=null;
+  let owlPrefetchPromise=null;
+
+  function rememberOnlineOwlQuote(result){
+    const q=result?.quote;
+    if(!q?.text)return null;
+
     const seen=readSeenOwlQuoteIds();
+    const nextSeen=result.cycleReset?[]:[...seen];
+    nextSeen.push(String(q.id||fallbackQuoteId(q)));
+    writeSeenOwlQuoteIds(nextSeen);
 
-    if(isProd && prod?.getWiseOwlQuote){
-      try{
-        const result=await prod.getWiseOwlQuote(seen);
+    return {
+      text:String(q.text),
+      author:String(q.author||"Khuyết danh"),
+      url:String(q.url||result.sourceUrl||OWL_QUOTE_SOURCE),
+      online:true,
+      poolSize:Number(result.poolSize||0)
+    };
+  }
+
+  function prefetchWiseOwlQuote(){
+    if(!isProd||!prod?.getWiseOwlQuote||owlPrefetchedQuote||owlPrefetchPromise)return;
+
+    const seen=readSeenOwlQuoteIds();
+    owlPrefetchPromise=prod.getWiseOwlQuote(seen)
+      .then(result=>{
         const q=result?.quote;
-
         if(q?.text){
-          const nextSeen=result.cycleReset?[]:[...seen];
-          nextSeen.push(String(q.id||fallbackQuoteId(q)));
-          writeSeenOwlQuoteIds(nextSeen);
-
-          return {
-            text:String(q.text),
-            author:String(q.author||"Khuyết danh"),
-            url:String(q.url||result.sourceUrl||OWL_QUOTE_SOURCE),
-            online:true,
-            poolSize:Number(result.poolSize||0)
+          owlPrefetchedQuote={
+            result,
+            preview:{
+              text:String(q.text),
+              author:String(q.author||"Khuyết danh"),
+              url:String(q.url||result.sourceUrl||OWL_QUOTE_SOURCE),
+              online:true,
+              poolSize:Number(result.poolSize||0)
+            }
           };
         }
-      }catch(err){
-        console.warn("Danh ngôn trực tuyến tạm thời không dùng được; chuyển sang kho dự phòng.",err);
-      }
+      })
+      .catch(err=>{
+        console.warn("Không nạp trước được danh ngôn trực tuyến.",err);
+      })
+      .finally(()=>{owlPrefetchPromise=null;});
+  }
+
+  function nextWiseOwlQuoteInstant(){
+    if(owlPrefetchedQuote){
+      const cached=owlPrefetchedQuote;
+      owlPrefetchedQuote=null;
+      const q=rememberOnlineOwlQuote(cached.result) || cached.preview;
+      // Nạp sẵn câu kế tiếp sau khi đã trả câu hiện tại.
+      setTimeout(prefetchWiseOwlQuote,0);
+      return q;
     }
 
-    // Offline / source unavailable fallback.
+    // Không chờ mạng: dùng kho dự phòng ngay lập tức và đồng thời nạp câu online cho lần sau.
+    prefetchWiseOwlQuote();
     const q=nextOwlQuote();
     return {
       ...q,
@@ -187,6 +219,8 @@
     const pet=$("#wiseOwlPet"), body=$("#owlBody"), speech=$("#owlSpeech"), closeBtn=$("#owlMuteBtn");
     if(!pet||!body||!speech)return;
     owlReady=true;
+    // Load the next online quote in the background; never block a click.
+    prefetchWiseOwlQuote();
 
     let raf=0, px=0, py=0;
     const updateLook=()=>{
@@ -195,20 +229,25 @@
       const cx=r.left+r.width/2, cy=r.top+r.height/2;
       const dx=px-cx, dy=py-cy;
       const len=Math.max(1,Math.hypot(dx,dy));
-      const max=4.3;
-      const x=Math.max(-max,Math.min(max,dx/len*max));
-      const y=Math.max(-max,Math.min(max,dy/len*max));
-      body.style.setProperty("--look-x",`${x.toFixed(2)}px`);
-      body.style.setProperty("--look-y",`${y.toFixed(2)}px`);
-      body.style.setProperty("--owl-tilt",`${Math.max(-7,Math.min(7,dx/70)).toFixed(2)}deg`);
 
-      const pupilMax=Math.max(2.2,Math.min(5.2,r.width*0.045));
-      const eyeX=Math.max(-pupilMax,Math.min(pupilMax,dx/len*pupilMax));
-      const eyeY=Math.max(-pupilMax,Math.min(pupilMax,dy/len*pupilMax));
-      body.querySelectorAll(".owl-live-pupil").forEach(pupil=>{
-        pupil.style.setProperty("--eye-x",`${eyeX.toFixed(2)}px`);
-        pupil.style.setProperty("--eye-y",`${eyeY.toFixed(2)}px`);
-      });
+      // Real pupils from the supplied SVG.
+      const eyeMax=Math.max(2.2,Math.min(5.4,r.width*0.047));
+      const eyeX=Math.max(-eyeMax,Math.min(eyeMax,dx/len*eyeMax));
+      const eyeY=Math.max(-eyeMax,Math.min(eyeMax,dy/len*eyeMax));
+      body.style.setProperty("--owl-eye-x",`${eyeX.toFixed(2)}px`);
+      body.style.setProperty("--owl-eye-y",`${eyeY.toFixed(2)}px`);
+
+      // Real wing pieces from the supplied SVG react subtly to pointer direction.
+      const nx=Math.max(-1,Math.min(1,dx/Math.max(1,r.width*2.2)));
+      const ny=Math.max(-1,Math.min(1,dy/Math.max(1,r.height*2.2)));
+      const lift=-ny;
+      const leftAngle=(-9*lift)+(3.5*nx);
+      const rightAngle=(9*lift)+(3.5*nx);
+      body.style.setProperty("--owl-wing-left-angle",`${leftAngle.toFixed(2)}deg`);
+      body.style.setProperty("--owl-wing-right-angle",`${rightAngle.toFixed(2)}deg`);
+
+      body.style.setProperty("--owl-tilt",`${Math.max(-5,Math.min(5,dx/85)).toFixed(2)}deg`);
+      pet.classList.toggle("owl-pointer-near",len<Math.max(240,r.width*3));
     };
     document.addEventListener("pointermove",e=>{
       if(e.pointerType==="touch")return;
@@ -218,6 +257,8 @@
 
     body.addEventListener("click",()=>{
       owlMessageCursor++;
+      // Phản hồi thị giác ngay trong cùng frame.
+      speech.classList.remove("hidden");
       pet.classList.remove("owl-flap");
       void pet.offsetWidth;
       pet.classList.add("owl-flap");
@@ -291,7 +332,7 @@
     return messages;
   }
 
-  async function showOwlMessage({preferQuote=false,force=false,quiet=false,text=null,urgent=false}={}){
+  function showOwlMessage({preferQuote=false,force=false,quiet=false,text=null,urgent=false}={}){
     if(!currentUser)return;
     setupWiseOwl();
     const pet=$("#wiseOwlPet"), speech=$("#owlSpeech"), textEl=$("#owlSpeechText"), source=$("#owlQuoteSource"), alertDot=$("#owlAlertDot");
@@ -306,7 +347,7 @@
       if(!preferQuote&&context.length){
         item=context[owlMessageCursor%context.length];
       }else{
-        const q=await nextWiseOwlQuote();
+        const q=nextWiseOwlQuoteInstant();
         item={
           text:`📚 ${q.text} — ${q.author}`,
           urgent:false,
@@ -1210,7 +1251,7 @@
 
     return head(
       "Quản lý học sinh",
-      "Bản 8.2.1: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
+      "Bản 8.2.2: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>
       </div>`

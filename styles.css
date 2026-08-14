@@ -1603,3 +1603,73 @@ tbody tr:hover{ background:#fbfdff; }
   .wise-owl-pet.owl-alert .owl-body,
   .wise-owl-pet.owl-flap .owl-body{animation:none !important}
 }
+
+
+
+/* =========================
+   V8.2.2 — INSTANT OWL + REAL SVG EYES/WINGS
+   ========================= */
+.owl-user-inline-svg{
+  width:100%;
+  height:100%;
+  display:block;
+  overflow:visible;
+  filter:drop-shadow(0 12px 18px rgba(73,95,192,.14));
+  pointer-events:none;
+}
+
+/* The classes are attached to the actual path pieces from the supplied SVG. */
+.owl-user-eye-piece{
+  transform-box:view-box;
+  transform:translate(var(--owl-eye-x,0px),var(--owl-eye-y,0px));
+  transition:transform 55ms linear;
+  will-change:transform;
+}
+.owl-user-wing-piece{
+  transform-box:view-box;
+  will-change:transform;
+  transition:transform 90ms ease-out;
+}
+.owl-user-wing-left-piece{
+  transform-origin:80px 132px;
+  transform:rotate(var(--owl-wing-left-angle,0deg));
+}
+.owl-user-wing-right-piece{
+  transform-origin:280px 132px;
+  transform:rotate(var(--owl-wing-right-angle,0deg));
+}
+
+/* Click / alert gives a stronger flap, while pointer movement gives subtle live motion. */
+.wise-owl-pet.owl-flap .owl-user-wing-left-piece,
+.wise-owl-pet.owl-alert .owl-user-wing-left-piece{
+  animation:owlUserRealWingLeft .34s ease-in-out 4;
+}
+.wise-owl-pet.owl-flap .owl-user-wing-right-piece,
+.wise-owl-pet.owl-alert .owl-user-wing-right-piece{
+  animation:owlUserRealWingRight .34s ease-in-out 4;
+}
+@keyframes owlUserRealWingLeft{
+  0%,100%{transform:rotate(var(--owl-wing-left-angle,0deg))}
+  50%{transform:rotate(-22deg)}
+}
+@keyframes owlUserRealWingRight{
+  0%,100%{transform:rotate(var(--owl-wing-right-angle,0deg))}
+  50%{transform:rotate(22deg)}
+}
+
+.wise-owl-pet.owl-pointer-near .owl-user-inline-svg{
+  filter:drop-shadow(0 14px 22px rgba(73,95,192,.20));
+}
+
+@media(prefers-reduced-motion:reduce){
+  .owl-user-eye-piece,
+  .owl-user-wing-piece{
+    transition:none !important;
+  }
+  .wise-owl-pet.owl-flap .owl-user-wing-left-piece,
+  .wise-owl-pet.owl-flap .owl-user-wing-right-piece,
+  .wise-owl-pet.owl-alert .owl-user-wing-left-piece,
+  .wise-owl-pet.owl-alert .owl-user-wing-right-piece{
+    animation:none !important;
+  }
+}
