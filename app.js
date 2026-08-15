@@ -1,4 +1,3 @@
-/* V8.3.3a: audit-log strict restored; V8.3.3 icon system retained. */
 import { renderDeviceChoice } from "./features/registration/registration-form.js";
 import {
   passwordChecklistState,
@@ -45,90 +44,46 @@ import { friendlyAppError } from "./utils/error-map.js";
   const DOW=["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6"];
   const navs={
     student:[
-      ["dashboard","dashboard","Trang chủ"],["register","register","Đăng ký tự học"],["history","history","Lịch sử của tôi"],["comments","comments","Nhận xét của GV"]
+      ["dashboard","🌟","Trang chủ"],["register","🪄","Đăng ký tự học"],["history","📚","Lịch sử của tôi"],["comments","💎","Nhận xét của GV"]
     ],
     monitor:[
-      ["dashboard","dashboard","Tổng quan"],["register","register","Đăng ký của tôi"],["class","class","Theo dõi cả lớp"],
-      ["missing","missing","Danh sách thiếu"],["history","history","Lịch sử của tôi"],["comments","comments","Nhận xét của GV"]
+      ["dashboard","🌈","Tổng quan"],["register","✨","Đăng ký của tôi"],["class","🫶","Theo dõi cả lớp"],
+      ["missing","🚨","Danh sách thiếu"],["history","📚","Lịch sử của tôi"],["comments","💎","Nhận xét của GV"]
     ],
     teacher:[
-      ["dashboard","dashboard","Dashboard"],["approvals","approvals","Duyệt đăng ký"],["class","class","Theo dõi cả lớp"],["schedule","schedule","TKB tự học"],
-      ["weeks","weeks","Quản lý tuần"],["students","students","Quản lý học sinh"],["stats","stats","Thống kê"],["settings","settings","Cài đặt"]
+      ["dashboard","🌠","Dashboard"],["approvals","🪄","Duyệt đăng ký"],["class","🫶","Theo dõi cả lớp"],["schedule","🗓️","TKB tự học"],
+      ["weeks","📆","Quản lý tuần"],["students","🧑‍🎓","Quản lý học sinh"],["stats","📈","Thống kê"],["settings","🦄","Cài đặt"]
     ]
   };
 
 
   const uiIcons={
-    dashboard:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 10.6 12 4l7.5 6.6v8a1.9 1.9 0 0 1-1.9 1.9h-4.1v-5.8h-3v5.8H6.4a1.9 1.9 0 0 1-1.9-1.9v-8Z"/><path class="clay-hi" d="M8 9.5 12 6l4 3.5"/></svg>`,
-    approvals:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.8h8.1l3.9 4v11.4a1.8 1.8 0 0 1-1.8 1.8H7a1.8 1.8 0 0 1-1.8-1.8V5.6A1.8 1.8 0 0 1 7 3.8Z"/><path class="clay-cut" d="m8.7 13.2 2.1 2.2 4.7-5"/></svg>`,
-    class:`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.2" r="3.1"/><circle cx="16.6" cy="8.7" r="2.3"/><path d="M3.7 19.7c.7-3.2 2.8-5 5.8-5 3.1 0 5.1 1.8 5.9 5H3.7Z"/><path d="M14.1 18.8c.6-2.3 2.1-3.6 4.2-3.6 1.1 0 2.2.4 3 1.2v2.4h-7.2Z"/></svg>`,
-    schedule:`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path class="clay-cut" d="M4 10h16M8 3.7v4M16 3.7v4M7.5 13.5h3M13.5 13.5h3M7.5 17h3"/></svg>`,
-    weeks:`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.6" y="5.3" width="16.8" height="15.2" rx="3"/><path class="clay-cut" d="M4.2 10h15.6M8 3.5v4M16 3.5v4M8 14h8M8 17.2h5"/></svg>`,
-    students:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3.3 8.1 8.7-4.2 8.7 4.2-8.7 4.1-8.7-4.1Z"/><path d="M6.2 11.1v4c0 2 2.6 3.6 5.8 3.6s5.8-1.6 5.8-3.6v-4l-5.8 2.7-5.8-2.7Z"/><path d="M19 9.2v5.2"/></svg>`,
-    stats:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.7h16"/><rect x="5" y="11.2" width="3.3" height="7.2" rx="1.2"/><rect x="10.3" y="6.5" width="3.4" height="11.9" rx="1.2"/><rect x="15.7" y="9" width="3.3" height="9.4" rx="1.2"/></svg>`,
-    settings:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7M16 6h4M4 12h3M12 12h8M4 18h8M17 18h3"/><circle cx="13.5" cy="6" r="2.4"/><circle cx="9.5" cy="12" r="2.4"/><circle cx="14.5" cy="18" r="2.4"/></svg>`,
-    register:`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="3.7" width="13" height="16.6" rx="3"/><path class="clay-cut" d="M9 8h6M9 12h6M9 16h3.8"/></svg>`,
-    history:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.1 8.1A8 8 0 1 1 4 13"/><path d="M4 4.7v4.8h4.8"/><path class="clay-cut" d="M12 8v4.4l3.1 1.8"/></svg>`,
-    comments:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.2h16a1.8 1.8 0 0 1 1.8 1.8v8.1a1.8 1.8 0 0 1-1.8 1.8H9l-4.8 3.3v-3.3H4A1.8 1.8 0 0 1 2.2 15V7A1.8 1.8 0 0 1 4 5.2Z"/><path class="clay-cut" d="M7.2 10h9.5M7.2 13.4h6"/></svg>`,
-    missing:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 3.9a2 2 0 0 1 3.4 0l8 13.8a2 2 0 0 1-1.7 3H4a2 2 0 0 1-1.7-3l8-13.8Z"/><path class="clay-cut" d="M12 8.5v5.2M12 17.1h.01"/></svg>`,
-    add:`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="clay-cut" d="M12 7.5v9M7.5 12h9"/></svg>`,
-    edit:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.7-.9 9.1-9.1a2.4 2.4 0 0 0-3.4-3.4l-9.1 9.1L4 20Z"/><path class="clay-cut" d="m13.4 7.6 3 3"/></svg>`,
-    lock:`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="10.2" width="15" height="10.3" rx="2.6"/><path d="M8 10.2V7.6a4 4 0 0 1 8 0v2.6"/><path class="clay-cut" d="M12 14v3"/></svg>`,
-    delete:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.3 7.2h13.4l-1 12.2a1.8 1.8 0 0 1-1.8 1.6H8.1a1.8 1.8 0 0 1-1.8-1.6L5.3 7.2Z"/><path d="M4 7.2h16M9 7.2V4.5h6v2.7"/><path class="clay-cut" d="M9.5 11v5.4M14.5 11v5.4"/></svg>`,
-    search:`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.7" cy="10.7" r="6.4"/><path d="m15.5 15.5 4.6 4.6"/></svg>`,
-    filter:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.8 5.3h16.4l-6.4 7.1v5.2l-3.6 1.8v-7L3.8 5.3Z"/></svg>`,
-    copy:`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.1" y="7.8" width="11.2" height="12.2" rx="2.2"/><path d="M6.4 16H5a1.8 1.8 0 0 1-1.8-1.8V5A1.8 1.8 0 0 1 5 3.2h9.2A1.8 1.8 0 0 1 16 5v.7"/></svg>`,
-    user:`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.7-3.5 3.4-5.7 7.5-5.7s6.8 2.2 7.5 5.7h-15Z"/></svg>`,
-    bell:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.2v-1.5l1.2-2.1c.5-.8.8-1.8.8-2.8V8.6a4 4 0 0 1 8 0v1.2c0 1 .3 2 .8 2.8l1.2 2.1v1.5H6Z"/><path d="M9.5 18.2a2.5 2.5 0 0 0 5 0"/></svg>`,
-    sync:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 8.5A8 8 0 0 0 5.7 6.2L4 8"/><path d="M4 4v4h4"/><path d="M4.5 15.5a8 8 0 0 0 13.8 2.3L20 16"/><path d="M20 20v-4h-4"/></svg>`,
-    menu:`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="3" rx="1.5"/><rect x="3.5" y="10.5" width="17" height="3" rx="1.5"/><rect x="3.5" y="16" width="17" height="3" rx="1.5"/></svg>`,
-    key:`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8.2" cy="12" r="4.2"/><path d="M12.2 12H21M17 12v3M20 12v2"/></svg>`,
-    logout:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5.5A1.5 1.5 0 0 0 4 5.5v13A1.5 1.5 0 0 0 5.5 20H10"/><path d="M13 8l4 4-4 4M8 12h9"/></svg>`,
-    check:`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="clay-cut" d="m7.7 12 2.7 2.8 5.9-6"/></svg>`,
-    revise:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7H4v-4"/><path d="M4.7 7.2A8.2 8.2 0 1 1 5 17"/><path d="M9 16.3h6M9 13h4"/></svg>`,
-    clock:`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="clay-cut" d="M12 7.2v5.2l3.4 2"/></svg>`,
-    calendar:`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.2" width="17" height="15.3" rx="3"/><path class="clay-cut" d="M4 10h16M8 3.5v4M16 3.5v4"/></svg>`,
-    emergency:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 3.9a2 2 0 0 1 3.4 0l8 13.8a2 2 0 0 1-1.7 3H4a2 2 0 0 1-1.7-3l8-13.8Z"/><path class="clay-cut" d="M12 8v6M12 17.3h.01"/></svg>`,
-    book:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4.5h5.4A2.6 2.6 0 0 1 12 7.1v13.1a3.5 3.5 0 0 0-3.4-2.7H4V4.5Z"/><path d="M20 4.5h-5.4A2.6 2.6 0 0 0 12 7.1v13.1a3.5 3.5 0 0 1 3.4-2.7H20V4.5Z"/></svg>`,
-    device:`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.2" width="17" height="11.5" rx="2.3"/><path d="M8 20h8M10 15.7 9.2 20M14 15.7l.8 4.3"/></svg>`,
-    ai:`<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="6" width="14" height="13" rx="4"/><path class="clay-cut" d="M9 12h.01M15 12h.01M9.5 15.3h5"/><path d="M12 3v3M8 3.8 9.3 6M16 3.8 14.7 6"/></svg>`,
-    save:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h13l3 3v13H4V4Z"/><path class="clay-cut" d="M8 4v6h8V4M8 20v-6h8v6"/></svg>`,
-    pin:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.5 6-11a6 6 0 1 0-12 0c0 5.5 6 11 6 11Z"/><circle class="clay-cut" cx="12" cy="10" r="2"/></svg>`,
-    download:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11M8 10l4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>`,
-    sparkle:`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2Z"/><path d="m18 14 .9 2.4 2.4.9-2.4.9L18 20.6l-.9-2.4-2.4-.9 2.4-.9L18 14Z"/></svg>`
+    dashboard:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 13.2 12 5l8 8.2V20a1 1 0 0 1-1 1h-4.8v-5.3H9.8V21H5a1 1 0 0 1-1-1v-6.8Z" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    approvals:`<svg viewBox="0 0 24 24" fill="none"><path d="M8 4h8l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke-width="2" stroke-linejoin="round"/><path d="M9 13.5l2 2 4-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    class:`<svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="2.8" stroke-width="2"/><circle cx="16.5" cy="8" r="2.2" stroke-width="2"/><path d="M4.5 18c.9-2.6 3.2-4.2 5.8-4.2s4.9 1.6 5.8 4.2" stroke-width="2" stroke-linecap="round"/><path d="M14.7 17.6c.6-1.8 2.1-2.9 4-2.9 1.1 0 2.1.4 2.8 1.1" stroke-width="2" stroke-linecap="round"/></svg>`,
+    schedule:`<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="15" rx="3" stroke-width="2"/><path d="M7.5 3v4M16.5 3v4M3.5 10h17M7 13h4M13 13h4M7 17h4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    weeks:`<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14h3M13 14h3M8 17.5h8" stroke-width="2" stroke-linecap="round"/></svg>`,
+    students:`<svg viewBox="0 0 24 24" fill="none"><path d="M3.5 8 12 4l8.5 4-8.5 4-8.5-4Z" stroke-width="2" stroke-linejoin="round"/><path d="M6.5 10.8V15c0 1.9 2.5 3.5 5.5 3.5s5.5-1.6 5.5-3.5v-4.2" stroke-width="2" stroke-linejoin="round"/><path d="M20.5 8v5" stroke-width="2" stroke-linecap="round"/></svg>`,
+    stats:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 19V11M12 19V6M19 19v-8" stroke-width="2" stroke-linecap="round"/><path d="M4 19h16" stroke-width="2" stroke-linecap="round"/></svg>`,
+    settings:`<svg viewBox="0 0 24 24" fill="none"><path d="M10 4h4M6 12h12M8.5 20h7" stroke-width="2" stroke-linecap="round"/><circle cx="15.5" cy="4" r="2.5" stroke-width="2"/><circle cx="8.5" cy="12" r="2.5" stroke-width="2"/><circle cx="13.5" cy="20" r="2.5" stroke-width="2"/></svg>`,
+    register:`<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="4" width="12" height="16" rx="3" stroke-width="2"/><path d="M9 8.5h6M9 12.5h6M9 16.5h4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    history:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 12a8 8 0 1 0 2.3-5.7" stroke-width="2" stroke-linecap="round"/><path d="M4 4v5h5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4l3 2" stroke-width="2" stroke-linecap="round"/></svg>`,
+    comments:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 6h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z" stroke-width="2" stroke-linejoin="round"/><path d="M8.5 11.2h7M8.5 14.2h4.5" stroke-width="2" stroke-linecap="round"/></svg>`,
+    missing:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 4 3.5 19h17L12 4Z" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4.5M12 17h.01" stroke-width="2" stroke-linecap="round"/></svg>`,
+    add:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>`,
+    edit:`<svg viewBox="0 0 24 24" fill="none"><path d="m4 20 4.7-.9 8.4-8.4a2.1 2.1 0 1 0-3-3l-8.4 8.4L4 20Z" stroke-width="2" stroke-linejoin="round"/><path d="m13.2 6.8 4 4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    lock:`<svg viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2.5" stroke-width="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3" stroke-width="2" stroke-linecap="round"/></svg>`,
+    delete:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5h6v2M8 7l1 12h6l1-12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    search:`<svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6" stroke-width="2"/><path d="m20 20-4.2-4.2" stroke-width="2" stroke-linecap="round"/></svg>`,
+    filter:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke-width="2" stroke-linecap="round"/></svg>`,
+    copy:`<svg viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="10" height="12" rx="2" stroke-width="2"/><path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" stroke-width="2" stroke-linecap="round"/></svg>`,
+    user:`<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke-width="2"/><path d="M5 19c1.2-2.9 4-4.7 7-4.7s5.8 1.8 7 4.7" stroke-width="2" stroke-linecap="round"/></svg>`
   };
 
-  const iconToneByName={
-    dashboard:"blue",approvals:"violet",class:"mint",schedule:"peach",
-    weeks:"pink",students:"blue",stats:"mint",settings:"violet",
-    register:"violet",history:"blue",comments:"peach",missing:"rose",
-    add:"mint",edit:"blue",lock:"slate",delete:"rose",search:"blue",
-    filter:"violet",copy:"peach",user:"blue",bell:"rose",sync:"blue",
-    menu:"blue",key:"peach",logout:"rose",check:"mint",revise:"peach",
-    clock:"blue",calendar:"pink",emergency:"rose",book:"violet",
-    device:"blue",ai:"violet",save:"mint",pin:"peach",download:"blue",
-    sparkle:"violet"
-  };
-
-  function uiIcon(name,extraClass="",tone=""){
-    const key=uiIcons[name]?name:"dashboard";
-    const resolvedTone=tone||iconToneByName[key]||"blue";
-    return `<span class="ui-icon clay-icon clay-tone-${resolvedTone} ${extraClass||""}" data-icon="${key}" aria-hidden="true">${uiIcons[key]}</span>`;
+  function uiIcon(name, extraClass=""){
+    const svg=uiIcons[name]||uiIcons.dashboard;
+    return `<span class="ui-icon ${extraClass||""}" aria-hidden="true">${svg}</span>`;
   }
-
-  function iconLabel(name,text,tone=""){
-    return `<span class="icon-label">${uiIcon(name,"inline-clay-icon",tone)}<span>${text}</span></span>`;
-  }
-
-  function hydrateStaticIcons(){
-    document.querySelectorAll("[data-ui-icon]").forEach(el=>{
-      const name=el.dataset.uiIcon||"dashboard";
-      const tone=el.dataset.uiTone||"";
-      el.outerHTML=uiIcon(name,el.className,tone);
-    });
-  }
-
-  hydrateStaticIcons();
 
   function navIconFor(route){
     const map={
@@ -148,8 +103,17 @@ import { friendlyAppError } from "./utils/error-map.js";
     return uiIcon(map[route]||"dashboard",`nav-icon nav-icon--${route}`);
   }
 
-  function kpiClayIcon(name){
-    return uiIcon(name||"dashboard","clay-kpi-icon");
+  function kpiClayIcon(symbol){
+    const map={
+      "👥":"class",
+      "✨":"approvals",
+      "⌛":"history",
+      "🔔":"comments",
+      "📈":"stats",
+      "✅":"approvals",
+      "⚠️":"missing"
+    };
+    return uiIcon(map[symbol]||"dashboard","clay-kpi-icon");
   }
 
   const OWL_QUOTE_SOURCE="https://www.tudiendanhngon.vn/danhngon/ds/strcats/180";
@@ -174,7 +138,6 @@ import { friendlyAppError } from "./utils/error-map.js";
     {text:"Thật sai lầm khi nghĩ rằng một khi rời khỏi trường học, bạn không bao giờ cần học thêm điều mới nữa.",author:"Sophia Loren"}
   ];
   let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1, owlQuoteBag=[];
-  let owlOnlineQuote=null, owlQuoteFetchPromise=null, owlOnlineRetryAfter=0;
 
   function shuffleOwlQuotes(list){
     const arr=[...list];
@@ -194,89 +157,12 @@ import { friendlyAppError } from "./utils/error-map.js";
     return next;
   }
 
-  function owlSeenStorageKey(){
-    return currentUser?.id
-      ? `wiseOwlSeenQuotes:${currentUser.id}`
-      : "wiseOwlSeenQuotes:guest";
-  }
-
-  function loadSeenOwlQuoteIds(){
-    try{
-      const raw=JSON.parse(localStorage.getItem(owlSeenStorageKey())||"[]");
-      return Array.isArray(raw)
-        ? raw.map(String).filter(Boolean).slice(-500)
-        : [];
-    }catch{
-      return [];
-    }
-  }
-
-  function rememberOnlineOwlQuote(id,{cycleReset=false}={}){
-    if(!id)return;
-    try{
-      let seen=cycleReset?[]:loadSeenOwlQuoteIds();
-      seen=seen.filter(x=>x!==String(id));
-      seen.push(String(id));
-      localStorage.setItem(owlSeenStorageKey(),JSON.stringify(seen.slice(-500)));
-    }catch{}
-  }
-
-  function prefetchOnlineOwlQuote(){
-    if(!isProd||!prod?.getWiseOwlQuote)return Promise.resolve(null);
-    if(owlOnlineQuote?.quote?.text)return Promise.resolve(owlOnlineQuote);
-    if(owlQuoteFetchPromise)return owlQuoteFetchPromise;
-    if(Date.now()<owlOnlineRetryAfter)return Promise.resolve(null);
-
-    owlQuoteFetchPromise=prod.getWiseOwlQuote(loadSeenOwlQuoteIds())
-      .then(result=>{
-        if(result?.quote?.text){
-          owlOnlineQuote=result;
-          owlOnlineRetryAfter=0;
-          return result;
-        }
-        return null;
-      })
-      .catch(error=>{
-        owlOnlineRetryAfter=Date.now()+10*60*1000;
-        console.warn("quote-feed tạm thời không dùng được; Cú sẽ dùng OWL_QUOTES local.",error);
-        return null;
-      })
-      .finally(()=>{
-        owlQuoteFetchPromise=null;
-      });
-
-    return owlQuoteFetchPromise;
-  }
-
   function nextWiseOwlQuoteInstant(){
-    if(owlOnlineQuote?.quote?.text){
-      const result=owlOnlineQuote;
-      owlOnlineQuote=null;
-
-      const q=result.quote;
-      rememberOnlineOwlQuote(q.id,{cycleReset:result.cycleReset===true});
-
-      // Lấy sẵn câu tiếp theo, không chặn giao diện.
-      setTimeout(()=>prefetchOnlineOwlQuote(),0);
-
-      return {
-        text:q.text,
-        author:q.author||"Khuyết danh",
-        url:q.url||result.sourceUrl||OWL_QUOTE_SOURCE,
-        poolSize:Number(result.poolSize||0),
-        source:"online"
-      };
-    }
-
-    // Online chưa sẵn sàng / lỗi: dùng local ngay và thử lại nền.
-    prefetchOnlineOwlQuote();
-
     const q=nextOwlQuote();
     return {
       ...q,
       url:OWL_QUOTE_SOURCE,
-      poolSize:OWL_QUOTES.length,
-      source:"local"
+      poolSize:OWL_QUOTES.length
     };
   }
 
@@ -291,7 +177,6 @@ import { friendlyAppError } from "./utils/error-map.js";
     initOwlPet(document);
 
     owlReady=true;
-    prefetchOnlineOwlQuote();
 
     body.addEventListener("click",()=>{
       owlMessageCursor++;
@@ -513,11 +398,11 @@ import { friendlyAppError } from "./utils/error-map.js";
   function deadlineChip(w,dow=null){
     const mode=w?.deadlineMode||"per_session_20";
     if(mode==="per_session_20" && dow===null){
-      return `<span class="deadline-chip ok">${uiIcon("clock","chip-icon","blue")} Theo từng buổi: 20:00 tối hôm trước</span>`;
+      return `<span class="deadline-chip ok">⏰ Theo từng buổi: 20:00 tối hôm trước</span>`;
     }
     const dl=deadlineForSlot(w,dow??0);
-    if(!dl)return `<span class="deadline-chip neutral">${uiIcon("clock","chip-icon","slate")} Chưa đặt deadline</span>`;
-    return `<span class="deadline-chip ${deadlinePassed(w,dow??0)?"late":"ok"}">${uiIcon("clock","chip-icon",deadlinePassed(w,dow??0)?"rose":"blue")} ${fmtDeadline(dl)}${deadlinePassed(w,dow??0)?" · Đã qua hạn":""}</span>`;
+    if(!dl)return `<span class="deadline-chip neutral">⏰ Chưa đặt deadline</span>`;
+    return `<span class="deadline-chip ${deadlinePassed(w,dow??0)?"late":"ok"}">⏰ ${fmtDeadline(dl)}${deadlinePassed(w,dow??0)?" · Đã qua hạn":""}</span>`;
   }
   function deadlineSummary(w){
     const mode=w?.deadlineMode||"per_session_20";
@@ -708,7 +593,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     }
     loginView.classList.add("hidden"); appView.classList.remove("hidden");
     $("#profileName").textContent=currentUser.name; $("#profileRole").textContent=roleLabel[currentUser.role]; $("#profileAvatar").textContent=initials(currentUser.name);
-    $("#sideNav").innerHTML=navs[currentUser.role].map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}">${uiIcon(n[1],`nav-icon nav-icon--${n[0]}`)}<span class="nav-label">${n[2]}</span></button>`).join("");
+    $("#sideNav").innerHTML=navs[currentUser.role].map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}">${navIconFor(n[0])}<span class="nav-label">${n[2]}</span></button>`).join("");
     $("#sideNav").querySelectorAll("[data-route]").forEach(b=>b.onclick=()=>{route=b.dataset.route; $("#sidebar").classList.remove("open"); renderShell(); render();});
     $("#globalWeekSelect").innerHTML=state.weeks.map(w=>`<option value="${w.id}" ${w.id===state.currentWeekId?"selected":""}>Tuần ${w.number} · ${fmtDateShort(w.startDate)}–${fmtDateShort(w.endDate)}</option>`).join("");
 
@@ -756,7 +641,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     <div class="card" style="box-shadow:none">
       <div class="person"><span class="avatar">${initials(currentUser?.name||"")}</span><div><b>${esc(currentUser?.name)}</b><div class="muted tiny">${roleLabel[currentUser?.role]} · ${esc(currentUser?.code)}</div></div></div>
       <p class="muted">Lớp ${esc(state.settings.className)} · Năm học ${esc(state.settings.schoolYear)}</p>
-      <div class="toolbar"><button class="btn btn-ghost" id="changeMyPasswordBtn">${iconLabel("key","Đổi mật khẩu")}</button><button class="btn btn-danger right" id="logoutBtn">${iconLabel("logout","Đăng xuất","rose")}</button></div>
+      <div class="toolbar"><button class="btn btn-ghost" id="changeMyPasswordBtn">🔑 Đổi mật khẩu</button><button class="btn btn-danger right" id="logoutBtn">Đăng xuất</button></div>
     </div>`));
   document.addEventListener("click",e=>{
     if(e.target?.id==="logoutBtn"){closeModal();logout();}
@@ -779,7 +664,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         </div>
         ${items.length?items.slice(0,20).map(n=>`
           <div class="notification-item ${n.isRead?"":"unread"}">
-            <div class="notification-icon">${uiIcon("bell","notification-clay-icon","rose")}</div>
+            <div class="notification-icon">🔔</div>
             <div><b>${esc(n.title)}</b><p>${esc(n.message||"")}</p><small>${n.createdAt?new Date(n.createdAt).toLocaleString("vi-VN"):""}</small></div>
           </div>`).join(""):`<div class="empty-mini">Không có thông báo cần duyệt.</div>`}
         <button class="btn btn-primary btn-block" id="openApprovalsFromNotifications">Mở danh sách cần duyệt</button>
@@ -837,7 +722,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     const w=week();
     const image=currentUser?.role==="teacher"?"assets/images/teacher-dashboard-illustration.svg":"assets/images/student-cards.svg";
     return `<div class="banner"><div>
-      <div class="eyebrow-pill">${uiIcon("calendar","eyebrow-icon","pink")}<span>${currentUser?.role==="teacher"?"Tuần đang xem":"Bạn đang đăng ký cho"}</span></div>
+      <div class="eyebrow-pill">📅 ${currentUser?.role==="teacher"?"Tuần đang xem":"Bạn đang đăng ký cho"}</div>
       <h2>Tuần ${w.number} · ${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</h2>
       <div class="deadline-row">${deadlineChip(w)} <span class="week-state-pill">${weekStatus(w.status)}</span></div>
       <p>${esc(state.settings.announcement)}</p>
@@ -855,7 +740,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       html+=`<div class="callout next-action-week"><b>➡ Đã chuyển sang Tuần ${week().number}.</b> Các buổi còn lại của tuần trước đã bắt đầu/đã qua nên app ưu tiên tuần có buổi đăng ký tiếp theo.</div>`;
     }
     html+=`<div class="card" style="margin-bottom:16px"><div class="toolbar"><b>Tiến độ của bạn</b><span class="right"><b>${done}/${total}</b> tiết</span></div><div class="progress" style="margin-top:10px"><span style="width:${pct}%"></span></div></div>`;
-    if(!slots.length) html+=empty("calendar","Tuần này chưa có tiết tự học.");
+    if(!slots.length) html+=empty("📅","Tuần này chưa có tiết tự học.");
     else html+=`<div class="grid">${slots.map((sl,i)=>studyCard(sl,regs[i])).join("")}</div>`;
     return html;
   }
@@ -867,17 +752,17 @@ import { friendlyAppError } from "./utils/error-map.js";
     const pastDeadline=deadlinePassed(w,sl.dow);
     const emergency=emergencyRegistrationEligible(w,sl.dow,sl.period,r);
 
-    const iconName=r?.status==="approved"
-      ?"check"
+    const icon=r?.status==="approved"
+      ?"✅"
       :r?.status==="needs_revision"
-        ?"edit"
+        ?"📝"
         :r
-          ?"book"
+          ?"📘"
           :started
-            ?"history"
+            ?"⌛"
             :emergency
-              ?"emergency"
-              :"register";
+              ?"🚨"
+              :"🗒️";
 
     const regularNewAllowed=!r&&effectiveStatus==="open"&&!pastDeadline&&!started;
     const approvedEditable=r?.status==="approved"&&effectiveStatus==="open"&&!pastDeadline&&!started;
@@ -894,11 +779,11 @@ import { friendlyAppError } from "./utils/error-map.js";
           :ordinaryEditable
             ?"Xem / sửa"
             :"Xem";
-      actionHtml=`<button class="btn ${editable?"btn-ghost":"btn-soft"} reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">${iconLabel(editable?"edit":"book",label)}</button>`;
+      actionHtml=`<button class="btn ${editable?"btn-ghost":"btn-soft"} reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">${label}</button>`;
     }else if(regularNewAllowed){
-      actionHtml=`<button class="btn btn-primary reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">${iconLabel("add","Đăng ký ngay","mint")}</button>`;
+      actionHtml=`<button class="btn btn-primary reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">+ Đăng ký ngay</button>`;
     }else if(emergency){
-      actionHtml=`<button class="btn emergency-reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">${iconLabel("emergency","Đăng ký bổ sung","rose")}</button>`;
+      actionHtml=`<button class="btn emergency-reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">🚨 Đăng ký bổ sung</button>`;
     }else{
       const label=started
         ?"Đã qua buổi"
@@ -914,12 +799,12 @@ import { friendlyAppError } from "./utils/error-map.js";
 
     const cardClass=(!r&&!regularNewAllowed&&!emergency)?"closed-slot":"";
     return `<div class="card study-card ${cardClass} ${emergency?"emergency-slot":""}">
-      <div class="study-icon">${uiIcon(iconName,"study-clay-icon",emergency?"rose":"")}</div>
+      <div class="study-icon">${icon}</div>
       <div class="study-main">
         <h3>${DOW[sl.dow]} · ${fmtDate(dateForDow(w,sl.dow))} · Tiết ${sl.period}</h3>
-        <p class="meta-line">${uiIcon("clock","meta-icon","blue")}<span>${pe.start} – ${pe.end}</span></p>
+        <p>🕘 ${pe.start} – ${pe.end}</p>
         <p class="slot-deadline ${pastDeadline?"expired":""}">
-          ${uiIcon("clock","meta-icon",pastDeadline?"rose":"blue")} Hạn: <b>${fmtDeadline(deadlineForSlot(w,sl.dow))}</b>
+          ⏰ Hạn: <b>${fmtDeadline(deadlineForSlot(w,sl.dow))}</b>
           ${pastDeadline?" · Đã qua":""}
         </p>
         ${started?`<p class="tiny session-passed-note">⌛ Buổi tự học đã bắt đầu/đã qua.</p>`:""}
@@ -1252,12 +1137,12 @@ import { friendlyAppError } from "./utils/error-map.js";
     return head("Lịch sử của tôi","Xem lại đăng ký ở các tuần trước.")+
       (regs.length?`<div class="card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Tuần</th><th>Tiết</th><th>Nội dung</th><th>Trạng thái</th><th>Nhận xét GV</th></tr></thead><tbody>
       ${regs.map(r=>{const w=state.weeks.find(x=>x.id===r.weekId);return `<tr><td>Tuần ${w?.number||"?"}</td><td>${slotLabel(r.dow,r.period)}</td><td><b>${esc(r.content)}</b>${r.isEmergency?`<div class="tiny emergency-badge">🚨 Bổ sung khẩn cấp</div>`:""}<div class="tiny muted">${esc(r.note||"")}</div></td><td>${statusBadge(r.status)}</td><td>${esc(r.teacherComment||"—")}</td></tr>`}).join("")}
-      </tbody></table></div></div>`:empty("history","Chưa có lịch sử đăng ký."));
+      </tbody></table></div></div>`:empty("🕘","Chưa có lịch sử đăng ký."));
   }
   function commentsPage(){
     const regs=state.registrations.filter(r=>r.studentId===currentUser.id&&r.teacherComment);
     return head("Nhận xét của giáo viên","Các phản hồi dành cho đăng ký của bạn.")+
-      (regs.length?`<div class="grid">${regs.map(r=>`<div class="card"><b>${slotLabel(r.dow,r.period)}</b><p>${esc(r.content)}</p><div class="callout">💬 ${esc(r.teacherComment)}</div></div>`).join("")}</div>`:empty("comments","Chưa có nhận xét nào."));
+      (regs.length?`<div class="grid">${regs.map(r=>`<div class="card"><b>${slotLabel(r.dow,r.period)}</b><p>${esc(r.content)}</p><div class="callout">💬 ${esc(r.teacherComment)}</div></div>`).join("")}</div>`:empty("💬","Chưa có nhận xét nào."));
   }
 
   function classOverview(){
@@ -1320,9 +1205,9 @@ import { friendlyAppError } from "./utils/error-map.js";
     const pending=pendingAll.slice(0,6), st=statsForWeek();
     const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
     let html=head("Dashboard",`Tổng quan tuần ${week().number}`)+weekBanner();
-    html+=`<div class="grid grid-5" style="margin-bottom:16px">${kpi("class",st.students,"Thành viên")}${kpi("sparkle",st.autoApproved,"Duyệt nhanh")}${kpi("history",st.missing,"Chưa gửi")}${kpi("bell",unread||pendingAll.length,"Cần GV xem")}${kpi("stats",st.rate+"%","Tỷ lệ hoàn thành")}</div>`;
+    html+=`<div class="grid grid-5" style="margin-bottom:16px">${kpi("👥",st.students,"Thành viên")}${kpi("✨",st.autoApproved,"Duyệt nhanh")}${kpi("⌛",st.missing,"Chưa gửi")}${kpi("🔔",unread||pendingAll.length,"Cần GV xem")}${kpi("📈",st.rate+"%","Tỷ lệ hoàn thành")}</div>`;
     html+=`<div class="smart-approval-banner ${state.settings.smartApprovalEnabled===false?"off":"on"}">
-      <div><b class="icon-heading">${uiIcon(state.settings.smartApprovalEnabled===false?"lock":"sparkle","heading-icon",state.settings.smartApprovalEnabled===false?"slate":"violet")}<span>${state.settings.smartApprovalEnabled===false?"Duyệt nhanh đang tắt":"Duyệt nhanh đang bật"}</span></b>
+      <div><b>${state.settings.smartApprovalEnabled===false?"⏸ Duyệt nhanh đang tắt":"✨ Duyệt nhanh đang bật"}</b>
       <span>${state.settings.smartApprovalEnabled===false
         ?"Mọi đăng ký gửi mới sẽ chờ GV duyệt."
         :state.settings.aiReviewEnabled===false
@@ -1330,18 +1215,18 @@ import { friendlyAppError } from "./utils/error-map.js";
           :`Rule xử lý trường hợp rõ; AI đọc trường hợp mơ hồ và chỉ tự duyệt từ ${Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100)}% tin cậy.`}</span></div>
       <button class="btn btn-ghost" data-route-settings="1">Cài đặt</button>
     </div>`;
-    html+=`<div class="grid grid-2"><div class="card"><h3 class="icon-heading">${uiIcon("bell","heading-icon","rose")}<span>Cần giáo viên xử lý</span></h3>${pending.length?pending.map(approvalItem).join(""):empty("check","Không còn đăng ký chờ xử lý.")}</div>
+    html+=`<div class="grid grid-2"><div class="card"><h3>🔔 Cần giáo viên xử lý</h3>${pending.length?pending.map(approvalItem).join(""):empty("✅","Không còn đăng ký chờ xử lý.")}</div>
       <div class="card"><h3>Tuần hiện tại</h3><p><b>Tuần ${week().number}</b></p><p>${fmtDate(week().startDate)} – ${fmtDate(week().endDate)}</p><p><b>Kiểu deadline:</b> ${deadlineModeLabel(week().deadlineMode)}</p><p>${deadlineChip(week())}</p><p>Trạng thái: ${weekStatus(effectiveWeekStatus(week()))}</p>
       <div class="progress"><span style="width:${st.rate}%"></span></div><p class="muted tiny">${st.submitted}/${st.total} lượt đã đăng ký</p></div></div>`;
     return html;
   }
-  function kpi(iconName,val,label){return `<div class="card kpi"><div class="kpi-icon">${kpiClayIcon(iconName)}</div><div><div class="kpi-value">${val}</div><div class="kpi-label">${label}</div></div></div>`;}
+  function kpi(icon,val,label){return `<div class="card kpi"><div class="kpi-icon">${kpiClayIcon(icon)}</div><div><div class="kpi-value">${val}</div><div class="kpi-label">${label}</div></div></div>`;}
   function approvalItem(r){
     const s=state.users.find(u=>u.id===r.studentId);
     return `<div class="approval-item manual-review-item"><div class="approval-content"><div class="person"><span class="avatar">${initials(s?.name||"?")}</span><div><b>${esc(s?.name||"")}</b><div class="tiny muted">${slotLabel(r.dow,r.period)}</div></div></div><p><b>${esc(r.content)}</b></p><p>${esc(r.note||"")}</p>${r.isEmergency?`<div class="callout emergency-callout"><b>🚨 Đăng ký bổ sung</b><br>Lý do: ${esc(r.emergencyReason||"—")}</div>`:""}
       ${(r.aiReason||r.autoReviewReason)?`<div class="review-reason">🧠 <b>Lý do cần GV xem:</b> ${esc(r.aiReason||r.autoReviewReason)}${r.aiConfidence==null?"":` <b>(${Math.round(r.aiConfidence*100)}%)</b>`}</div>`:""}
       ${r.teacherComment?`<p style="color:#7c3aed">💬 ${esc(r.teacherComment)}</p>`:""}</div>
-      <div class="approval-actions">${statusBadge(r.status)}<button class="btn btn-success approve-btn" data-id="${r.id}">${iconLabel("check","Duyệt","mint")}</button><button class="btn btn-warning revise-btn" data-id="${r.id}">${iconLabel("revise","Yêu cầu sửa","peach")}</button><button class="btn btn-ghost comment-btn" data-id="${r.id}">${iconLabel("comments","Nhận xét","violet")}</button><button class="btn btn-danger delete-reg-btn" data-id="${r.id}">${iconLabel("delete","Xóa","rose")}</button></div></div>`;
+      <div class="approval-actions">${statusBadge(r.status)}<button class="btn btn-success approve-btn" data-id="${r.id}">✓ Duyệt</button><button class="btn btn-warning revise-btn" data-id="${r.id}">↩ Yêu cầu sửa</button><button class="btn btn-ghost comment-btn" data-id="${r.id}">💬 Nhận xét</button><button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button></div></div>`;
   }
   function bindTeacherActions(root=content){
     root.querySelectorAll(".approve-btn").forEach(b=>b.onclick=()=>{const r=state.registrations.find(x=>x.id===b.dataset.id);if(r){r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);audit("Phê duyệt đăng ký",r.id);saveState();toast("Đã phê duyệt.","success");render();}});
@@ -1424,8 +1309,8 @@ import { friendlyAppError } from "./utils/error-map.js";
           <td>${sourceBadge(r)}</td>
           <td>
             <div class="toolbar" style="gap:5px">
-              ${r.status==="approved"&&r.approvalSource==="ai"?`<button class="btn btn-warning ai-wrong-btn" data-id="${r.id}">${iconLabel("missing","AI chưa đúng","peach")}</button>`:""}
-              <button class="btn btn-danger delete-reg-btn" data-id="${r.id}">${iconLabel("delete","Xóa","rose")}</button>
+              ${r.status==="approved"&&r.approvalSource==="ai"?`<button class="btn btn-warning ai-wrong-btn" data-id="${r.id}">⚠️ AI chưa đúng</button>`:""}
+              <button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button>
             </div>
           </td>
         </tr>`;
@@ -1433,8 +1318,8 @@ import { friendlyAppError } from "./utils/error-map.js";
       </tbody></table></div></div>`:"";
 
     return head("Duyệt đăng ký",`${pending.length} đăng ký đang cần xử lý`,
-      pending.length?`<button class="btn btn-success" id="approveAll">${iconLabel("check","Duyệt tất cả đang chờ","mint")}</button>`:"")+
-      `<div class="card">${pending.length?pending.map(approvalItem).join(""):empty("check","Không có đăng ký cần xử lý.")}</div>`+
+      pending.length?`<button class="btn btn-success" id="approveAll">✓ Duyệt tất cả đang chờ</button>`:"")+
+      `<div class="card">${pending.length?pending.map(approvalItem).join(""):empty("🎉","Không có đăng ký cần xử lý.")}</div>`+
       allTable;
   }
 
@@ -1504,7 +1389,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     return head(
       "Quản lý tuần",
       "Trạng thái tuần được tính tự động: tuần hiện tại và tuần kế tiếp luôn mở; các tuần cũ tự khóa. Giáo viên chỉ cần đánh dấu tuần nghỉ.",
-      `<div class="toolbar"><button class="btn btn-ghost" id="goCurrentWeek">${iconLabel("pin","Tuần theo ngày hôm nay","peach")}</button><button class="btn btn-primary" id="saveWeeks">${iconLabel("save","Lưu cấu hình","mint")}</button></div>`
+      `<div class="toolbar"><button class="btn btn-ghost" id="goCurrentWeek">📍 Tuần theo ngày hôm nay</button><button class="btn btn-primary" id="saveWeeks">💾 Lưu cấu hình</button></div>`
     )+
       `<div class="card week-setup-card">
         <div>
@@ -1522,7 +1407,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             <span>🕗 Mặc định: 20:00 tối hôm trước từng buổi.</span>
             <span>🎯 Khi thật sự cần, GV có thể đặt hạn cụ thể cho cả tuần.</span>
           </div>
-          <button class="btn btn-primary glossy-action" id="applyWeekCalendar">${iconLabel("sparkle","Áp dụng mốc tuần","violet")}</button>
+          <button class="btn btn-primary glossy-action" id="applyWeekCalendar">✨ Áp dụng mốc tuần</button>
         </div>
         ${first?`<div class="calendar-preview">Tuần 1 hiện tại: <b>${fmtDate(first.startDate)} – ${fmtDate(first.endDate)}</b></div>`:""}
       </div>
@@ -1638,7 +1523,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         <td>
           <div class="code-cell">
             <b class="code-badge">${esc(u.code)}</b>
-            <button class="mini-icon-btn copy-code-btn" data-code="${esc(u.code)}" title="Sao chép mã đăng nhập" aria-label="Sao chép mã đăng nhập">${uiIcon("copy","mini-clay-icon","peach")}</button>
+            <button class="mini-icon-btn copy-code-btn" data-code="${esc(u.code)}" title="Sao chép mã đăng nhập">📋</button>
           </div>
         </td>
         <td><div class="person"><span class="avatar">${initials(u.name)}</span><b>${esc(u.name)}</b></div></td>
@@ -1788,7 +1673,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             const result=await prod.teacherCreateUser(changes);
             openModal("Đã thêm học sinh",`
               <div class="success-account-card">
-                <div class="success-icon">${uiIcon("check","success-clay-icon","mint")}</div>
+                <div class="success-icon">🎉</div>
                 <h3>${esc(result.user?.fullName||changes.fullName)}</h3>
                 <p>Mã đăng nhập</p><div class="credential-box">${esc(result.user?.code||changes.code)}</div>
                 <p>Mật khẩu tạm</p><div class="credential-box">${esc(result.password||changes.password)}</div>
@@ -1876,7 +1761,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       const u=state.users.find(x=>x.id===btn.dataset.id); if(!u)return;
       openModal("Xóa tài khoản học sinh",`
         <div class="danger-zone-card">
-          <div class="danger-zone-icon">${uiIcon("delete","danger-clay-icon","rose")}</div>
+          <div class="danger-zone-icon">🗑️</div>
           <h3>${esc(u.name)}</h3>
           <p>Mã đăng nhập: <b>${esc(u.code)}</b></p>
           <div class="callout warning">
@@ -1943,9 +1828,9 @@ import { friendlyAppError } from "./utils/error-map.js";
       return {w,rate:st.rate,submitted:st.submitted,total:st.total};
     });
     return head("Thống kê","Tỷ lệ đăng ký theo tuần.")+
-      `<div class="grid grid-3" style="margin-bottom:16px">${kpi("stats",statsForWeek().rate+"%","Tuần đang xem")}${kpi("check",statsForWeek().approved,"Đã duyệt")}${kpi("missing",statsForWeek().missing,"Còn thiếu")}</div>
+      `<div class="grid grid-3" style="margin-bottom:16px">${kpi("📈",statsForWeek().rate+"%","Tuần đang xem")}${kpi("✅",statsForWeek().approved,"Đã duyệt")}${kpi("⚠️",statsForWeek().missing,"Còn thiếu")}</div>
       <div class="card"><h3>12 tuần đầu năm học</h3>${rows.map(x=>`<div class="bar-row"><span>Tuần ${x.w.number}</span><div class="bar-track"><div class="bar-fill" style="width:${x.rate}%"></div></div><b>${x.rate}%</b></div>`).join("")}
-      <button id="exportCsv" class="btn btn-ghost" style="margin-top:12px">${iconLabel("download","Xuất CSV tuần đang xem","blue")}</button></div>`;
+      <button id="exportCsv" class="btn btn-ghost" style="margin-top:12px">⬇ Xuất CSV tuần đang xem</button></div>`;
   }
   function bindStats(){
     $("#exportCsv")?.addEventListener("click",()=>{
@@ -2051,10 +1936,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     });
   }
 
-  function empty(icon,text){
-    const key=uiIcons[icon]?icon:null;
-    return `<div class="empty"><img class="empty-image" src="assets/images/empty-state.svg" alt=""><div class="empty-state-icon">${key?uiIcon(key,"empty-clay-icon"):esc(icon||"")}</div><b>${text}</b></div>`;
-  }
+  function empty(icon,text){return `<div class="empty"><img class="empty-image" src="assets/images/empty-state.svg" alt=""><div class="tiny muted">${icon}</div><b>${text}</b></div>`;}
 
   function render(){
     if(!currentUser){renderShell();return;}
