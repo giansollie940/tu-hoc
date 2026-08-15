@@ -10,4 +10,4 @@
 - Dữ liệu lớp được tải theo tuần đang xem, còn lịch sử cá nhân vẫn được giữ.
 - Tinh gọn gói SQL triển khai còn `schema.sql`, bản vá cộng dồn và tệp kiểm tra.
 - Gia cố CORS, JWT/role checks, thông báo lỗi trung hòa và phiên bản thư viện cố định.
-
+- Bản phát hành production được kích hoạt qua GitHub Pages từ nhánh `main`.
