@@ -647,43 +647,31 @@
   }
 
   async function insertAudit(entries){
-    if(!entries.length)return {ok:true};
+    if(!entries.length)return;
 
-    try{
-      const sb=requireClient();
-      const payload={
-        entries:entries.map(a=>({
-          action:a.action||"Thay đổi",
-          entityType:"web_app",
-          entityId:String(a.entityId||""),
-          detail:a.detail||"",
-          createdAt:a.at||new Date().toISOString()
-        }))
-      };
+    const sb=requireClient();
+    const payload={
+      entries:entries.map(a=>({
+        action:a.action||"Thay đổi",
+        entityType:"web_app",
+        entityId:String(a.entityId||""),
+        detail:a.detail||"",
+        createdAt:a.at||new Date().toISOString()
+      }))
+    };
 
-      const {data,error}=await sb.functions.invoke("audit-log",{body:payload});
+    const {data,error}=await sb.functions.invoke("audit-log",{body:payload});
 
-      if(error){
-        const detail=await edgeFunctionErrorMessage(
-          error,
-          "Không ghi được nhật ký hệ thống"
-        );
-        throw new Error(detail);
-      }
-
-      if(!data?.ok){
-        throw new Error(data?.error||"Không ghi được nhật ký hệ thống");
-      }
-
-      return {ok:true};
-    }catch(error){
-      // Best-effort: thao tác chính đã thành công thì audit không được phép
-      // làm syncState() báo thất bại cho học sinh/giáo viên.
-      console.warn(
-        "audit-log best-effort thất bại; dữ liệu chính vẫn được giữ.",
-        error
+    if(error){
+      const detail=await edgeFunctionErrorMessage(
+        error,
+        "Không ghi được nhật ký hệ thống"
       );
-      return {ok:false,error};
+      throw new Error(detail);
+    }
+
+    if(!data?.ok){
+      throw new Error(data?.error||"Không ghi được nhật ký hệ thống");
     }
   }
 
