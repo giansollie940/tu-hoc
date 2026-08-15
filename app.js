@@ -25,6 +25,20 @@ import { friendlyAppError } from "./utils/error-map.js";
     return mapped.code==="UNKNOWN"?fallback:mapped.message;
   };
 
+  document.addEventListener("click",event=>{
+    const toggle=event.target.closest?.(".password-toggle");
+    if(!toggle)return;
+    const targetId=toggle.dataset.passwordTarget;
+    const input=targetId?document.getElementById(targetId):null;
+    if(!input)return;
+
+    const showing=input.type==="text";
+    input.type=showing?"password":"text";
+    toggle.setAttribute("aria-pressed",String(!showing));
+    toggle.setAttribute("aria-label",showing?"Hiện mật khẩu":"Ẩn mật khẩu");
+    toggle.classList.toggle("is-visible",!showing);
+  });
+
   const roleLabel={student:"Học sinh",monitor:"Cán sự lớp",teacher:"Giáo viên"};
   const statusLabel={approved:"Đã duyệt",submitted:"Chờ duyệt",needs_revision:"Cần chỉnh sửa",draft:"Bản nháp",missing:"Chưa đăng ký"};
   const DOW=["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6"];
@@ -87,6 +101,19 @@ import { friendlyAppError } from "./utils/error-map.js";
       missing:"missing"
     };
     return uiIcon(map[route]||"dashboard",`nav-icon nav-icon--${route}`);
+  }
+
+  function kpiClayIcon(symbol){
+    const map={
+      "👥":"class",
+      "✨":"approvals",
+      "⌛":"history",
+      "🔔":"comments",
+      "📈":"stats",
+      "✅":"approvals",
+      "⚠️":"missing"
+    };
+    return uiIcon(map[symbol]||"dashboard","clay-kpi-icon");
   }
 
   const OWL_QUOTE_SOURCE="https://www.tudiendanhngon.vn/danhngon/ds/strcats/180";
@@ -566,7 +593,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     }
     loginView.classList.add("hidden"); appView.classList.remove("hidden");
     $("#profileName").textContent=currentUser.name; $("#profileRole").textContent=roleLabel[currentUser.role]; $("#profileAvatar").textContent=initials(currentUser.name);
-    $("#sideNav").innerHTML=navs[currentUser.role].map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}"><span class="nav-icon">${n[1]}</span>${n[2]}</button>`).join("");
+    $("#sideNav").innerHTML=navs[currentUser.role].map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}">${navIconFor(n[0])}<span class="nav-label">${n[2]}</span></button>`).join("");
     $("#sideNav").querySelectorAll("[data-route]").forEach(b=>b.onclick=()=>{route=b.dataset.route; $("#sidebar").classList.remove("open"); renderShell(); render();});
     $("#globalWeekSelect").innerHTML=state.weeks.map(w=>`<option value="${w.id}" ${w.id===state.currentWeekId?"selected":""}>Tuần ${w.number} · ${fmtDateShort(w.startDate)}–${fmtDateShort(w.endDate)}</option>`).join("");
 
@@ -786,6 +813,8 @@ import { friendlyAppError } from "./utils/error-map.js";
         ${r?.note?`<p>${esc(r.note)}</p>`:""}
         ${r?.teacherComment?`<p style="color:#7c3aed">💬 GV: ${esc(r.teacherComment)}</p>`:""}
         ${r?.isEmergency?`<p class="tiny emergency-badge">🚨 Đăng ký bổ sung · ${esc(r.emergencyReason||"")}</p>`:""}
+        ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="ai"?`<p class="tiny device-ai-badge">🤖 AI phát hiện nội dung có sử dụng thiết bị điện tử${r.deviceDetectionConfidence==null?"":` · ${Math.round(r.deviceDetectionConfidence*100)}%`}</p>`:""}
+        ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="rule"?`<p class="tiny device-rule-badge">🔎 Hệ thống phát hiện nội dung có nhắc đến thiết bị điện tử · đang chờ AI xác nhận</p>`:""}
         ${r?.approvalSource==="auto_rule"?`<p class="tiny auto-approved-note">✨ Đã được duyệt nhanh theo quy tắc</p>`:""}
         ${r?.approvalSource==="ai"?`<p class="tiny auto-approved-note">🤖 AI đã duyệt${r.aiConfidence==null?"":` · ${Math.round(r.aiConfidence*100)}%`}</p>`:""}
         ${["pending","processing"].includes(r?.aiReviewStatus)?`<p class="tiny ai-review-badge">🤖 AI đang đánh giá...</p>`:""}
@@ -861,6 +890,9 @@ import { friendlyAppError } from "./utils/error-map.js";
             placeholder="Nêu bài, trang hoặc mục tiêu cụ thể...">${esc(r?.note||"")}</textarea>
         </label>
         ${renderDeviceChoice({checked:r?.usesElectronicDevice===true,disabled:locked})}
+        ${r?.usesElectronicDevice&&r?.deviceDetectionSource&&r.deviceDetectionSource!=="student"
+          ?`<p class="tiny device-detection-hint">🤖 Hệ thống đã nhận diện nội dung có sử dụng thiết bị điện tử dù bạn chưa bật công tắc.</p>`
+          :""}
 
         ${locked
           ?`<p class="muted tiny">Đăng ký này hiện chỉ được xem.</p>`
@@ -1188,7 +1220,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       <div class="progress"><span style="width:${st.rate}%"></span></div><p class="muted tiny">${st.submitted}/${st.total} lượt đã đăng ký</p></div></div>`;
     return html;
   }
-  function kpi(icon,val,label){return `<div class="card kpi"><div class="kpi-icon">${icon}</div><div><div class="kpi-value">${val}</div><div class="kpi-label">${label}</div></div></div>`;}
+  function kpi(icon,val,label){return `<div class="card kpi"><div class="kpi-icon">${kpiClayIcon(icon)}</div><div><div class="kpi-value">${val}</div><div class="kpi-label">${label}</div></div></div>`;}
   function approvalItem(r){
     const s=state.users.find(u=>u.id===r.studentId);
     return `<div class="approval-item manual-review-item"><div class="approval-content"><div class="person"><span class="avatar">${initials(s?.name||"?")}</span><div><b>${esc(s?.name||"")}</b><div class="tiny muted">${slotLabel(r.dow,r.period)}</div></div></div><p><b>${esc(r.content)}</b></p><p>${esc(r.note||"")}</p>${r.isEmergency?`<div class="callout emergency-callout"><b>🚨 Đăng ký bổ sung</b><br>Lý do: ${esc(r.emergencyReason||"—")}</div>`:""}
@@ -1770,9 +1802,9 @@ import { friendlyAppError } from "./utils/error-map.js";
       openModal("Đặt lại mật khẩu",`
         <div class="callout"><b>${esc(u.name)}</b> · ${esc(u.code)}</div>
         <form id="teacherResetPasswordForm">
-          <label>Mật khẩu tạm mới<input id="teacherNewPassword" type="password" minlength="8" autocomplete="new-password" required></label>
+          <label>Mật khẩu tạm mới<span class="password-field"><input id="teacherNewPassword" type="password" minlength="8" autocomplete="new-password" required><button class="password-toggle" type="button" data-password-target="teacherNewPassword" aria-label="Hiện mật khẩu" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12s3.4-5 9-5 9 5 9 5-3.4 5-9 5-9-5-9-5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="2"/></svg></button></span></label>
           <small>Ít nhất 8 ký tự và có cả chữ lẫn số.</small>
-          <label>Nhập lại mật khẩu<input id="teacherNewPassword2" type="password" minlength="8" autocomplete="new-password" required></label>
+          <label>Nhập lại mật khẩu<span class="password-field"><input id="teacherNewPassword2" type="password" minlength="8" autocomplete="new-password" required><button class="password-toggle" type="button" data-password-target="teacherNewPassword2" aria-label="Hiện mật khẩu" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12s3.4-5 9-5 9 5 9 5-3.4 5-9 5-9-5-9-5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="2"/></svg></button></span></label>
           <button class="btn btn-primary btn-block" type="submit">Đặt lại mật khẩu</button>
         </form>`);
       $("#teacherResetPasswordForm").onsubmit=async e=>{

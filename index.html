@@ -18,7 +18,20 @@
 
   <section id="loginView" class="login-view">
     <div class="login-art">
-      <div class="brand brand-large"><span class="brand-mark">📚</span><span>SỔ TỰ HỌC</span></div>
+      <div class="brand brand-large"><span class="brand-mark clay-brand-icon"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+  <path d="M6 7.5c4.2 0 7.5 1.2 10 3.7v14.2c-2.5-2-5.8-3-10-3V7.5Z" fill="url(#bookA)"/>
+  <path d="M26 7.5c-4.2 0-7.5 1.2-10 3.7v14.2c2.5-2 5.8-3 10-3V7.5Z" fill="url(#bookB)"/>
+  <path d="M16 11.2v14.2" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M9 11.2c2.2.2 3.9.8 5.3 1.8M23 11.2c-2.2.2-3.9.8-5.3 1.8" stroke="#fff" stroke-opacity=".8" stroke-width="1.4" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="bookA" x1="6" y1="7" x2="16" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8BE8FF"/><stop offset="1" stop-color="#7F8CFF"/>
+    </linearGradient>
+    <linearGradient id="bookB" x1="26" y1="7" x2="16" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8B4D9"/><stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+  </defs>
+</svg></span><span>SỔ TỰ HỌC</span></div>
       <h1>Đăng ký · Theo dõi · Phê duyệt<br><span>giờ tự học mỗi tuần</span></h1>
       <p>Một không gian học tập gọn gàng cho học sinh, cán sự lớp và giáo viên.</p>
       <img class="hero-illustration" src="assets/images/login-hero.svg" alt="Minh họa học sinh tự học với sách vở">
@@ -27,8 +40,30 @@
 
     <div class="login-panel">
       <div class="login-card">
-        <div class="mobile-brand brand"><span class="brand-mark">📚</span><span>SỔ TỰ HỌC</span></div>
-        <div class="cap-icon">🎓</div>
+        <div class="mobile-brand brand"><span class="brand-mark clay-brand-icon"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+  <path d="M6 7.5c4.2 0 7.5 1.2 10 3.7v14.2c-2.5-2-5.8-3-10-3V7.5Z" fill="url(#bookA)"/>
+  <path d="M26 7.5c-4.2 0-7.5 1.2-10 3.7v14.2c2.5-2 5.8-3 10-3V7.5Z" fill="url(#bookB)"/>
+  <path d="M16 11.2v14.2" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M9 11.2c2.2.2 3.9.8 5.3 1.8M23 11.2c-2.2.2-3.9.8-5.3 1.8" stroke="#fff" stroke-opacity=".8" stroke-width="1.4" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="bookA" x1="6" y1="7" x2="16" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8BE8FF"/><stop offset="1" stop-color="#7F8CFF"/>
+    </linearGradient>
+    <linearGradient id="bookB" x1="26" y1="7" x2="16" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8B4D9"/><stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+  </defs>
+</svg></span><span>SỔ TỰ HỌC</span></div>
+        <div class="cap-icon clay-cap-icon"><svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+  <path d="M5 15.5 20 8l15 7.5L20 23 5 15.5Z" fill="url(#capA)"/>
+  <path d="M11 19.5V26c0 3 4 5.5 9 5.5s9-2.5 9-5.5v-6.5L20 24l-9-4.5Z" fill="url(#capB)"/>
+  <path d="M34 16v9" stroke="#8B5CF6" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="34" cy="27" r="2.2" fill="#F9A8D4"/>
+  <defs>
+    <linearGradient id="capA" x1="6" y1="10" x2="31" y2="23" gradientUnits="userSpaceOnUse"><stop stop-color="#93C5FD"/><stop offset="1" stop-color="#A78BFA"/></linearGradient>
+    <linearGradient id="capB" x1="12" y1="20" x2="28" y2="31" gradientUnits="userSpaceOnUse"><stop stop-color="#F9A8D4"/><stop offset="1" stop-color="#C4B5FD"/></linearGradient>
+  </defs>
+</svg></div>
         <h2>Đăng nhập</h2>
         <p class="muted">Dùng mã tài khoản do giáo viên cung cấp.</p>
         <form id="loginForm">
@@ -36,7 +71,16 @@
             <input id="loginId" autocomplete="username" placeholder="VD: 10A1-01 hoặc GV-10A1">
           </label>
           <label>Mật khẩu
-            <input id="loginPassword" type="password" autocomplete="current-password">
+            <span class="password-field">
+              <input id="loginPassword" type="password" autocomplete="current-password">
+              <button class="password-toggle" type="button" data-password-target="loginPassword"
+                aria-label="Hiện mật khẩu" aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 12s3.4-5 9-5 9 5 9 5-3.4 5-9 5-9-5-9-5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                  <circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </button>
+            </span>
           </label>
           <button class="btn btn-primary btn-block" type="submit">Đăng nhập</button>
         </form>
@@ -46,7 +90,20 @@
 
   <section id="appView" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand"><span class="brand-mark">📚</span><span>SỔ TỰ HỌC</span></div>
+      <div class="brand"><span class="brand-mark clay-brand-icon"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+  <path d="M6 7.5c4.2 0 7.5 1.2 10 3.7v14.2c-2.5-2-5.8-3-10-3V7.5Z" fill="url(#bookA)"/>
+  <path d="M26 7.5c-4.2 0-7.5 1.2-10 3.7v14.2c2.5-2 5.8-3 10-3V7.5Z" fill="url(#bookB)"/>
+  <path d="M16 11.2v14.2" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M9 11.2c2.2.2 3.9.8 5.3 1.8M23 11.2c-2.2.2-3.9.8-5.3 1.8" stroke="#fff" stroke-opacity=".8" stroke-width="1.4" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="bookA" x1="6" y1="7" x2="16" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8BE8FF"/><stop offset="1" stop-color="#7F8CFF"/>
+    </linearGradient>
+    <linearGradient id="bookB" x1="26" y1="7" x2="16" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8B4D9"/><stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+  </defs>
+</svg></span><span>SỔ TỰ HỌC</span></div>
       <nav id="sideNav" class="side-nav" aria-label="Điều hướng chính"></nav>
       <div class="sidebar-quote">
         <div class="quote-art">🌱📖</div>
@@ -120,7 +177,7 @@
 
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.95.0/dist/umd/supabase.js"></script>
-  <script src="supabase-service.js?v=8.3.0.1"></script>
+  <script src="supabase-service.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -19,7 +19,7 @@
     "teacher_comment","approval_source","auto_review_reason","ai_review_status","ai_decision",
     "ai_category","ai_confidence","ai_reason","ai_model","ai_reviewed_at","ai_review_count",
     "is_emergency","emergency_reason","emergency_requested_at","uses_electronic_device",
-    "updated_at","approved_at"
+    "device_detection_source","device_detection_confidence","updated_at","approved_at"
   ].join(",");
   const WEEK_OVERRIDE_COLUMNS="id,week_id,weekday,period_number,is_study_period,reason";
 
@@ -357,18 +357,10 @@
     if (error) throw error;
   }
 
-  function isMissingSessionError(error){
-    return error?.name === "AuthSessionMissingError"
-      || /auth session missing/i.test(String(error?.message || ""));
-  }
-
   async function authUser(){
     const sb = requireClient();
     const { data, error } = await sb.auth.getUser();
-    if (error){
-      if (isMissingSessionError(error)) return null;
-      throw error;
-    }
+    if (error) throw error;
     return data.user || null;
   }
 
@@ -411,6 +403,8 @@
       emergencyReason:r.emergency_reason || "",
       emergencyRequestedAt:r.emergency_requested_at || null,
       usesElectronicDevice:r.uses_electronic_device===true,
+      deviceDetectionSource:r.device_detection_source || "",
+      deviceDetectionConfidence:r.device_detection_confidence==null?null:Number(r.device_detection_confidence),
       updatedAt:r.updated_at ? new Date(r.updated_at).getTime() : Date.now(),
       approvedAt:r.approved_at ? new Date(r.approved_at).getTime() : null
     };
