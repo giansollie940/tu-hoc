@@ -620,25 +620,70 @@
     return { currentUser:mapProfile(profile), state };
   }
 
-  async function insertAudit(entries){
-    if (!entries.length) return;
+
+  async function getWiseOwlQuote(seenIds=[]){
     const sb=requireClient();
-    const payload={
-      entries:entries.map(a=>({
-        action:a.action || "Thay đổi",
-        entityType:"web_app",
-        entityId:String(a.entityId || ""),
-        detail:a.detail || "",
-        createdAt:a.at || new Date().toISOString()
-      }))
-    };
-    const { data,error }=await sb.functions.invoke("audit-log",{ body: payload });
+    const safeSeen=Array.isArray(seenIds)
+      ? seenIds.map(String).filter(Boolean).slice(-500)
+      : [];
+
+    const {data,error}=await sb.functions.invoke("quote-feed",{
+      body:{seenIds:safeSeen}
+    });
+
     if(error){
-      const detail=await edgeFunctionErrorMessage(error,"Không ghi được nhật ký hệ thống");
+      const detail=await edgeFunctionErrorMessage(
+        error,
+        "Không tải được danh ngôn trực tuyến"
+      );
       throw new Error(detail);
     }
-    if(!data?.ok){
-      throw new Error(data?.error || "Không ghi được nhật ký hệ thống");
+
+    if(!data?.ok||!data?.quote?.text){
+      throw new Error(data?.error||"Kho danh ngôn trực tuyến chưa sẵn sàng");
+    }
+
+    return data;
+  }
+
+  async function insertAudit(entries){
+    if(!entries.length)return {ok:true};
+
+    try{
+      const sb=requireClient();
+      const payload={
+        entries:entries.map(a=>({
+          action:a.action||"Thay đổi",
+          entityType:"web_app",
+          entityId:String(a.entityId||""),
+          detail:a.detail||"",
+          createdAt:a.at||new Date().toISOString()
+        }))
+      };
+
+      const {data,error}=await sb.functions.invoke("audit-log",{body:payload});
+
+      if(error){
+        const detail=await edgeFunctionErrorMessage(
+          error,
+          "Không ghi được nhật ký hệ thống"
+        );
+        throw new Error(detail);
+      }
+
+      if(!data?.ok){
+        throw new Error(data?.error||"Không ghi được nhật ký hệ thống");
+      }
+
+      return {ok:true};
+    }catch(error){
+      // Best-effort: thao tác chính đã thành công thì audit không được phép
+      // làm syncState() báo thất bại cho học sinh/giáo viên.
+      console.warn(
+        "audit-log best-effort thất bại; dữ liệu chính vẫn được giữ.",
+        error
+      );
+      return {ok:false,error};
     }
   }
 
@@ -784,7 +829,7 @@
   window.SupabaseService={
     enabled,init,signInCode,signOut,authUser,loadState,loadWeekData,syncState,resetSnapshot,
     codeToEmail,changeOwnPassword,teacherResetPassword,teacherListUsers,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
-    teacherRebaseWeeks,emergencyRegister,requestAiReview,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
+    teacherRebaseWeeks,emergencyRegister,requestAiReview,getWiseOwlQuote,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
     get client(){return client;}
   };
 })();

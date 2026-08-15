@@ -138,6 +138,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     {text:"Thật sai lầm khi nghĩ rằng một khi rời khỏi trường học, bạn không bao giờ cần học thêm điều mới nữa.",author:"Sophia Loren"}
   ];
   let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1, owlQuoteBag=[];
+  let owlOnlineQuote=null, owlQuoteFetchPromise=null, owlOnlineRetryAfter=0;
 
   function shuffleOwlQuotes(list){
     const arr=[...list];
@@ -157,12 +158,89 @@ import { friendlyAppError } from "./utils/error-map.js";
     return next;
   }
 
+  function owlSeenStorageKey(){
+    return currentUser?.id
+      ? `wiseOwlSeenQuotes:${currentUser.id}`
+      : "wiseOwlSeenQuotes:guest";
+  }
+
+  function loadSeenOwlQuoteIds(){
+    try{
+      const raw=JSON.parse(localStorage.getItem(owlSeenStorageKey())||"[]");
+      return Array.isArray(raw)
+        ? raw.map(String).filter(Boolean).slice(-500)
+        : [];
+    }catch{
+      return [];
+    }
+  }
+
+  function rememberOnlineOwlQuote(id,{cycleReset=false}={}){
+    if(!id)return;
+    try{
+      let seen=cycleReset?[]:loadSeenOwlQuoteIds();
+      seen=seen.filter(x=>x!==String(id));
+      seen.push(String(id));
+      localStorage.setItem(owlSeenStorageKey(),JSON.stringify(seen.slice(-500)));
+    }catch{}
+  }
+
+  function prefetchOnlineOwlQuote(){
+    if(!isProd||!prod?.getWiseOwlQuote)return Promise.resolve(null);
+    if(owlOnlineQuote?.quote?.text)return Promise.resolve(owlOnlineQuote);
+    if(owlQuoteFetchPromise)return owlQuoteFetchPromise;
+    if(Date.now()<owlOnlineRetryAfter)return Promise.resolve(null);
+
+    owlQuoteFetchPromise=prod.getWiseOwlQuote(loadSeenOwlQuoteIds())
+      .then(result=>{
+        if(result?.quote?.text){
+          owlOnlineQuote=result;
+          owlOnlineRetryAfter=0;
+          return result;
+        }
+        return null;
+      })
+      .catch(error=>{
+        owlOnlineRetryAfter=Date.now()+10*60*1000;
+        console.warn("quote-feed tạm thời không dùng được; Cú sẽ dùng OWL_QUOTES local.",error);
+        return null;
+      })
+      .finally(()=>{
+        owlQuoteFetchPromise=null;
+      });
+
+    return owlQuoteFetchPromise;
+  }
+
   function nextWiseOwlQuoteInstant(){
+    if(owlOnlineQuote?.quote?.text){
+      const result=owlOnlineQuote;
+      owlOnlineQuote=null;
+
+      const q=result.quote;
+      rememberOnlineOwlQuote(q.id,{cycleReset:result.cycleReset===true});
+
+      // Lấy sẵn câu tiếp theo, không chặn giao diện.
+      setTimeout(()=>prefetchOnlineOwlQuote(),0);
+
+      return {
+        text:q.text,
+        author:q.author||"Khuyết danh",
+        url:q.url||result.sourceUrl||OWL_QUOTE_SOURCE,
+        poolSize:Number(result.poolSize||0),
+        source:"online"
+      };
+    }
+
+    // Online chưa sẵn sàng / lỗi: dùng local ngay và thử lại nền.
+    prefetchOnlineOwlQuote();
+
     const q=nextOwlQuote();
     return {
       ...q,
       url:OWL_QUOTE_SOURCE,
-      poolSize:OWL_QUOTES.length
+      poolSize:OWL_QUOTES.length,
+      source:"local"
     };
   }
 
@@ -177,6 +255,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     initOwlPet(document);
 
     owlReady=true;
+    prefetchOnlineOwlQuote();
 
     body.addEventListener("click",()=>{
       owlMessageCursor++;
