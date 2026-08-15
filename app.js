@@ -1,18 +1,33 @@
+import { renderDeviceChoice } from "./features/registration/registration-form.js";
+import {
+  passwordChecklistState,
+  renderPasswordDialog
+} from "./features/account/password-dialog.js";
+import {
+  renderClassOverview as renderClassOverviewV830,
+  renderSessionDetails
+} from "./features/class-overview/class-overview.js";
+import { initOwlPet } from "./ui/owl-pet.js";
+import { friendlyAppError } from "./utils/error-map.js";
+
 (async () => {
-  const KEY="soTuHocDemo_v1";
   const prod = window.SupabaseService;
-  const isProd = !!prod?.enabled?.();
-  let state = loadState();
-  let currentUser = isProd ? null : JSON.parse(sessionStorage.getItem("soTuHocUser")||"null");
+  let state = null;
+  let currentUser = null;
   let route="dashboard";
   let weekSelectionTouched=false;
 
   const $ = s => document.querySelector(s);
   const content=$("#content"), loginView=$("#loginView"), appView=$("#appView");
   const modal=$("#modal"), modalBody=$("#modalBody"), modalTitle=$("#modalTitle");
+  const safeErrorMessage=(error,fallback)=>{
+    const mapped=friendlyAppError(error);
+    return mapped.code==="UNKNOWN"?fallback:mapped.message;
+  };
 
   const roleLabel={student:"Học sinh",monitor:"Cán sự lớp",teacher:"Giáo viên"};
   const statusLabel={approved:"Đã duyệt",submitted:"Chờ duyệt",needs_revision:"Cần chỉnh sửa",draft:"Bản nháp",missing:"Chưa đăng ký"};
+  const DOW=["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6"];
   const navs={
     student:[
       ["dashboard","🌟","Trang chủ"],["register","🪄","Đăng ký tự học"],["history","📚","Lịch sử của tôi"],["comments","💎","Nhận xét của GV"]
@@ -115,102 +130,11 @@
     return next;
   }
 
-  function owlSeenStorageKey(){
-    return `wiseOwlSeenQuotes:${currentUser?.id||"guest"}`;
-  }
-
-  function readSeenOwlQuoteIds(){
-    try{
-      const value=JSON.parse(localStorage.getItem(owlSeenStorageKey())||"[]");
-      return Array.isArray(value)?value.map(String).slice(-500):[];
-    }catch{
-      return [];
-    }
-  }
-
-  function writeSeenOwlQuoteIds(ids){
-    try{
-      localStorage.setItem(
-        owlSeenStorageKey(),
-        JSON.stringify([...new Set((ids||[]).map(String))].slice(-500))
-      );
-    }catch{}
-  }
-
-  function fallbackQuoteId(q){
-    const raw=`${q?.author||""}|${q?.text||""}`;
-    let h=2166136261;
-    for(let i=0;i<raw.length;i++){
-      h^=raw.charCodeAt(i);
-      h=Math.imul(h,16777619);
-    }
-    return `fallback-${(h>>>0).toString(16)}`;
-  }
-
-  let owlPrefetchedQuote=null;
-  let owlPrefetchPromise=null;
-
-  function rememberOnlineOwlQuote(result){
-    const q=result?.quote;
-    if(!q?.text)return null;
-
-    const seen=readSeenOwlQuoteIds();
-    const nextSeen=result.cycleReset?[]:[...seen];
-    nextSeen.push(String(q.id||fallbackQuoteId(q)));
-    writeSeenOwlQuoteIds(nextSeen);
-
-    return {
-      text:String(q.text),
-      author:String(q.author||"Khuyết danh"),
-      url:String(q.url||result.sourceUrl||OWL_QUOTE_SOURCE),
-      online:true,
-      poolSize:Number(result.poolSize||0)
-    };
-  }
-
-  function prefetchWiseOwlQuote(){
-    if(!isProd||!prod?.getWiseOwlQuote||owlPrefetchedQuote||owlPrefetchPromise)return;
-
-    const seen=readSeenOwlQuoteIds();
-    owlPrefetchPromise=prod.getWiseOwlQuote(seen)
-      .then(result=>{
-        const q=result?.quote;
-        if(q?.text){
-          owlPrefetchedQuote={
-            result,
-            preview:{
-              text:String(q.text),
-              author:String(q.author||"Khuyết danh"),
-              url:String(q.url||result.sourceUrl||OWL_QUOTE_SOURCE),
-              online:true,
-              poolSize:Number(result.poolSize||0)
-            }
-          };
-        }
-      })
-      .catch(err=>{
-        console.warn("Không nạp trước được danh ngôn trực tuyến.",err);
-      })
-      .finally(()=>{owlPrefetchPromise=null;});
-  }
-
   function nextWiseOwlQuoteInstant(){
-    if(owlPrefetchedQuote){
-      const cached=owlPrefetchedQuote;
-      owlPrefetchedQuote=null;
-      const q=rememberOnlineOwlQuote(cached.result) || cached.preview;
-      // Nạp sẵn câu kế tiếp sau khi đã trả câu hiện tại.
-      setTimeout(prefetchWiseOwlQuote,0);
-      return q;
-    }
-
-    // Không chờ mạng: dùng kho dự phòng ngay lập tức và đồng thời nạp câu online cho lần sau.
-    prefetchWiseOwlQuote();
     const q=nextOwlQuote();
     return {
       ...q,
       url:OWL_QUOTE_SOURCE,
-      online:false,
       poolSize:OWL_QUOTES.length
     };
   }
@@ -223,9 +147,9 @@
     const speech=$("#owlSpeech");
     const closeBtn=$("#owlMuteBtn");
     if(!pet||!body||!speech)return;
+    initOwlPet(document);
 
     owlReady=true;
-    prefetchWiseOwlQuote();
 
     body.addEventListener("click",()=>{
       owlMessageCursor++;
@@ -295,7 +219,7 @@
         const urgency=hours<=24;
         messages.push({
           urgent:urgency,
-          text:`${urgency?"⏰":"📅"} Tiết ${next.sl.period} ${DemoData.DOW[next.sl.dow]} chưa đăng ký. Hạn: ${fmtDeadline(next.deadline)}.`
+          text:`${urgency?"⏰":"📅"} Tiết ${next.sl.period} ${DOW[next.sl.dow]} chưa đăng ký. Hạn: ${fmtDeadline(next.deadline)}.`
         });
       }else if(missing.length&&effectiveWeekStatus(w)==="open"){
         messages.push({urgent:true,text:`⚠️ Tuần ${w.number} còn ${missing.length} tiết của bạn chưa có nội dung đăng ký.`});
@@ -398,25 +322,12 @@
     }
   }
 
-  function loadState(){
-    try{ return JSON.parse(localStorage.getItem(KEY)) || DemoData.defaultState(); }
-    catch(e){ return DemoData.defaultState(); }
-  }
   function saveState(){
-    if(isProd){
-      return prod.syncState(state,currentUser).catch(err=>{
-        console.error(err);
-        toast("Không đồng bộ được dữ liệu: "+(err.message||err),"warn");
-        throw err;
-      });
-    }else{
-      localStorage.setItem(KEY,JSON.stringify(state));
-      return Promise.resolve();
-    }
-  }
-  function resetDemo(){
-    if(isProd){ toast("Chức năng khôi phục chỉ dùng ở chế độ Demo.","warn"); return; }
-    state=DemoData.defaultState(); const aw=actualWeek(); if(aw)state.currentWeekId=aw.id; saveState(); toast("Đã khôi phục dữ liệu demo.","success"); render();
+    return prod.syncState(state,currentUser).catch(err=>{
+      console.error(err);
+      toast(safeErrorMessage(err,"Không đồng bộ được dữ liệu. Vui lòng thử lại."),"warn");
+      throw err;
+    });
   }
   function esc(v=""){ return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
   function fmtDate(s){ if(!s)return""; const [y,m,d]=s.slice(0,10).split("-"); return `${d}/${m}/${y}`; }
@@ -472,37 +383,6 @@
     if(mode==="week_before_20") return fmtDeadline(deadlineForSlot(w,0));
     return w?.deadline ? fmtDeadline(w.deadline) : "Chưa chọn hạn cụ thể";
   }
-  function smartReviewDecision(content,note=""){
-    const text=`${content||""} ${note||""}`.toLowerCase();
-    const nonStudy=/(chơi\s*game|game\s*giải\s*trí|tiktok|facebook|instagram|xem\s*phim|video\s*giải\s*trí|nghe\s*nhạc|mạng\s*xã\s*hội|lướt\s*mạng|chat|nhắn\s*tin|giải\s*trí|shopping|mua\s*sắm)/i.test(text);
-    const device=/(điện\s*thoại|laptop|máy\s*tính|tablet|ipad|chromebook|thiết\s*bị\s*điện\s*tử|internet|website|youtube|ứng\s*dụng|\bapp\b)/i.test(text);
-    const study=/(học|ôn|ôn\s*tập|bài\s*tập|làm\s*bài|đọc\s*sách|soạn\s*bài|luyện|làm\s*đề|đề\s*kiểm\s*tra|nghiên\s*cứu|tra\s*cứu|tìm\s*tài\s*liệu|ghi\s*chép|thuyết\s*trình|dự\s*án|lập\s*trình|coding|programming|bài\s*giảng|từ\s*vựng|công\s*thức|sgk|sách\s*giáo\s*khoa|kiểm\s*tra|study|homework|research|practice|toán|ngữ\s*văn|văn\s*học|tiếng\s*anh|anh\s*văn|vật\s*lí|vật\s*lý|hóa\s*học|hoá\s*học|sinh\s*học|lịch\s*sử|địa\s*lí|địa\s*lý|tin\s*học|công\s*nghệ|giáo\s*dục)/i.test(text);
-
-    if(nonStudy)return {auto:false,reason:"Có dấu hiệu giải trí/mạng xã hội; cần giáo viên xác nhận."};
-    if(device&&study)return {auto:true,reason:"Thiết bị điện tử được nêu kèm mục đích học tập rõ ràng."};
-    if(study&&!device)return {auto:true,reason:"Nội dung học tập rõ ràng."};
-    if(device&&!study)return {auto:false,reason:"Có sử dụng thiết bị điện tử nhưng mục đích học tập chưa đủ rõ."};
-    return {auto:false,reason:"Nội dung chưa đủ rõ để tự động duyệt."};
-  }
-
-  function syncDemoNotificationForRegistration(r){
-    state.notifications=state.notifications||[];
-    const existing=state.notifications.find(n=>n.registrationId===r.id&&n.type==="manual_review");
-    if(r.status==="submitted"&&r.approvalSource==="manual"){
-      const student=state.users.find(u=>u.id===r.studentId);
-      const payload={
-        id:existing?.id||`n-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-        registrationId:r.id,studentId:r.studentId,weekId:r.weekId,type:"manual_review",
-        title:"Đăng ký cần giáo viên duyệt",
-        message:`${student?.name||"Học sinh"}: ${r.content} — ${r.autoReviewReason||""}`,
-        isRead:false,createdAt:new Date().toISOString()
-      };
-      if(existing)Object.assign(existing,payload);else state.notifications.unshift(payload);
-    }else if(existing){
-      existing.isRead=true;
-    }
-  }
-
   function markLocalNotificationReadByReg(registrationId){
     (state.notifications||[]).forEach(n=>{
       if(n.registrationId===registrationId)n.isRead=true;
@@ -511,7 +391,7 @@
 
   function week(){ return state.weeks.find(w=>w.id===state.currentWeekId)||state.weeks[0]; }
   function todayDateISO(){
-    if(isProd&&prod?.dateISOInTimeZone)return prod.dateISOInTimeZone(new Date());
+    if(prod?.dateISOInTimeZone)return prod.dateISOInTimeZone(new Date());
     const now=new Date();
     const y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,"0"),d=String(now.getDate()).padStart(2,"0");
     return `${y}-${m}-${d}`;
@@ -547,7 +427,7 @@
   }
 
   function period(n){ return state.periods.find(p=>p.n===Number(n)); }
-  function slotLabel(dow,p){ const pe=period(p); return `${DemoData.DOW[dow]} · Tiết ${p}${pe?` (${pe.start}–${pe.end})`:""}`; }
+  function slotLabel(dow,p){ const pe=period(p); return `${DOW[dow]} · Tiết ${p}${pe?` (${pe.start}–${pe.end})`:""}`; }
   function sortKeyCode(code=""){
     return String(code||"").toUpperCase().match(/[A-Z]+|\d+/g)?.map(part=>/^\d+$/.test(part)?part.padStart(8,"0"):part).join("|")
       || String(code||"").toUpperCase();
@@ -651,57 +531,31 @@
 
   function login(user){
     currentUser=user;
-    if(!isProd) sessionStorage.setItem("soTuHocUser",JSON.stringify(user));
     route="dashboard"; renderShell(); render();
   }
   async function logout(){
-    if(isProd){
-      try{ await prod.signOut(); }catch(err){ console.error(err); }
-    }else sessionStorage.removeItem("soTuHocUser");
+    try{ await prod.signOut(); }catch(err){ console.error(err); }
     currentUser=null;
     $("#wiseOwlPet")?.classList.add("hidden");
     $("#owlSpeech")?.classList.add("hidden");
     appView.classList.add("hidden"); loginView.classList.remove("hidden");
   }
-  function findLogin(id){
-    const q=id.trim().toLowerCase();
-    return state.users.find(u=>u.active&&(u.code.toLowerCase()===q||u.email.toLowerCase()===q));
-  }
   $("#loginForm").addEventListener("submit",async e=>{
     e.preventDefault();
-    if(isProd){
-      try{
-        const code=$("#loginId").value.trim();
-        const password=$("#loginPassword").value;
-        if(!code){ toast("Hãy nhập mã đăng nhập.","warn"); return; }
-        await prod.signInCode(code,password);
-        const loaded=await prod.loadState();
-        if(!loaded.currentUser?.active){ await prod.signOut(); throw new Error("Tài khoản đã bị khóa."); }
-        state=loaded.state; login(loaded.currentUser);
-        toast("Đăng nhập thành công.","success");
-      }catch(err){
-        console.error(err); toast("Đăng nhập không thành công: "+(err.message||err),"warn");
-      }
-      return;
+    try{
+      const code=$("#loginId").value.trim();
+      const password=$("#loginPassword").value;
+      if(!code){ toast("Hãy nhập mã đăng nhập.","warn"); return; }
+      await prod.signInCode(code,password);
+      const loaded=await prod.loadState();
+      if(!loaded.currentUser?.active){ await prod.signOut(); throw new Error("Tài khoản đã bị khóa."); }
+      state=loaded.state; login(loaded.currentUser);
+      toast("Đăng nhập thành công.","success");
+    }catch(err){
+      console.error(err); toast("Đăng nhập không thành công. Hãy kiểm tra mã và mật khẩu.","warn");
     }
-    const user=findLogin($("#loginId").value);
-    if(!user){ toast("Không tìm thấy tài khoản demo.","warn"); return; }
-    if($("#loginPassword").value!=="123456"){ toast("Mật khẩu demo là 123456.","warn"); return; }
-    login(user);
   });
-  if(isProd){
-    document.querySelector(".demo-divider")?.classList.add("hidden");
-    document.querySelector(".demo-buttons")?.classList.add("hidden");
-    document.querySelector(".login-card .tiny")?.classList.add("hidden");
-    $("#loginId").value="";
-    $("#loginPassword").value="";
-    $("#loginId").placeholder="VD: 10A1-01 hoặc GV-10A1";
-    $("#syncBtn")?.classList.remove("hidden");
-  }
-  document.querySelectorAll("[data-demo-role]").forEach(b=>b.addEventListener("click",()=>{
-    const role=b.dataset.demoRole;
-    const u=state.users.find(x=>x.role===role && x.active); if(u)login(u);
-  }));
+  $("#syncBtn")?.classList.remove("hidden");
 
   function renderShell(){
     if(!currentUser){
@@ -731,16 +585,39 @@
 
     refreshWiseOwl();
   }
-  $("#globalWeekSelect").addEventListener("change",e=>{weekSelectionTouched=true;state.currentWeekId=e.target.value;saveState();render();});
+  async function selectWeek(weekId,{announce=false}={}){
+    if(!weekId)return;
+    try{
+      const weekData=await prod.loadWeekData(weekId);
+      state.registrations=(state.registrations||[])
+        .filter(row=>row.weekId!==weekId)
+        .concat(weekData.registrations||[]);
+      state.overrides=(state.overrides||[])
+        .filter(row=>row.weekId!==weekId)
+        .concat(weekData.overrides||[]);
+      state.currentWeekId=weekId;
+      prod.resetSnapshot(state);
+      renderShell();
+      render();
+      if(announce)toast(`Đã chuyển đến Tuần ${week().number}.`,"success");
+    }catch(error){
+      console.error(error);
+      renderShell();
+      toast("Không tải được dữ liệu của tuần đã chọn.","warn");
+    }
+  }
+  $("#globalWeekSelect").addEventListener("change",async e=>{
+    weekSelectionTouched=true;
+    await selectWeek(e.target.value);
+  });
   $("#profileBtn").addEventListener("click",()=>openModal("Tài khoản",`
     <div class="card" style="box-shadow:none">
       <div class="person"><span class="avatar">${initials(currentUser?.name||"")}</span><div><b>${esc(currentUser?.name)}</b><div class="muted tiny">${roleLabel[currentUser?.role]} · ${esc(currentUser?.code)}</div></div></div>
       <p class="muted">Lớp ${esc(state.settings.className)} · Năm học ${esc(state.settings.schoolYear)}</p>
-      <div class="toolbar">${isProd?`<button class="btn btn-ghost" id="changeMyPasswordBtn">🔑 Đổi mật khẩu</button>`:`<button class="btn btn-ghost" id="resetDemoBtn">↻ Khôi phục dữ liệu demo</button>`}<button class="btn btn-danger right" id="logoutBtn">Đăng xuất</button></div>
+      <div class="toolbar"><button class="btn btn-ghost" id="changeMyPasswordBtn">🔑 Đổi mật khẩu</button><button class="btn btn-danger right" id="logoutBtn">Đăng xuất</button></div>
     </div>`));
   document.addEventListener("click",e=>{
     if(e.target?.id==="logoutBtn"){closeModal();logout();}
-    if(e.target?.id==="resetDemoBtn"){if(confirm("Khôi phục toàn bộ dữ liệu demo?")){resetDemo();closeModal();}}
     if(e.target?.id==="changeMyPasswordBtn"){ changeOwnPasswordModal(); }
   });
   $("#notificationBtn")?.addEventListener("click",()=>openTeacherNotifications());
@@ -773,31 +650,40 @@
     if(unread.length){
       unread.forEach(n=>n.isRead=true);
       renderShell();
-      if(isProd){
-        try{await prod.markNotificationsRead(unread.map(n=>n.id));}
-        catch(err){console.error("markNotificationsRead",err);}
-      }else{
-        localStorage.setItem(KEY,JSON.stringify(state));
-      }
+      try{await prod.markNotificationsRead(unread.map(n=>n.id));}
+      catch(err){console.error("markNotificationsRead",err);}
     }
   }
 
   function changeOwnPasswordModal(){
-    openModal("Đổi mật khẩu",`
-      <form id="changePasswordForm">
-        <div class="callout">Mật khẩu nên có ít nhất 8 ký tự và không dùng chung với tài khoản khác.</div>
-        <label>Mật khẩu mới<input id="newOwnPassword" type="password" minlength="8" autocomplete="new-password" required></label>
-        <label>Nhập lại mật khẩu<input id="newOwnPassword2" type="password" minlength="8" autocomplete="new-password" required></label>
-        <button class="btn btn-primary btn-block" type="submit">Đổi mật khẩu</button>
-      </form>`);
+    openModal("Đổi mật khẩu",renderPasswordDialog());
+    const newPasswordInput=$("#newOwnPassword");
+    const updateChecklist=()=>{
+      const rules=passwordChecklistState(newPasswordInput.value);
+      modalBody.querySelector('[data-password-rule="length"]')?.classList.toggle("valid",rules.hasMinLength);
+      modalBody.querySelector('[data-password-rule="mixed"]')?.classList.toggle("valid",rules.hasLetterAndNumber);
+    };
+    newPasswordInput.addEventListener("input",updateChecklist);
+    updateChecklist();
+
     $("#changePasswordForm").onsubmit=async e=>{
       e.preventDefault();
-      const p1=$("#newOwnPassword").value, p2=$("#newOwnPassword2").value;
+      const current=$("#currentOwnPassword").value;
+      const p1=newPasswordInput.value, p2=$("#newOwnPassword2").value;
+      const rules=passwordChecklistState(p1);
+      if(!rules.hasMinLength||!rules.hasLetterAndNumber){toast("Mật khẩu mới chưa đạt đủ hai tiêu chí.","warn");return;}
       if(p1!==p2){toast("Hai mật khẩu chưa khớp.","warn");return;}
+      const submit=e.submitter;
+      if(submit)submit.disabled=true;
       try{
-        await prod.changeOwnPassword(p1);
+        await prod.changeOwnPassword(current,p1);
         closeModal(); toast("Đã đổi mật khẩu.","success");
-      }catch(err){console.error(err);toast("Không đổi được mật khẩu: "+(err.message||err),"warn");}
+      }catch(err){
+        console.error(err);
+        toast(err?.code==="CURRENT_PASSWORD_INVALID"?"Mật khẩu hiện tại không đúng.":"Không đổi được mật khẩu. Vui lòng thử lại.","warn");
+        $("#currentOwnPassword").value="";
+        if(submit)submit.disabled=false;
+      }
     };
   }
 
@@ -888,7 +774,7 @@
     return `<div class="card study-card ${cardClass} ${emergency?"emergency-slot":""}">
       <div class="study-icon">${icon}</div>
       <div class="study-main">
-        <h3>${DemoData.DOW[sl.dow]} · ${fmtDate(dateForDow(w,sl.dow))} · Tiết ${sl.period}</h3>
+        <h3>${DOW[sl.dow]} · ${fmtDate(dateForDow(w,sl.dow))} · Tiết ${sl.period}</h3>
         <p>🕘 ${pe.start} – ${pe.end}</p>
         <p class="slot-deadline ${pastDeadline?"expired":""}">
           ⏰ Hạn: <b>${fmtDeadline(deadlineForSlot(w,sl.dow))}</b>
@@ -950,9 +836,9 @@
     const editable=approvedEdit||needsRevision||ordinaryEdit||newAllowed;
     const locked=!editable;
 
-    openModal(`Đăng ký · ${DemoData.DOW[dow]} · Tiết ${p}`,`
+    openModal(`Đăng ký · ${DOW[dow]} · Tiết ${p}`,`
       <div class="registration-summary">
-        <div><span>📅 Ngày học</span><b>${DemoData.DOW[dow]}, ${fmtDate(dateForDow(w,dow))}</b></div>
+        <div><span>📅 Ngày học</span><b>${DOW[dow]}, ${fmtDate(dateForDow(w,dow))}</b></div>
         <div><span>🕘 Khung giờ</span><b>${pe.start} – ${pe.end}</b></div>
         <div><span>🗓️ Tuần</span><b>Tuần ${w.number} · ${fmtDate(w.startDate)}–${fmtDate(w.endDate)}</b></div>
         <div><span>⏰ Hạn đăng ký</span><b>${fmtDeadline(deadlineForSlot(w,dow))}</b></div>
@@ -974,6 +860,7 @@
           <textarea id="regNote" maxlength="500" ${locked?"disabled":""}
             placeholder="Nêu bài, trang hoặc mục tiêu cụ thể...">${esc(r?.note||"")}</textarea>
         </label>
+        ${renderDeviceChoice({checked:r?.usesElectronicDevice===true,disabled:locked})}
 
         ${locked
           ?`<p class="muted tiny">Đăng ký này hiện chỉ được xem.</p>`
@@ -1018,6 +905,7 @@
       Object.assign(rr,{
         content:contentVal,
         note:$("#regNote").value.trim(),
+        usesElectronicDevice:$("#usesElectronicDevice")?.checked===true,
         status,
         updatedAt:Date.now()
       });
@@ -1030,19 +918,6 @@
         rr.aiCategory="";
         rr.aiConfidence=null;
         rr.aiReason="";
-      }
-
-      if(!isProd&&status==="submitted"){
-        const decision=state.settings.smartApprovalEnabled===false
-          ?{auto:false,reason:"Duyệt nhanh thông minh đang tắt."}
-          :smartReviewDecision(rr.content,rr.note);
-        rr.autoReviewReason=decision.reason;
-        rr.approvalSource=decision.auto?"auto_rule":"manual";
-        if(decision.auto){
-          rr.status="approved";
-          rr.approvedAt=Date.now();
-        }
-        syncDemoNotificationForRegistration(rr);
       }
 
       state.audit.unshift({
@@ -1060,7 +935,7 @@
       try{
         await saveState();
 
-        if(status==="submitted"&&isProd&&rr.aiReviewStatus==="pending"){
+        if(status==="submitted"&&rr.aiReviewStatus==="pending"){
           setOwlThinking(true,"🤖 Cú Thông Thái đang nhờ Groq AI đọc ngữ cảnh đăng ký này...");
           toast(wasApproved?"Đã lưu thay đổi; AI đang duyệt lại...":"AI đang đánh giá trường hợp chưa rõ...","success");
           try{
@@ -1108,9 +983,7 @@
         setOwlThinking(false);
 
         const message=String(err?.message||err||"");
-        if(isProd){
-          try{await refreshFromServer(false);}catch{}
-        }
+        try{await refreshFromServer(false);}catch{}
 
         if(/row-level security|security policy|42501|SECURITY_REGISTRATION/i.test(message)){
           toast("Không thể lưu: quyền, trạng thái tuần hoặc deadline không còn hợp lệ. Dữ liệu đã được tải lại.","warn");
@@ -1141,14 +1014,14 @@
       return;
     }
 
-    openModal(`🚨 Đăng ký bổ sung · ${DemoData.DOW[dow]} · Tiết ${p}`,`
+    openModal(`🚨 Đăng ký bổ sung · ${DOW[dow]} · Tiết ${p}`,`
       <div class="callout emergency-callout">
         <b>Đăng ký bổ sung khẩn cấp</b><br>
         Deadline đã qua nhưng buổi tự học chưa bắt đầu. Đăng ký này <b>không tự duyệt</b>; giáo viên sẽ nhận thông báo và duyệt thủ công.
       </div>
 
       <div class="registration-summary">
-        <div><span>📅 Buổi học</span><b>${DemoData.DOW[dow]}, ${fmtDate(dateForDow(w,dow))}</b></div>
+        <div><span>📅 Buổi học</span><b>${DOW[dow]}, ${fmtDate(dateForDow(w,dow))}</b></div>
         <div><span>🕘 Thời gian</span><b>${pe.start} – ${pe.end}</b></div>
         <div><span>⏰ Deadline đã qua</span><b>${fmtDeadline(deadlineForSlot(w,dow))}</b></div>
       </div>
@@ -1162,6 +1035,7 @@
           <textarea id="emergencyNote" maxlength="500"
             placeholder="Nêu bài, trang hoặc mục tiêu cụ thể..."></textarea>
         </label>
+        ${renderDeviceChoice()}
         <label>Lý do đăng ký bổ sung *
           <textarea id="emergencyReason" maxlength="300" required
             placeholder="VD: Em quên xác nhận đăng ký trước deadline."></textarea>
@@ -1179,6 +1053,7 @@
       const contentVal=$("#emergencyContent").value.trim();
       const noteVal=$("#emergencyNote").value.trim();
       const reasonVal=$("#emergencyReason").value.trim();
+      const usesElectronicDevice=$("#usesElectronicDevice")?.checked===true;
 
       if(!contentVal){
         toast("Bạn cần nhập nội dung tự học.","warn");
@@ -1196,39 +1071,16 @@
       }
 
       try{
-        if(isProd){
-          await prod.emergencyRegister({
-            weekId:w.id,
-            dow,
-            period:p,
-            content:contentVal,
-            note:noteVal,
-            reason:reasonVal
-          });
-          await refreshFromServer(false);
-        }else{
-          const rr={
-            id:"em"+Date.now(),
-            studentId:currentUser.id,
-            weekId:w.id,
-            dow,
-            period:p,
-            content:contentVal,
-            note:noteVal,
-            status:"submitted",
-            teacherComment:"",
-            approvalSource:"manual",
-            autoReviewReason:"Đăng ký bổ sung khẩn cấp sau deadline; giáo viên cần duyệt.",
-            aiReviewStatus:"not_needed",
-            isEmergency:true,
-            emergencyReason:reasonVal,
-            emergencyRequestedAt:new Date().toISOString(),
-            updatedAt:Date.now()
-          };
-          state.registrations.push(rr);
-          syncDemoNotificationForRegistration(rr);
-          await saveState();
-        }
+        await prod.emergencyRegister({
+          weekId:w.id,
+          dow,
+          period:p,
+          content:contentVal,
+          note:noteVal,
+          reason:reasonVal,
+          usesElectronicDevice
+        });
+        await refreshFromServer(false);
 
         closeModal();
         toast("Đã gửi đăng ký bổ sung. Giáo viên sẽ duyệt thủ công.","success");
@@ -1239,7 +1091,7 @@
         render();
       }catch(error){
         console.error(error);
-        toast("Không gửi được đăng ký bổ sung: "+(error.message||error),"warn");
+        toast(safeErrorMessage(error,"Không gửi được đăng ký bổ sung. Vui lòng thử lại."),"warn");
         if(submitBtn){
           submitBtn.disabled=false;
           submitBtn.textContent="🚨 Gửi đăng ký bổ sung";
@@ -1262,17 +1114,53 @@
   }
 
   function classOverview(){
-    const slots=effectiveSchedule(), students=studentUsers(), st=statsForWeek();
-    let html=head("Theo dõi cả lớp",`Tuần ${week().number} · ${students.length} thành viên`);
-    html+=`<div class="grid grid-4" style="margin-bottom:16px">
-      ${kpi("👥",st.students,"Học sinh & cán sự")}${kpi("✅",st.submitted,"Đã đăng ký")}${kpi("⚠️",st.missing,"Chưa đăng ký")}${kpi("📝",st.needs,"Cần chỉnh sửa")}
-    </div>`;
-    if(!slots.length)return html+empty("📅","Chưa cấu hình tiết tự học.");
-    html+=`<div class="card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Họ và tên</th>${slots.map(s=>`<th class="cell-center">${DemoData.DOW[s.dow]}<br><small>Tiết ${s.period}</small></th>`).join("")}<th>Hoàn thành</th></tr></thead><tbody>
-      ${students.map(s=>{let done=0;const cells=slots.map(sl=>{const r=regFor(s.id,sl.dow,sl.period);if(r&&r.status!=="draft")done++;return `<td class="cell-center">${r?statusBadge(r.status):statusBadge("missing")}</td>`}).join("");return `<tr><td><div class="person"><span class="avatar">${initials(s.name)}</span><div><b>${esc(s.name)}</b><div class="tiny muted">${esc(s.code)}</div></div></div></td>${cells}<td><b>${done}/${slots.length}</b></td></tr>`}).join("")}
-      </tbody></table></div></div>`;
-    return html;
+    $("#pageTitle").textContent="Theo dõi cả lớp";
+    $("#pageEyebrow").textContent=`Tuần ${week().number} · Xem theo từng buổi`;
+    const sessions=effectiveSchedule().map(session=>({
+      ...session,
+      label:slotLabel(session.dow,session.period)
+    }));
+    const registrations=(state.registrations||[]).filter(registration=>
+      registration.weekId===state.currentWeekId
+    );
+    return renderClassOverviewV830({
+      week:week(),
+      sessions,
+      users:state.users||[],
+      registrations,
+      role:currentUser.role
+    });
   }
+
+  function bindClassOverview(){
+    content.querySelectorAll("[data-open-session]").forEach(button=>{
+      button.addEventListener("click",()=>{
+        const [dow,periodNumber]=String(button.dataset.openSession||"").split("-").map(Number);
+        const session={dow,period:periodNumber,label:slotLabel(dow,periodNumber)};
+        const registrations=(state.registrations||[]).filter(registration=>
+          registration.weekId===state.currentWeekId
+        );
+
+        const renderDetails=(filter="all")=>{
+          modalBody.innerHTML=renderSessionDetails({
+            session,
+            users:state.users||[],
+            registrations,
+            role:currentUser.role,
+            filter
+          });
+          modalBody.querySelectorAll("[data-session-filter]").forEach(filterButton=>{
+            filterButton.addEventListener("click",()=>renderDetails(filterButton.dataset.sessionFilter));
+          });
+          if(currentUser.role==="teacher")bindTeacherActions(modalBody);
+        };
+
+        openModal("Nội dung · "+session.label,"");
+        renderDetails();
+      });
+    });
+  }
+
   function missingPage(){
     const slots=effectiveSchedule(), rows=[];
     studentUsers().forEach(s=>slots.forEach(sl=>{const r=regFor(s.id,sl.dow,sl.period);if(!r||r.status==="draft")rows.push({s,sl});}));
@@ -1308,11 +1196,11 @@
       ${r.teacherComment?`<p style="color:#7c3aed">💬 ${esc(r.teacherComment)}</p>`:""}</div>
       <div class="approval-actions">${statusBadge(r.status)}<button class="btn btn-success approve-btn" data-id="${r.id}">✓ Duyệt</button><button class="btn btn-warning revise-btn" data-id="${r.id}">↩ Yêu cầu sửa</button><button class="btn btn-ghost comment-btn" data-id="${r.id}">💬 Nhận xét</button><button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button></div></div>`;
   }
-  function bindTeacherActions(){
-    content.querySelectorAll(".approve-btn").forEach(b=>b.onclick=()=>{const r=state.registrations.find(x=>x.id===b.dataset.id);if(r){r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);audit("Phê duyệt đăng ký",r.id);saveState();toast("Đã phê duyệt.","success");render();}});
-    content.querySelectorAll(".revise-btn").forEach(b=>b.onclick=()=>teacherComment(b.dataset.id,true));
-    content.querySelectorAll(".comment-btn").forEach(b=>b.onclick=()=>teacherComment(b.dataset.id,false));
-    content.querySelectorAll(".ai-wrong-btn").forEach(b=>b.onclick=()=>{
+  function bindTeacherActions(root=content){
+    root.querySelectorAll(".approve-btn").forEach(b=>b.onclick=()=>{const r=state.registrations.find(x=>x.id===b.dataset.id);if(r){r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);audit("Phê duyệt đăng ký",r.id);saveState();toast("Đã phê duyệt.","success");render();}});
+    root.querySelectorAll(".revise-btn").forEach(b=>b.onclick=()=>teacherComment(b.dataset.id,true));
+    root.querySelectorAll(".comment-btn").forEach(b=>b.onclick=()=>teacherComment(b.dataset.id,false));
+    root.querySelectorAll(".ai-wrong-btn").forEach(b=>b.onclick=()=>{
       const r=state.registrations.find(x=>x.id===b.dataset.id);
       if(!r)return;
       const s=state.users.find(u=>u.id===r.studentId);
@@ -1338,12 +1226,12 @@
           await saveState();
           closeModal();
           toast("Đã hủy duyệt AI và yêu cầu học sinh chỉnh sửa.","success");
-          if(isProd)await refreshFromServer(false);else render();
+          await refreshFromServer(false);
         }catch{}
       };
     });
 
-    content.querySelectorAll(".delete-reg-btn").forEach(b=>b.onclick=()=>{
+    root.querySelectorAll(".delete-reg-btn").forEach(b=>b.onclick=()=>{
       const r=state.registrations.find(x=>x.id===b.dataset.id);
       if(!r) return;
       const s=state.users.find(u=>u.id===r.studentId);
@@ -1408,8 +1296,8 @@
     let html=head("TKB tự học","Bật/tắt tiết tự học. Mặc định áp dụng cho toàn bộ tuần.",
       `<div class="toolbar"><label style="margin:0"><input id="weekSpecific" type="checkbox" style="width:auto"> Áp dụng riêng tuần ${week().number}</label><button id="saveSchedule" class="btn btn-primary">Lưu TKB</button></div>`);
     html+=`<div class="card"><div class="callout" style="margin-bottom:14px">Mỗi tiết 40 phút · Học Thứ 2–Thứ 6 · Nghỉ trưa 11:30–13:15.</div><div class="schedule-wrap"><div class="schedule-grid">
-      <div></div>${DemoData.DOW.map(x=>`<div class="head">${x}</div>`).join("")}
-      ${state.periods.map(p=>`<div class="period-label"><b>Tiết ${p.n}</b><span>${p.start}–${p.end}</span></div>${[0,1,2,3,4].map(d=>`<button class="slot-btn ${set.has(`${d}-${p.n}`)?"active":""}" data-slot="${d}-${p.n}" aria-label="${DemoData.DOW[d]} tiết ${p.n}">${set.has(`${d}-${p.n}`)?"●":"○"}</button>`).join("")}`).join("")}
+      <div></div>${DOW.map(x=>`<div class="head">${x}</div>`).join("")}
+      ${state.periods.map(p=>`<div class="period-label"><b>Tiết ${p.n}</b><span>${p.start}–${p.end}</span></div>${[0,1,2,3,4].map(d=>`<button class="slot-btn ${set.has(`${d}-${p.n}`)?"active":""}" data-slot="${d}-${p.n}" aria-label="${DOW[d]} tiết ${p.n}">${set.has(`${d}-${p.n}`)?"●":"○"}</button>`).join("")}`).join("")}
       </div></div></div>`;
     return html;
   }
@@ -1505,26 +1393,12 @@
       if(!confirm(`Xếp lại lịch với Tuần 1 bắt đầu ${fmtDate(start)}? Trạng thái mở/khóa sẽ được tính tự động.`))return;
 
       try{
-        if(isProd){
-          await prod.teacherRebaseWeeks(start,"20:00");
-          toast("Đã xếp lại lịch. Tuần hiện tại và tuần kế tiếp sẽ tự mở.","success");
-          await refreshFromServer(false);
-        }else{
-          state.weeks.forEach((w,i)=>{
-            w.startDate=addDaysDateISO(start,i*7);
-            w.endDate=addDaysDateISO(w.startDate,4);
-            if(w.deadlineMode!=="specific")w.deadlineMode="per_session_20";
-            if(w.status!=="holiday")w.status=automaticWeekStatus(w);
-          });
-          const current=actualWeek();
-          if(current)state.currentWeekId=current.id;
-          await saveState();
-          toast("Đã xếp lại lịch tuần demo.","success");
-          renderShell();render();
-        }
+        await prod.teacherRebaseWeeks(start,"20:00");
+        toast("Đã xếp lại lịch. Tuần hiện tại và tuần kế tiếp sẽ tự mở.","success");
+        await refreshFromServer(false);
       }catch(err){
         console.error(err);
-        toast("Không xếp lại được lịch tuần: "+(err.message||err),"warn");
+        toast(safeErrorMessage(err,"Không xếp lại được lịch tuần. Vui lòng thử lại."),"warn");
       }
     });
 
@@ -1574,24 +1448,20 @@
       try{
         await saveState();
         toast("Đã lưu. Trạng thái tuần sẽ tiếp tục tự động theo ngày.","success");
-        if(isProd)await refreshFromServer(false); else render();
+        await refreshFromServer(false);
       }catch{}
     });
 
-    content.querySelectorAll(".view-week").forEach(b=>b.onclick=()=>{
-      state.currentWeekId=b.dataset.id;
-      saveState();
-      renderShell();
-      render();
+    content.querySelectorAll(".view-week").forEach(b=>b.onclick=async()=>{
+      weekSelectionTouched=true;
+      await selectWeek(b.dataset.id,{announce:true});
     });
 
-    $("#goCurrentWeek")?.addEventListener("click",()=>{
+    $("#goCurrentWeek")?.addEventListener("click",async()=>{
       const w=actualWeek();
       if(!w){toast("Chưa có tuần học nào.","warn");return;}
-      state.currentWeekId=w.id;
-      if(!isProd)saveState();
-      toast(`Đã chuyển đến Tuần ${w.number}.`,"success");
-      renderShell();render();
+      weekSelectionTouched=true;
+      await selectWeek(w.id,{announce:true});
     });
   }
 
@@ -1630,8 +1500,8 @@
         <td>
           <div class="toolbar" style="gap:6px;flex-wrap:wrap">
             <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">${uiIcon('edit')}<span>Sửa tài khoản</span></button>
-            ${isProd?`<button class="btn btn-ghost reset-password-btn" data-id="${u.id}">${uiIcon('lock')}<span>Đặt lại mật khẩu</span></button>`:""}
-            ${isProd?`<button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">${uiIcon('delete')}<span>Xóa tài khoản</span></button>`:""}
+            <button class="btn btn-ghost reset-password-btn" data-id="${u.id}">${uiIcon('lock')}<span>Đặt lại mật khẩu</span></button>
+            <button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">${uiIcon('delete')}<span>Xóa tài khoản</span></button>
           </div>
         </td>
       </tr>`).join("") || `<tr><td colspan="5" class="center muted" style="padding:18px">Không có học sinh phù hợp bộ lọc hiện tại.</td></tr>`;
@@ -1742,7 +1612,7 @@
           </label>
           <label>Mật khẩu tạm
             <input id="newStudentPassword" type="text" minlength="8" autocomplete="off" placeholder="Để trống để tự sinh">
-            <small>Ít nhất 8 ký tự nếu tự nhập.</small>
+            <small>Nếu tự nhập: ít nhất 8 ký tự và có cả chữ lẫn số.</small>
           </label>
           <div class="toolbar">
             <button class="btn btn-ghost" type="button" id="cancelAddStudent">Hủy</button>
@@ -1762,12 +1632,12 @@
         if(!/^[A-Z0-9._-]{2,32}$/.test(changes.code)){
           toast("Mã chỉ dùng chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.","warn");return;
         }
-        if(changes.password && changes.password.length<8){
-          toast("Mật khẩu phải có ít nhất 8 ký tự.","warn");return;
+        const passwordRules=passwordChecklistState(changes.password);
+        if(changes.password && (!passwordRules.hasMinLength||!passwordRules.hasLetterAndNumber)){
+          toast("Mật khẩu cần ít nhất 8 ký tự và có cả chữ lẫn số.","warn");return;
         }
 
         try{
-          if(isProd){
             const result=await prod.teacherCreateUser(changes);
             openModal("Đã thêm học sinh",`
               <div class="success-account-card">
@@ -1779,16 +1649,8 @@
                 <button class="btn btn-primary btn-block" id="finishAddStudent">Đã lưu thông tin</button>
               </div>`);
             $("#finishAddStudent").onclick=async()=>{closeModal();await refreshFromServer(false);};
-          }else{
-            if(state.users.some(x=>x.code.toUpperCase()===changes.code)){
-              toast("Mã đăng nhập đã tồn tại.","warn");return;
-            }
-            const id="demo-"+Date.now();
-            state.users.push({id,code:changes.code,name:changes.fullName,email:`${changes.code.toLowerCase()}@demo.local`,role:changes.role,active:true});
-            saveState();closeModal();toast("Đã thêm học sinh demo.","success");render();
-          }
         }catch(err){
-          console.error(err);toast("Không thêm được học sinh: "+(err.message||err),"warn");
+          console.error(err);toast(safeErrorMessage(err,"Không thêm được học sinh. Vui lòng thử lại."),"warn");
         }
       };
     });
@@ -1853,21 +1715,12 @@
           toast("Mã chỉ dùng chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.","warn");return;
         }
         try{
-          if(isProd){
             await prod.teacherUpdateUser(u.id,changes);
             closeModal();
             toast(`Đã cập nhật ${changes.code}.`,"success");
             await refreshFromServer(false);
-          }else{
-            if(state.users.some(x=>x.id!==u.id&&x.code.toUpperCase()===changes.code)){
-              toast("Mã đăng nhập đã tồn tại.","warn");return;
-            }
-            Object.assign(u,{code:changes.code,name:changes.fullName,role:changes.role,active:changes.active});
-            audit("Sửa tài khoản",u.id,changes.code);saveState();closeModal();render();
-            toast("Đã cập nhật tài khoản demo.","success");
-          }
         }catch(err){
-          console.error(err);toast("Không cập nhật được tài khoản: "+(err.message||err),"warn");
+          console.error(err);toast(safeErrorMessage(err,"Không cập nhật được tài khoản. Vui lòng thử lại."),"warn");
         }
       };
     }));
@@ -1902,21 +1755,12 @@
           toast("Mã xác nhận chưa đúng.","warn");return;
         }
         try{
-          if(isProd){
             await prod.teacherDeleteUser(u.id,confirmCode);
             closeModal();
             toast(`Đã xóa tài khoản ${u.code}; lịch sử được giữ lại.`,"success");
             await refreshFromServer(false);
-          }else{
-            const oldCode=u.code;
-            u.active=false;
-            u.code=`__deleted__${Date.now()}__${oldCode}`;
-            audit("Xóa tài khoản demo",u.id,oldCode);
-            await saveState();
-            closeModal();toast("Đã xóa tài khoản demo; lịch sử được giữ.","success");render();
-          }
         }catch(err){
-          console.error(err);toast("Không xóa được tài khoản: "+(err.message||err),"warn");
+          console.error(err);toast(safeErrorMessage(err,"Không xóa được tài khoản. Vui lòng thử lại."),"warn");
         }
       };
     }));
@@ -1927,18 +1771,21 @@
         <div class="callout"><b>${esc(u.name)}</b> · ${esc(u.code)}</div>
         <form id="teacherResetPasswordForm">
           <label>Mật khẩu tạm mới<input id="teacherNewPassword" type="password" minlength="8" autocomplete="new-password" required></label>
+          <small>Ít nhất 8 ký tự và có cả chữ lẫn số.</small>
           <label>Nhập lại mật khẩu<input id="teacherNewPassword2" type="password" minlength="8" autocomplete="new-password" required></label>
           <button class="btn btn-primary btn-block" type="submit">Đặt lại mật khẩu</button>
         </form>`);
       $("#teacherResetPasswordForm").onsubmit=async e=>{
         e.preventDefault();
         const p1=$("#teacherNewPassword").value,p2=$("#teacherNewPassword2").value;
+        const rules=passwordChecklistState(p1);
+        if(!rules.hasMinLength||!rules.hasLetterAndNumber){toast("Mật khẩu chưa đạt đủ hai tiêu chí.","warn");return;}
         if(p1!==p2){toast("Hai mật khẩu chưa khớp.","warn");return;}
         try{
           await prod.teacherResetPassword(u.id,p1);
           closeModal();
           toast(`Đã đặt lại mật khẩu cho ${u.code}.`,"success");
-        }catch(err){console.error(err);toast("Không đặt lại được mật khẩu: "+(err.message||err),"warn");}
+        }catch(err){console.error(err);toast(safeErrorMessage(err,"Không đặt lại được mật khẩu. Vui lòng thử lại."),"warn");}
       };
     }));
   }
@@ -1955,7 +1802,7 @@
   }
   function bindStats(){
     $("#exportCsv")?.addEventListener("click",()=>{
-      const slots=effectiveSchedule(), lines=[["Mã","Họ tên",...slots.map(s=>`${DemoData.DOW[s.dow]}-T${s.period}`)].join(",")];
+      const slots=effectiveSchedule(), lines=[["Mã","Họ tên",...slots.map(s=>`${DOW[s.dow]}-T${s.period}`)].join(",")];
       studentUsers().forEach(s=>lines.push([s.code,`"${s.name}"`,...slots.map(sl=>statusLabel[regFor(s.id,sl.dow,sl.period)?.status]||"Chưa đăng ký")].join(",")));
       const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"}), a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`so-tu-hoc-tuan-${week().number}.csv`;a.click();URL.revokeObjectURL(a.href);
       toast("Đã tạo file CSV.","success");
@@ -2052,7 +1899,7 @@
             : "👤 AI review đang tắt; các trường hợp rule không tự duyệt sẽ chuyển giáo viên.",
           force:true
         });
-        if(isProd)await refreshFromServer(false);else{renderShell();render();}
+        await refreshFromServer(false);
       }catch{}
     });
   }
@@ -2086,52 +1933,43 @@
       else html=teacherDashboard();
     }
     content.innerHTML=html;
-    bindRegistrationButtons(); bindTeacherActions(); bindSchedule(); bindWeeks(); bindStudents(); bindStats(); bindSettings();
+    bindRegistrationButtons(); bindTeacherActions(); bindClassOverview(); bindSchedule(); bindWeeks(); bindStudents(); bindStats(); bindSettings();
     content.querySelector("[data-route-settings]")?.addEventListener("click",()=>{route="settings";renderShell();render();});
     $("#approveAll")?.addEventListener("click",()=>{state.registrations.filter(r=>r.weekId===state.currentWeekId&&(r.status==="submitted"||r.status==="needs_revision")).forEach(r=>{r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);});audit("Duyệt hàng loạt","registrations");saveState();toast("Đã duyệt tất cả đăng ký đang chờ.","success");render();});
     renderShell();
   }
 
   async function refreshFromServer(showToast=true){
-    if(!isProd) return;
     try{
       const loaded=await prod.loadState();
       if(!loaded.currentUser){ await logout(); return; }
       currentUser=loaded.currentUser; state=loaded.state; route=route||"dashboard";
       if(!weekSelectionTouched&&["dashboard","register"].includes(route)){
-        alignStudentWeekToNextAction();
+        const aligned=alignStudentWeekToNextAction();
+        if(aligned)await selectWeek(state.currentWeekId);
       }
       renderShell(); render();
       if(showToast) toast("Đã đồng bộ dữ liệu mới nhất.","success");
-    }catch(err){ console.error(err); if(showToast) toast("Không tải được dữ liệu mới: "+(err.message||err),"warn"); }
+    }catch(err){ console.error(err); if(showToast) toast(safeErrorMessage(err,"Không tải được dữ liệu mới. Vui lòng thử lại."),"warn"); }
   }
   $("#syncBtn")?.addEventListener("click",()=>refreshFromServer(true));
 
-  if(isProd){
-    try{
-      await prod.init();
-      const loaded=await prod.loadState();
-      if(loaded.currentUser){
-        currentUser=loaded.currentUser;
-        state=loaded.state;
-        alignStudentWeekToNextAction(true);
-        renderShell();
-        render();
-        const seconds=Math.max(30,Number(window.APP_CONFIG?.refreshSeconds||60));
-        setInterval(()=>{ if(currentUser && !document.hidden) refreshFromServer(false); },seconds*1000);
-      }else renderShell();
-    }catch(err){
-      console.error(err); renderShell();
-      toast("Supabase chưa sẵn sàng: "+(err.message||err),"warn");
-    }
-    return;
+  try{
+    if(!prod?.enabled?.()) throw new Error("Thiếu URL hoặc publishable key của Supabase.");
+    await prod.init();
+    const loaded=await prod.loadState();
+    if(loaded.currentUser){
+      currentUser=loaded.currentUser;
+      state=loaded.state;
+      const aligned=alignStudentWeekToNextAction(true);
+      if(aligned)await selectWeek(state.currentWeekId);
+      renderShell();
+      render();
+      const seconds=Math.max(30,Number(window.APP_CONFIG?.refreshSeconds||60));
+      setInterval(()=>{ if(currentUser && !document.hidden) refreshFromServer(false); },seconds*1000);
+    }else renderShell();
+  }catch(err){
+    console.error(err); renderShell();
+    toast("Supabase chưa sẵn sàng. Hãy kiểm tra cấu hình triển khai.","warn");
   }
-
-  // Demo cũng chọn tuần theo ngày khi vừa mở trang, thay vì cố định w1.
-  const demoWeek=actualWeek(); if(demoWeek) state.currentWeekId=demoWeek.id;
-  if(currentUser)alignStudentWeekToNextAction(true);
-
-  if(currentUser){
-    const live=state.users.find(u=>u.id===currentUser.id&&u.active); if(live){currentUser=live;sessionStorage.setItem("soTuHocUser",JSON.stringify(live));renderShell();render();}else logout();
-  }else renderShell();
 })();

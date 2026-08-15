@@ -1,15 +1,6 @@
 /*
-  SỔ TỰ HỌC - CẤU HÌNH CHẠY
-
-  mode: "demo"
-    - Chạy ngay, không cần Supabase.
-    - Dữ liệu lưu trong localStorage của từng trình duyệt.
-
-  mode: "supabase"
-    - Dùng thật cho cả lớp: mọi thiết bị dùng chung database.
-    - Điền projectUrl và publishableKey bên dưới.
-    - Chỉ dùng Publishable key/legacy anon key ở frontend.
-      TUYỆT ĐỐI KHÔNG đưa Secret key/service_role key vào file này.
+  Cấu hình triển khai thật. Chỉ điền Project URL và publishable/anon key.
+  Không đưa secret key hoặc service_role key vào mã nguồn giao diện.
 */
 window.APP_CONFIG = {
   mode: "supabase",

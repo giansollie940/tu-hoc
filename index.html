@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#2563eb">
+  <meta name="theme-color" content="#315C9B">
   <meta name="description" content="Sổ Tự Học - đăng ký, theo dõi và phê duyệt nội dung tự học theo tuần.">
 
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://*.supabase.in https://*.supabase.net; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; upgrade-insecure-requests; block-all-mixed-content">
@@ -11,7 +11,7 @@
   <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
 
   <title>Sổ Tự Học</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=8.3.0">
 </head>
 <body>
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
@@ -30,23 +30,16 @@
         <div class="mobile-brand brand"><span class="brand-mark">📚</span><span>SỔ TỰ HỌC</span></div>
         <div class="cap-icon">🎓</div>
         <h2>Đăng nhập</h2>
-        <p class="muted">Bản demo chạy trực tiếp trên trình duyệt.</p>
+        <p class="muted">Dùng mã tài khoản do giáo viên cung cấp.</p>
         <form id="loginForm">
           <label>Mã đăng nhập
-            <input id="loginId" autocomplete="username" placeholder="VD: 10A1-01 hoặc GV-10A1" value="HS01">
+            <input id="loginId" autocomplete="username" placeholder="VD: 10A1-01 hoặc GV-10A1">
           </label>
           <label>Mật khẩu
-            <input id="loginPassword" type="password" autocomplete="current-password" value="123456">
+            <input id="loginPassword" type="password" autocomplete="current-password">
           </label>
           <button class="btn btn-primary btn-block" type="submit">Đăng nhập</button>
         </form>
-        <div class="demo-divider"><span>Đăng nhập nhanh bản demo</span></div>
-        <div class="demo-buttons">
-          <button class="btn btn-soft" data-demo-role="student">👩‍🎓 Học sinh</button>
-          <button class="btn btn-soft" data-demo-role="monitor">🧑‍💼 Cán sự</button>
-          <button class="btn btn-soft" data-demo-role="teacher">👩‍🏫 Giáo viên</button>
-        </div>
-        <p class="tiny muted center">Dữ liệu demo được lưu bằng localStorage trên máy này.</p>
       </div>
     </div>
   </section>
@@ -104,13 +97,14 @@
     
     <button id="owlBody" class="owl-body owl-image-button" type="button"
       aria-label="Cú Thông Thái — bấm để nhận lời nhắc">
-      <img
-        id="owlMascotImage"
-        class="owl-pet-image"
-        src="assets/images/wise-owl-pet.svg"
-        alt=""
-        aria-hidden="true"
-        draggable="false">
+      <span class="owl-layer-stage" aria-hidden="true">
+        <img class="owl-layer owl-layer-body" src="assets/images/owl/body.webp" alt="" draggable="false">
+        <img class="owl-layer owl-layer-left-wing" src="assets/images/owl/left-wing.webp" alt="" draggable="false">
+        <img class="owl-layer owl-layer-right-wing" src="assets/images/owl/right-wing.webp" alt="" draggable="false">
+        <img class="owl-layer owl-layer-head" src="assets/images/owl/head.webp" alt="" draggable="false">
+        <img class="owl-layer owl-layer-left-pupil" src="assets/images/owl/left-pupil.webp" alt="" draggable="false">
+        <img class="owl-layer owl-layer-right-pupil" src="assets/images/owl/right-pupil.webp" alt="" draggable="false">
+      </span>
       <span id="owlAlertDot" class="owl-alert-dot hidden"></span>
     </button>
 
@@ -125,9 +119,8 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.95.0/dist/umd/supabase.js"></script>
   <script src="supabase-service.js"></script>
-  <script src="data.js"></script>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

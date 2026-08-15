@@ -14,6 +14,14 @@
   const deepClone = v => JSON.parse(JSON.stringify(v));
   const stable = v => JSON.stringify(v);
   const isUuid = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v || "");
+  const REGISTRATION_COLUMNS=[
+    "id","student_id","week_id","weekday","period_number","content","note","status",
+    "teacher_comment","approval_source","auto_review_reason","ai_review_status","ai_decision",
+    "ai_category","ai_confidence","ai_reason","ai_model","ai_reviewed_at","ai_review_count",
+    "is_emergency","emergency_reason","emergency_requested_at","uses_electronic_device",
+    "updated_at","approved_at"
+  ].join(",");
+  const WEEK_OVERRIDE_COLUMNS="id,week_id,weekday,period_number,is_study_period,reason";
 
   const sessionAuthStorage={
     getItem:key=>window.sessionStorage.getItem(key),
@@ -80,10 +88,26 @@
     return data.user;
   }
 
-  async function changeOwnPassword(newPassword){
-    if(String(newPassword||"").length < 8) throw new Error("Mật khẩu mới phải có ít nhất 8 ký tự.");
+  async function changeOwnPassword(currentPassword,newPassword){
+    const next=String(newPassword||"");
+    if(next.length < 8 || !/\p{L}/u.test(next) || !/\d/u.test(next)){
+      throw new Error("Mật khẩu mới cần ít nhất 8 ký tự và có cả chữ lẫn số.");
+    }
     const sb=requireClient();
-    const { data,error }=await sb.auth.updateUser({password:newPassword});
+    const {data:currentData,error:currentError}=await sb.auth.getUser();
+    if(currentError) throw currentError;
+    const email=currentData?.user?.email;
+    if(!email) throw new Error("Không xác định được tài khoản hiện tại.");
+    const {error:reauthError}=await sb.auth.signInWithPassword({
+      email,
+      password:String(currentPassword||"")
+    });
+    if(reauthError){
+      const error=new Error("Mật khẩu hiện tại không đúng.");
+      error.code="CURRENT_PASSWORD_INVALID";
+      throw error;
+    }
+    const { data,error }=await sb.auth.updateUser({password:next});
     if(error) throw error;
     return data.user;
   }
@@ -142,22 +166,6 @@
       console.warn("Không đọc được nội dung lỗi Edge Function",parseError);
     }
     return message;
-  }
-
-  async function getWiseOwlQuote(seenIds=[]){
-    const sb=requireClient();
-    const {data,error}=await sb.functions.invoke("quote-feed",{
-      body:{seenIds:Array.isArray(seenIds)?seenIds.slice(-500):[]}
-    });
-
-    if(error){
-      const detail=await edgeFunctionErrorMessage(error,"Không tải được danh ngôn trực tuyến");
-      throw new Error(detail);
-    }
-    if(!data?.ok||!data?.quote?.text){
-      throw new Error(data?.error||"Nguồn danh ngôn chưa trả về câu phù hợp.");
-    }
-    return data;
   }
 
   async function teacherListUsers(){
@@ -304,7 +312,7 @@
     return {ok:true,currentWeekNumber:chosen?.week_number||1,createdWeeks:newRows.length};
   }
 
-  async function emergencyRegister({weekId,dow,period,content,note,reason}){
+  async function emergencyRegister({weekId,dow,period,content,note,reason,usesElectronicDevice=false}){
     const sb=requireClient();
     const {data,error}=await sb.functions.invoke("emergency-register",{
       body:{
@@ -313,7 +321,8 @@
         periodNumber:Number(period),
         content:String(content||"").trim(),
         note:String(note||"").trim(),
-        reason:String(reason||"").trim()
+        reason:String(reason||"").trim(),
+        usesElectronicDevice:usesElectronicDevice===true
       }
     });
     if(error){
@@ -393,6 +402,7 @@
       isEmergency:r.is_emergency===true,
       emergencyReason:r.emergency_reason || "",
       emergencyRequestedAt:r.emergency_requested_at || null,
+      usesElectronicDevice:r.uses_electronic_device===true,
       updatedAt:r.updated_at ? new Date(r.updated_at).getTime() : Date.now(),
       approvedAt:r.approved_at ? new Date(r.approved_at).getTime() : null
     };
@@ -402,6 +412,7 @@
       student_id:r.studentId, week_id:r.weekId, weekday:Number(r.dow)+1,
       period_number:Number(r.period), content:r.content, note:r.note || null,
       status:r.status, teacher_comment:r.teacherComment || null,
+      uses_electronic_device:r.usesElectronicDevice===true,
       updated_at:new Date().toISOString()
     };
     if (r.status === "submitted") out.submitted_at = new Date().toISOString();
@@ -444,6 +455,29 @@
     return weeks[weeks.length-1];
   }
 
+  async function loadWeekData(weekId){
+    if(!weekId) return {overrides:[],registrations:[]};
+    const sb=requireClient();
+    const [overridesRes,registrationsRes]=await Promise.all([
+      sb.from("week_schedule_overrides")
+        .select(WEEK_OVERRIDE_COLUMNS)
+        .eq("week_id",weekId),
+      sb.from("registrations")
+        .select(REGISTRATION_COLUMNS)
+        .eq("week_id",weekId)
+        .eq("is_deleted",false)
+    ]);
+    if(overridesRes.error) throw overridesRes.error;
+    if(registrationsRes.error) throw registrationsRes.error;
+    return {
+      overrides:(overridesRes.data||[]).map(o=>({
+        id:o.id,weekId:o.week_id,dow:Number(o.weekday)-1,period:o.period_number,
+        active:o.is_study_period,reason:o.reason||""
+      })),
+      registrations:(registrationsRes.data||[]).map(mapReg)
+    };
+  }
+
   async function loadState(){
     const sb = requireClient();
     const user = await authUser();
@@ -465,30 +499,34 @@
       }
     }
 
-    const membersQuery=sb.from("class_members").select("*").order("full_name");
+    const membersQuery=sb.from("class_members")
+      .select("id,student_code,full_name,role,class_name,active")
+      .order("full_name");
 
     const [
-      profilesRes, yearsRes, periodsRes, scheduleRes, overridesRes, regsRes, settingsRes, notificationsRes
+      profilesRes, yearsRes, periodsRes, scheduleRes, settingsRes, notificationsRes
     ] = await Promise.all([
       membersQuery,
-      sb.from("school_years").select("*").order("start_date",{ascending:false}),
-      sb.from("periods").select("*").order("period_number"),
-      sb.from("study_schedule").select("*").eq("is_study_period",true),
-      sb.from("week_schedule_overrides").select("*"),
-      sb.from("registrations").select("*").eq("is_deleted",false),
-      sb.from("app_settings").select("*"),
+      sb.from("school_years").select("id,name,start_date,end_date,is_active").order("start_date",{ascending:false}),
+      sb.from("periods").select("period_number,start_time,end_time").order("period_number"),
+      sb.from("study_schedule").select("weekday,period_number").eq("is_study_period",true),
+      sb.from("app_settings").select("key,value"),
       profile.role==="teacher"
-        ? sb.from("teacher_notifications").select("*").order("created_at",{ascending:false}).limit(100)
+        ? sb.from("teacher_notifications")
+          .select("id,registration_id,student_id,week_id,notification_type,title,message,is_read,created_at")
+          .order("created_at",{ascending:false}).limit(100)
         : Promise.resolve({data:[],error:null})
     ]);
-    for (const r of [profilesRes,yearsRes,periodsRes,scheduleRes,overridesRes,regsRes,settingsRes,notificationsRes]){
+    for (const r of [profilesRes,yearsRes,periodsRes,scheduleRes,settingsRes,notificationsRes]){
       if (r.error) throw r.error;
     }
 
     const activeYear = yearsRes.data.find(y=>y.is_active) || yearsRes.data[0];
     let weeks = [];
     if (activeYear){
-      const wr = await sb.from("weeks").select("*").eq("school_year_id",activeYear.id).order("week_number");
+      const wr = await sb.from("weeks")
+        .select("id,week_number,start_date,end_date,status,deadline_mode,registration_deadline,note")
+        .eq("school_year_id",activeYear.id).order("week_number");
       if (wr.error) throw wr.error;
       weeks = wr.data.map(mapWeek);
     }
@@ -496,6 +534,20 @@
     const settingsObj = {};
     (settingsRes.data || []).forEach(x=>settingsObj[x.key]=x.value);
     const currentWeek = chooseCurrentWeek(weeks);
+    const weekData=await loadWeekData(currentWeek?.id);
+    let registrations=weekData.registrations;
+
+    // Lịch sử cá nhân vẫn đầy đủ; dữ liệu cả lớp chỉ tải theo tuần đang xem.
+    if(["student","monitor"].includes(profile.role)){
+      const ownRes=await sb.from("registrations")
+        .select(REGISTRATION_COLUMNS)
+        .eq("student_id",user.id)
+        .eq("is_deleted",false);
+      if(ownRes.error) throw ownRes.error;
+      const byId=new Map(registrations.map(row=>[row.id,row]));
+      (ownRes.data||[]).map(mapReg).forEach(row=>byId.set(row.id,row));
+      registrations=[...byId.values()];
+    }
 
     const state = {
       version:2,
@@ -546,10 +598,8 @@
         n:p.period_number,start:String(p.start_time).slice(0,5),end:String(p.end_time).slice(0,5)
       })),
       schedule:(scheduleRes.data || []).map(s=>({dow:Number(s.weekday)-1,period:s.period_number})),
-      overrides:(overridesRes.data || []).map(o=>({
-        id:o.id,weekId:o.week_id,dow:Number(o.weekday)-1,period:o.period_number,active:o.is_study_period,reason:o.reason||""
-      })),
-      registrations:(regsRes.data || []).map(mapReg),
+      overrides:weekData.overrides,
+      registrations,
       notifications:(notificationsRes.data || []).map(n=>({
         id:n.id,
         registrationId:n.registration_id,
@@ -730,8 +780,8 @@
   function resetSnapshot(state){ snapshot=deepClone(state); }
 
   window.SupabaseService={
-    enabled,init,signInCode,signOut,authUser,loadState,syncState,resetSnapshot,
-    codeToEmail,changeOwnPassword,getWiseOwlQuote,teacherResetPassword,teacherListUsers,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
+    enabled,init,signInCode,signOut,authUser,loadState,loadWeekData,syncState,resetSnapshot,
+    codeToEmail,changeOwnPassword,teacherResetPassword,teacherListUsers,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
     teacherRebaseWeeks,emergencyRegister,requestAiReview,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
     get client(){return client;}
   };
