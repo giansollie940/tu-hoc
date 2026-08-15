@@ -357,10 +357,18 @@
     if (error) throw error;
   }
 
+  function isMissingSessionError(error){
+    return error?.name === "AuthSessionMissingError"
+      || /auth session missing/i.test(String(error?.message || ""));
+  }
+
   async function authUser(){
     const sb = requireClient();
     const { data, error } = await sb.auth.getUser();
-    if (error) throw error;
+    if (error){
+      if (isMissingSessionError(error)) return null;
+      throw error;
+    }
     return data.user || null;
   }
 
