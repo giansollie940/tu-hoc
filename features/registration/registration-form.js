@@ -1,12 +1,7 @@
-import { normalizeDeviceChoice } from "./registration-domain.js";
+export function renderDeviceChoice({checked=false,disabled=false}={}){
+  const checkedAttribute=checked?" checked":"";
+  const disabledAttribute=disabled?" disabled":"";
 
-export function deviceChoiceFromValue(value) {
-  return normalizeDeviceChoice(value);
-}
-
-export function renderDeviceChoice({ checked = false, disabled = false } = {}) {
-  const checkedAttribute = checked ? " checked" : "";
-  const disabledAttribute = disabled ? " disabled" : "";
   return [
     '<label class="device-choice" for="usesElectronicDevice">',
     '  <span class="device-choice-copy">',
