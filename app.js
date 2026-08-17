@@ -764,7 +764,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
   function weekBanner(){
     const w=week();
-    const image=currentUser?.role==="teacher"?"assets/images/teacher-dashboard-illustration.svg":"assets/images/student-cards.svg";
+    const image=currentUser?.role==="teacher"?"assets/images/teacher-dashboard-illustration.png":"assets/images/student-cards.png";
     return `<div class="banner"><div>
       <div class="eyebrow-pill">📅 ${currentUser?.role==="teacher"?"Tuần đang xem":"Bạn đang đăng ký cho"}</div>
       <h2>Tuần ${w.number} · ${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</h2>
@@ -2006,7 +2006,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     });
   }
 
-  function empty(icon,text){return `<div class="empty"><img class="empty-image" src="assets/images/empty-state.svg" alt=""><div class="tiny muted">${icon}</div><b>${text}</b></div>`;}
+  function empty(icon,text){return `<div class="empty"><img class="empty-image" src="assets/images/empty-state.png" alt=""><div class="tiny muted">${icon}</div><b>${text}</b></div>`;}
 
   function render(){
     if(!currentUser){renderShell();return;}
