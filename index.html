@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#315C9B">
   <meta name="description" content="Sổ Tự Học - đăng ký, theo dõi và phê duyệt nội dung tự học theo tuần.">
 
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://*.supabase.in https://*.supabase.net; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; upgrade-insecure-requests; block-all-mixed-content">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; script-src-attr 'none'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co https://*.supabase.in https://*.supabase.net; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; upgrade-insecure-requests; block-all-mixed-content">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
 
   <title>Sổ Tự Học</title>
-  <link rel="stylesheet" href="styles.css?v=8.3.0">
+  <link rel="stylesheet" href="styles.css?v=8.3.1-clean1">
 </head>
 <body>
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
@@ -31,10 +31,10 @@
       <stop stop-color="#F8B4D9"/><stop offset="1" stop-color="#A78BFA"/>
     </linearGradient>
   </defs>
-</></span><span>SỔ TỰ HỌC</span></div>
+</svg></span><span>SỔ TỰ HỌC</span></div>
       <h1>Đăng ký · Theo dõi · Phê duyệt<br><span>giờ tự học mỗi tuần</span></h1>
       <p>Một không gian học tập gọn gàng cho học sinh, cán sự lớp và giáo viên.</p>
-      <img class="hero-illustration" src="assets/images/login-hero.png" alt="Minh họa học sinh tự học với sách vở">
+      <img class="hero-illustration" src="assets/images/login-hero.svg" alt="Minh họa học sinh tự học với sách vở">
       <div class="art-note"><b>Tự học hôm nay</b><span>Thành công ngày mai!</span></div>
     </div>
 
@@ -68,11 +68,11 @@
         <p class="muted">Dùng mã tài khoản do giáo viên cung cấp.</p>
         <form id="loginForm">
           <label>Mã đăng nhập
-            <input id="loginId" autocomplete="username" placeholder="VD: 10A1-01 hoặc GV-10A1">
+            <input id="loginId" autocomplete="username" autocapitalize="characters" spellcheck="false" maxlength="32" required placeholder="VD: 10A1-01 hoặc GV-10A1">
           </label>
           <label>Mật khẩu
             <span class="password-field">
-              <input id="loginPassword" type="password" autocomplete="current-password">
+              <input id="loginPassword" type="password" autocomplete="current-password" maxlength="256" required>
               <button class="password-toggle" type="button" data-password-target="loginPassword"
                 aria-label="Hiện mật khẩu" aria-pressed="false">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -177,7 +177,7 @@
 
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.95.0/dist/umd/supabase.js"></script>
-  <script src="supabase-service.js"></script>
-  <script type="module" src="app.js"></script>
+  <script src="supabase-service.js?v=8.3.1-clean1"></script>
+  <script type="module" src="app.js?v=8.3.1-clean1"></script>
 </body>
 </html>
