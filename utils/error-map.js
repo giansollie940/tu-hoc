@@ -11,13 +11,23 @@ export function friendlyAppError(error) {
   const status = Number(error?.status ?? 0);
   const message = String(error?.message ?? "").toLowerCase();
 
-  if (code === "42501" || message.includes("row-level security")) {
+  if (
+    code === "42501"
+    || code === "SECURITY_REGISTRATION"
+    || message.includes("row-level security")
+    || message.includes("security_registration")
+  ) {
     return { code: "PERMISSION_DENIED", message: MESSAGES.PERMISSION_DENIED };
   }
   if (status === 401 || message.includes("jwt expired") || message.includes("session expired")) {
     return { code: "SESSION_EXPIRED", message: MESSAGES.SESSION_EXPIRED };
   }
-  if (code === "23505" || message.includes("duplicate key")) {
+  if (
+    code === "23505"
+    || code === "DUPLICATE_REGISTRATION"
+    || message.includes("duplicate key")
+    || message.includes("duplicate_registration")
+  ) {
     return { code: "DUPLICATE", message: MESSAGES.DUPLICATE };
   }
   if (message.includes("failed to fetch") || message.includes("network")) {
