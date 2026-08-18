@@ -75,9 +75,20 @@
 
   function codeToEmail(code){
     const clean=normalizeLoginCode(code);
-    if(!clean) throw new Error("Mã đăng nhập không hợp lệ.");
+    if(!/^[a-z0-9._-]{2,32}$/.test(clean)){
+      throw new Error("Mã đăng nhập không hợp lệ.");
+    }
     const domain=String(cfg.loginDomain||"users.example.com").trim().toLowerCase();
     return `${clean}@${domain}`;
+  }
+
+  function assertPasswordPolicy(password,{allowEmpty=false}={}){
+    const value=String(password||"");
+    if(allowEmpty&&!value)return value;
+    if(value.length<8||!/\p{L}/u.test(value)||!/\d/u.test(value)){
+      throw new Error("Mật khẩu cần ít nhất 8 ký tự và có cả chữ lẫn số.");
+    }
+    return value;
   }
 
   async function signInCode(code, password){
@@ -89,10 +100,7 @@
   }
 
   async function changeOwnPassword(currentPassword,newPassword){
-    const next=String(newPassword||"");
-    if(next.length < 8 || !/\p{L}/u.test(next) || !/\d/u.test(next)){
-      throw new Error("Mật khẩu mới cần ít nhất 8 ký tự và có cả chữ lẫn số.");
-    }
+    const next=assertPasswordPolicy(newPassword);
     const sb=requireClient();
     const {data:currentData,error:currentError}=await sb.auth.getUser();
     if(currentError) throw currentError;
@@ -112,35 +120,14 @@
     return data.user;
   }
 
-  async function teacherResetPassword(userId,newPassword){
-    if(String(newPassword||"").length < 8) throw new Error("Mật khẩu mới phải có ít nhất 8 ký tự.");
-    const sb=requireClient();
-    const { data,error }=await sb.functions.invoke("admin-reset-password",{
-      body:{userId,newPassword}
-    });
-    if(error) throw error;
-    if(!data?.ok) throw new Error(data?.error||"Không đặt lại được mật khẩu.");
-    return data;
-  }
-
-  async function teacherDeleteUser(userId,confirmCode){
-    const sb=requireClient();
-    const {data,error}=await sb.functions.invoke("admin-delete-user",{
-      body:{userId,confirmCode:String(confirmCode||"").trim().toUpperCase()}
-    });
-    if(error) throw error;
-    if(!data?.ok) throw new Error(data?.error||"Không xóa được tài khoản.");
-    return data;
-  }
-
   async function edgeFunctionErrorMessage(error,fallback="Edge Function bị lỗi"){
-    if(!error) return fallback;
+    if(!error)return fallback;
     let message=String(error?.message||fallback);
 
     try{
       const ctx=error?.context;
       if(ctx){
-        const response=typeof ctx.clone==="function" ? ctx.clone() : ctx;
+        const response=typeof ctx.clone==="function"?ctx.clone():ctx;
         let body=null;
 
         try{
@@ -148,79 +135,100 @@
         }catch(_){
           try{
             const text=await response.text();
-            if(text) body={message:text};
+            if(text)body={message:text};
           }catch(__){}
         }
 
         const detail=body?.error||body?.message||body?.msg||body?.code;
-        if(detail) message=String(detail);
+        if(detail)message=String(detail);
 
         const status=response?.status;
         const sbCode=response?.headers?.get?.("sb-error-code");
         const parts=[];
-        if(status) parts.push(`HTTP ${status}`);
-        if(sbCode) parts.push(sbCode);
-        if(parts.length) message+=` [${parts.join(" · ")}]`;
+        if(status)parts.push(`HTTP ${status}`);
+        if(sbCode)parts.push(sbCode);
+        if(parts.length)message+=` [${parts.join(" · ")}]`;
       }
     }catch(parseError){
       console.warn("Không đọc được nội dung lỗi Edge Function",parseError);
     }
+
     return message;
   }
 
-  async function teacherListUsers(){
+  async function invokeEdgeFunction(name,body,fallback){
     const sb=requireClient();
-    const {data,error}=await sb.functions.invoke("admin-list-users",{body:{}});
+    const {data,error}=await sb.functions.invoke(name,{body:body||{}});
 
     if(error){
-      const detail=await edgeFunctionErrorMessage(error,"Không tải được mã đăng nhập học sinh");
-      throw new Error(detail);
+      const wrapped=new Error(await edgeFunctionErrorMessage(error,fallback));
+      wrapped.code=String(error?.code||"EDGE_FUNCTION_ERROR");
+      wrapped.status=Number(error?.context?.status||0)||undefined;
+      wrapped.cause=error;
+      throw wrapped;
     }
 
     if(!data?.ok){
-      throw new Error(data?.error||data?.message||"Không tải được danh sách học sinh.");
+      const wrapped=new Error(data?.error||data?.message||fallback);
+      wrapped.code=String(data?.code||"EDGE_FUNCTION_ERROR");
+      throw wrapped;
     }
 
     return data;
+  }
+
+  async function teacherResetPassword(userId,newPassword){
+    const password=assertPasswordPolicy(newPassword);
+    return invokeEdgeFunction(
+      "admin-reset-password",
+      {userId,newPassword:password},
+      "Không đặt lại được mật khẩu."
+    );
+  }
+
+  async function teacherDeleteUser(userId,confirmCode){
+    return invokeEdgeFunction(
+      "admin-delete-user",
+      {userId,confirmCode:String(confirmCode||"").trim().toUpperCase()},
+      "Không xóa được tài khoản."
+    );
+  }
+
+  async function teacherListUsers(){
+    return invokeEdgeFunction(
+      "admin-list-users",
+      {},
+      "Không tải được danh sách học sinh."
+    );
   }
 
   async function teacherUpdateUser(userId,changes){
-    const sb=requireClient();
-    const payload={
-      userId,
-      changeCode:changes?.changeCode===true,
-      code:String(changes?.code||"").trim(),
-      fullName:String(changes?.fullName||"").trim(),
-      role:String(changes?.role||"student"),
-      active:changes?.active!==false
-    };
-
-    const {data,error}=await sb.functions.invoke("admin-update-user",{body:payload});
-
-    if(error){
-      const detail=await edgeFunctionErrorMessage(error,"Không gọi được admin-update-user");
-      throw new Error(detail);
-    }
-
-    if(!data?.ok){
-      throw new Error(data?.error||data?.message||"Không cập nhật được tài khoản.");
-    }
-    return data;
+    return invokeEdgeFunction(
+      "admin-update-user",
+      {
+        userId,
+        changeCode:changes?.changeCode===true,
+        code:String(changes?.code||"").trim(),
+        fullName:String(changes?.fullName||"").trim(),
+        role:String(changes?.role||"student"),
+        active:changes?.active!==false
+      },
+      "Không cập nhật được tài khoản."
+    );
   }
 
   async function teacherCreateUser(changes){
-    const sb=requireClient();
-    const payload={
-      code:String(changes?.code||"").trim().toUpperCase(),
-      fullName:String(changes?.fullName||"").trim(),
-      role:String(changes?.role||"student"),
-      className:String(changes?.className||"").trim(),
-      password:String(changes?.password||"")
-    };
-    const {data,error}=await sb.functions.invoke("admin-create-user",{body:payload});
-    if(error) throw error;
-    if(!data?.ok) throw new Error(data?.error||"Không tạo được tài khoản.");
-    return data;
+    return invokeEdgeFunction(
+      "admin-create-user",
+      {
+        code:String(changes?.code||"").trim().toUpperCase(),
+        fullName:String(changes?.fullName||"").trim(),
+        role:String(changes?.role||"student"),
+        className:String(changes?.className||"").trim(),
+        password:assertPasswordPolicy(changes?.password,{allowEmpty:true})
+      },
+      "Không tạo được tài khoản."
+    );
   }
 
   async function teacherRebaseWeeks(firstWeekStart, deadlineTime="20:00"){
@@ -313,9 +321,9 @@
   }
 
   async function emergencyRegister({weekId,dow,period,content,note,reason,usesElectronicDevice=false}){
-    const sb=requireClient();
-    const {data,error}=await sb.functions.invoke("emergency-register",{
-      body:{
+    const data=await invokeEdgeFunction(
+      "emergency-register",
+      {
         weekId,
         weekday:Number(dow)+1,
         periodNumber:Number(period),
@@ -323,25 +331,37 @@
         note:String(note||"").trim(),
         reason:String(reason||"").trim(),
         usesElectronicDevice:usesElectronicDevice===true
-      }
-    });
-    if(error){
-      const detail=await edgeFunctionErrorMessage(error,"Không đăng ký bổ sung được");
-      throw new Error(detail);
-    }
-    if(!data?.ok)throw new Error(data?.error||"Không đăng ký bổ sung được");
+      },
+      "Không đăng ký bổ sung được."
+    );
     return data.registration?mapReg(data.registration):null;
   }
 
   async function requestAiReview(registrationId){
-    const sb=requireClient();
-    const {data,error}=await sb.functions.invoke("ai-review-registration",{
-      body:{registrationId}
-    });
-    if(error) throw error;
-    if(!data?.ok) throw new Error(data?.error||"AI không xử lý được đăng ký.");
-    return data;
+    return invokeEdgeFunction(
+      "ai-review-registration",
+      {registrationId},
+      "AI không xử lý được đăng ký."
+    );
   }
+
+  async function deleteRegistration(registrationId){
+    if(!isUuid(registrationId)){
+      throw new Error("Mã đăng ký không hợp lệ.");
+    }
+
+    const sb=requireClient();
+    const {data,error}=await sb.rpc("delete_registration_safely",{
+      p_registration_id:registrationId
+    });
+
+    if(error)throw friendlySyncError(error);
+    if(data!==true){
+      throw new Error("Không tìm thấy đăng ký đang hoạt động để xóa.");
+    }
+    return true;
+  }
+
 
   async function markNotificationsRead(ids){
     const list=(ids||[]).filter(Boolean);
@@ -357,7 +377,6 @@
     if (error) throw error;
   }
 
-  // V8.3.1 hotfix: no active session is a normal logged-out state, not an app error.
   function isMissingAuthSession(error){
     if(!error)return false;
     const name=String(error?.name||"");
@@ -372,35 +391,29 @@
 
   async function authUser(){
     const sb=requireClient();
-
-    const {
-      data:sessionData,
-      error:sessionError
-    }=await sb.auth.getSession();
+    const {data:sessionData,error:sessionError}=await sb.auth.getSession();
 
     if(sessionError){
       if(isMissingAuthSession(sessionError))return null;
       throw sessionError;
     }
-
-    if(!sessionData?.session){
-      return null;
-    }
+    if(!sessionData?.session)return null;
 
     const {data,error}=await sb.auth.getUser();
-
     if(error){
       if(isMissingAuthSession(error))return null;
       throw error;
     }
-
     return data.user||null;
   }
 
   function mapProfile(p){
     return {
-      id:p.id, code:p.student_code || "", name:p.full_name, email:p.email || "",
-      role:p.role, active:p.active !== false
+      id:p.id,
+      code:p.student_code || "",
+      name:p.full_name,
+      role:p.role,
+      active:p.active !== false
     };
   }
   function toLocalInput(iso){
@@ -620,7 +633,6 @@
               id:extra.id,
               code:String(extra.code||"").toUpperCase(),
               name:extra.fullName||extra.code||"",
-              email:"",
               role:extra.role||"student",
               active:extra.active!==false
             });
@@ -654,25 +666,21 @@
   }
 
   async function insertAudit(entries){
-    if (!entries.length) return;
-    const sb=requireClient();
-    const payload={
-      entries:entries.map(a=>({
-        action:a.action || "Thay đổi",
-        entityType:"web_app",
-        entityId:String(a.entityId || ""),
-        detail:a.detail || "",
-        createdAt:a.at || new Date().toISOString()
-      }))
-    };
-    const { data,error }=await sb.functions.invoke("audit-log",{ body: payload });
-    if(error){
-      const detail=await edgeFunctionErrorMessage(error,"Không ghi được nhật ký hệ thống");
-      throw new Error(detail);
-    }
-    if(!data?.ok){
-      throw new Error(data?.error || "Không ghi được nhật ký hệ thống");
-    }
+    if(!entries.length)return;
+
+    await invokeEdgeFunction(
+      "audit-log",
+      {
+        entries:entries.map(entry=>({
+          action:entry.action||"Thay đổi",
+          entityType:"web_app",
+          entityId:String(entry.entityId||""),
+          detail:entry.detail||"",
+          createdAt:entry.at||new Date().toISOString()
+        }))
+      },
+      "Không ghi được nhật ký hệ thống."
+    );
   }
 
   async function syncInternal(state,currentUser){
@@ -791,16 +799,36 @@
     snapshot=deepClone(state);
   }
 
+  function appSyncError(code,message,cause){
+    const wrapped=new Error(message);
+    wrapped.code=code;
+    wrapped.cause=cause;
+    return wrapped;
+  }
+
   function friendlySyncError(error){
     const message=String(error?.message||error||"");
     const code=String(error?.code||"");
-    if(code==="42501"||/row-level security|security policy/i.test(message)){
-      return new Error("SECURITY_REGISTRATION: thao tác bị RLS từ chối vì quyền tài khoản, trạng thái tuần hoặc deadline không hợp lệ.");
+
+    if(code==="42501"||code==="SECURITY_REGISTRATION"||/row-level security|security policy/i.test(message)){
+      return appSyncError(
+        "SECURITY_REGISTRATION",
+        "Thao tác bị RLS từ chối vì quyền tài khoản, trạng thái tuần hoặc deadline không hợp lệ.",
+        error
+      );
     }
-    if(code==="23505"||/duplicate key/i.test(message)){
-      return new Error("DUPLICATE_REGISTRATION: tiết này đã có đăng ký đang hoạt động.");
+
+    if(code==="23505"||code==="DUPLICATE_REGISTRATION"||/duplicate key/i.test(message)){
+      return appSyncError(
+        "DUPLICATE_REGISTRATION",
+        "Tiết này đã có đăng ký đang hoạt động.",
+        error
+      );
     }
-    return error instanceof Error?error:new Error(message||"Không đồng bộ được dữ liệu");
+
+    return error instanceof Error
+      ? error
+      : appSyncError("SYNC_ERROR",message||"Không đồng bộ được dữ liệu",error);
   }
 
   function syncState(state,currentUser){
@@ -814,10 +842,25 @@
 
   function resetSnapshot(state){ snapshot=deepClone(state); }
 
-  window.SupabaseService={
-    enabled,init,signInCode,signOut,authUser,loadState,loadWeekData,syncState,resetSnapshot,
-    codeToEmail,changeOwnPassword,teacherResetPassword,teacherListUsers,teacherUpdateUser,teacherDeleteUser,teacherCreateUser,
-    teacherRebaseWeeks,emergencyRegister,requestAiReview,markNotificationsRead,chooseCurrentWeek,dateISOInTimeZone,
-    get client(){return client;}
-  };
+  window.SupabaseService=Object.freeze({
+    enabled,
+    init,
+    signInCode,
+    signOut,
+    loadState,
+    loadWeekData,
+    syncState,
+    resetSnapshot,
+    changeOwnPassword,
+    teacherResetPassword,
+    teacherUpdateUser,
+    teacherDeleteUser,
+    teacherCreateUser,
+    teacherRebaseWeeks,
+    emergencyRegister,
+    requestAiReview,
+    deleteRegistration,
+    markNotificationsRead,
+    dateISOInTimeZone
+  });
 })();

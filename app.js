@@ -257,7 +257,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     if(currentUser.role==="teacher"){
       const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
       const aiPending=(state.registrations||[]).filter(r=>r.aiReviewStatus==="pending"||r.aiReviewStatus==="processing").length;
-      const manual=(state.registrations||[]).filter(r=>r.weekId===state.currentWeekId&&(r.status==="submitted"||r.status==="needs_revision")).length;
+      const manual=(state.registrations||[]).filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r)).length;
       if(unread)messages.push({urgent:true,text:`🔔 Thầy/cô có ${unread} thông báo mới cần xem. Cú đã đánh dấu chuông ở góc trên.`});
       if(aiPending)messages.push({text:`🤖 AI đang phân loại ${aiPending} đăng ký. Trường hợp chưa đủ chắc chắn sẽ tự chuyển sang thầy/cô.`});
       if(manual)messages.push({urgent:true,text:`📋 Tuần ${w.number} còn ${manual} đăng ký cần giáo viên xử lý.`});
@@ -451,6 +451,11 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(n.registrationId===registrationId)n.isRead=true;
     });
   }
+  function needsTeacherReview(registration){
+    return ["submitted","needs_revision"].includes(registration?.status)
+      && !["pending","processing"].includes(registration?.aiReviewStatus);
+  }
+
 
   function week(){ return state.weeks.find(w=>w.id===state.currentWeekId)||state.weeks[0]; }
   function todayDateISO(){
@@ -710,18 +715,18 @@ import { friendlyAppError } from "./utils/error-map.js";
     if(currentUser?.role!=="teacher")return;
     const items=(state.notifications||[]).slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
     const unread=items.filter(n=>!n.isRead);
-    openModal("Thông báo cần xử lý",`
+    openModal("Thông báo",`
       <div class="notification-panel">
         <div class="callout">
           <b>${unread.length} thông báo chưa đọc</b><br>
-          Nội dung không đủ điều kiện duyệt nhanh sẽ xuất hiện ở đây và vẫn nằm trong mục <b>Duyệt đăng ký</b>.
+          Thông báo <b>đăng ký bổ sung</b> giúp thầy/cô biết học sinh vừa gửi bổ sung; chỉ khi AI thấy vấn đề mới tạo thêm thông báo <b>cần duyệt</b>.
         </div>
         ${items.length?items.slice(0,20).map(n=>`
           <div class="notification-item ${n.isRead?"":"unread"}">
-            <div class="notification-icon">🔔</div>
+            <div class="notification-icon">${n.type==="emergency_notice"?"🚨":"🔔"}</div>
             <div><b>${esc(n.title)}</b><p>${esc(n.message||"")}</p><small>${n.createdAt?new Date(n.createdAt).toLocaleString("vi-VN"):""}</small></div>
           </div>`).join(""):`<div class="empty-mini">Không có thông báo cần duyệt.</div>`}
-        <button class="btn btn-primary btn-block" id="openApprovalsFromNotifications">Mở danh sách cần duyệt</button>
+        <button class="btn btn-primary btn-block" id="openApprovalsFromNotifications">Mở đăng ký & danh sách bổ sung</button>
       </div>`);
 
     $("#openApprovalsFromNotifications").onclick=()=>{
@@ -833,7 +838,10 @@ import { friendlyAppError } from "./utils/error-map.js";
           :ordinaryEditable
             ?"Xem / sửa"
             :"Xem";
-      actionHtml=`<button class="btn ${editable?"btn-ghost":"btn-soft"} reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">${label}</button>`;
+      actionHtml=`<button class="btn ${editable?"btn-ghost":"btn-soft"} reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">${label}</button>
+        ${r.isEmergency&&!started
+          ?`<button class="btn btn-danger delete-own-emergency-btn" data-id="${r.id}">Hủy bổ sung</button>`
+          :""}`;
     }else if(regularNewAllowed){
       actionHtml=`<button class="btn btn-primary reg-btn" data-dow="${sl.dow}" data-period="${sl.period}">+ Đăng ký ngay</button>`;
     }else if(emergency){
@@ -862,7 +870,7 @@ import { friendlyAppError } from "./utils/error-map.js";
           ${pastDeadline?" · Đã qua":""}
         </p>
         ${started?`<p class="tiny session-passed-note">⌛ Buổi tự học đã bắt đầu/đã qua.</p>`:""}
-        ${emergency?`<p class="tiny emergency-note">🚨 Deadline đã qua nhưng buổi học chưa bắt đầu. Chỉ còn đăng ký bổ sung khẩn cấp và giáo viên sẽ duyệt.</p>`:""}
+        ${emergency?`<p class="tiny emergency-note">🚨 Deadline đã qua nhưng buổi học chưa bắt đầu. Đăng ký bổ sung sẽ được AI kiểm tra trước; chỉ trường hợp có vấn đề mới chuyển GV duyệt.</p>`:""}
         <p><b>${r?esc(r.content):"Chưa đăng ký"}</b></p>
         ${r?.note?`<p>${esc(r.note)}</p>`:""}
         ${r?.teacherComment?`<p style="color:#7c3aed">💬 GV: ${esc(r.teacherComment)}</p>`:""}
@@ -893,6 +901,32 @@ import { friendlyAppError } from "./utils/error-map.js";
         Number(button.dataset.dow),
         Number(button.dataset.period)
       );
+    });
+
+    content.querySelectorAll(".delete-own-emergency-btn").forEach(button=>{
+      button.onclick=async()=>{
+        const registration=state.registrations.find(row=>row.id===button.dataset.id);
+        if(!registration?.isEmergency)return;
+        if(!confirm("Hủy đăng ký bổ sung này? Bạn chỉ có thể hủy trước khi buổi tự học bắt đầu."))return;
+
+        button.disabled=true;
+        try{
+          await prod.deleteRegistration(registration.id);
+          await refreshFromServer(false);
+          toast("Đã hủy đăng ký bổ sung.","success");
+          render();
+        }catch(error){
+          console.error(error);
+          toast(
+            safeErrorMessage(
+              error,
+              "Không hủy được đăng ký bổ sung. Có thể buổi học đã bắt đầu hoặc đăng ký không còn hợp lệ."
+            ),
+            "warn"
+          );
+          button.disabled=false;
+        }
+      };
     });
   }
 
@@ -1103,7 +1137,9 @@ import { friendlyAppError } from "./utils/error-map.js";
     openModal(`🚨 Đăng ký bổ sung · ${DOW[dow]} · Tiết ${p}`,`
       <div class="callout emergency-callout">
         <b>Đăng ký bổ sung khẩn cấp</b><br>
-        Deadline đã qua nhưng buổi tự học chưa bắt đầu. Đăng ký này <b>không tự duyệt</b>; giáo viên sẽ nhận thông báo và duyệt thủ công.
+        Deadline đã qua nhưng buổi tự học chưa bắt đầu. Sau khi gửi, <b>AI sẽ kiểm tra trước</b>.
+        Nếu nội dung phù hợp và đủ tin cậy, AI có thể duyệt; chỉ trường hợp mơ hồ, có vấn đề hoặc AI lỗi mới chuyển <b>giáo viên duyệt</b>.
+        Giáo viên vẫn thấy đăng ký này trong danh sách bổ sung.
       </div>
 
       <div class="registration-summary">
@@ -1157,7 +1193,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       }
 
       try{
-        await prod.emergencyRegister({
+        const created=await prod.emergencyRegister({
           weekId:w.id,
           dow,
           period:p,
@@ -1166,14 +1202,47 @@ import { friendlyAppError } from "./utils/error-map.js";
           reason:reasonVal,
           usesElectronicDevice
         });
-        await refreshFromServer(false);
 
+        if(created?.aiReviewStatus==="pending"){
+          setOwlThinking(true);
+          try{
+            await prod.requestAiReview(created.id);
+            await refreshFromServer(false);
+
+            const fresh=state.registrations.find(row=>row.id===created.id);
+            setOwlThinking(false);
+            closeModal();
+
+            if(fresh?.status==="approved"&&fresh?.approvalSource==="ai"){
+              const pct=fresh.aiConfidence==null?"":` (${Math.round(fresh.aiConfidence*100)}%)`;
+              toast(`Đăng ký bổ sung đã được AI duyệt${pct}.`,"success");
+              showOwlMessage({
+                text:"🤖 AI đã kiểm tra và duyệt đăng ký bổ sung của bạn.",
+                force:true
+              });
+            }else{
+              toast("AI thấy đăng ký cần giáo viên xem thêm. Đã chuyển GV duyệt.","warn");
+              showOwlMessage({
+                text:"🚨 AI cần giáo viên xem thêm đăng ký bổ sung này.",
+                force:true
+              });
+            }
+            render();
+            return;
+          }catch(aiError){
+            console.error("Emergency AI review",aiError);
+            setOwlThinking(false);
+            try{await refreshFromServer(false);}catch{}
+            closeModal();
+            toast("Đã lưu đăng ký bổ sung; AI tạm thời chưa xử lý được nên giáo viên sẽ duyệt.","warn");
+            render();
+            return;
+          }
+        }
+
+        await refreshFromServer(false);
         closeModal();
-        toast("Đã gửi đăng ký bổ sung. Giáo viên sẽ duyệt thủ công.","success");
-        showOwlMessage({
-          text:"🚨 Cú đã chuyển đăng ký bổ sung của bạn cho giáo viên duyệt.",
-          force:true
-        });
+        toast("Đã gửi đăng ký bổ sung. Hệ thống đang chuyển giáo viên duyệt theo cấu hình hiện tại.","success");
         render();
       }catch(error){
         console.error(error);
@@ -1255,7 +1324,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
 
   function teacherDashboard(){
-    const pendingAll=state.registrations.filter(r=>r.weekId===state.currentWeekId&&(r.status==="submitted"||r.status==="needs_revision"));
+    const pendingAll=state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r));
     const pending=pendingAll.slice(0,6), st=statsForWeek();
     const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
     let html=head("Dashboard",`Tổng quan tuần ${week().number}`)+weekBanner();
@@ -1317,15 +1386,26 @@ import { friendlyAppError } from "./utils/error-map.js";
       };
     });
 
-    root.querySelectorAll(".delete-reg-btn").forEach(b=>b.onclick=()=>{
+    root.querySelectorAll(".delete-reg-btn").forEach(b=>b.onclick=async()=>{
       const r=state.registrations.find(x=>x.id===b.dataset.id);
-      if(!r) return;
+      if(!r)return;
       const s=state.users.find(u=>u.id===r.studentId);
-      if(!confirm(`Xóa đăng ký của ${s?.name||"học sinh"} - ${slotLabel(r.dow,r.period)}?`)) return;
-      markLocalNotificationReadByReg(r.id);
-      state.registrations=state.registrations.filter(x=>x.id!==r.id);
-      audit("Xóa mềm đăng ký",r.id,`${s?.name||""} - ${slotLabel(r.dow,r.period)}`);
-      saveState(); toast("Đã xóa đăng ký.","success"); render();
+      if(!confirm(`Xóa đăng ký của ${s?.name||"học sinh"} - ${slotLabel(r.dow,r.period)}?`))return;
+
+      b.disabled=true;
+      try{
+        await prod.deleteRegistration(r.id);
+        markLocalNotificationReadByReg(r.id);
+        audit("Xóa mềm đăng ký",r.id,`${s?.name||""} - ${slotLabel(r.dow,r.period)}`);
+        await refreshFromServer(false);
+        toast(r.isEmergency?"Đã xóa đăng ký bổ sung.":"Đã xóa đăng ký.","success");
+        render();
+      }catch(error){
+        console.error(error);
+        toast(safeErrorMessage(error,"Không xóa được đăng ký. Vui lòng thử lại."),"warn");
+        try{await refreshFromServer(false);}catch{}
+        render();
+      }
     });
   }
   function teacherComment(id,needsRevision){
@@ -1334,8 +1414,11 @@ import { friendlyAppError } from "./utils/error-map.js";
     $("#commentForm").onsubmit=e=>{e.preventDefault();r.teacherComment=$("#teacherComment").value.trim();if(needsRevision){r.status="needs_revision";markLocalNotificationReadByReg(r.id);}audit(needsRevision?"Yêu cầu chỉnh sửa":"Nhận xét",r.id,r.teacherComment);saveState();closeModal();toast("Đã lưu phản hồi.","success");render();};
   }
   function approvalsPage(){
-    const pending=state.registrations.filter(r=>r.weekId===state.currentWeekId&&(r.status==="submitted"||r.status==="needs_revision"));
+    const pending=state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r));
     const allWeek=state.registrations.filter(r=>r.weekId===state.currentWeekId);
+    const emergencyWeek=allWeek
+      .filter(r=>r.isEmergency)
+      .sort((a,b)=>String(b.emergencyRequestedAt||"").localeCompare(String(a.emergencyRequestedAt||"")));
 
     const sourceBadge=r=>{
       if(r.approvalSource==="ai"){
@@ -1371,9 +1454,46 @@ import { friendlyAppError } from "./utils/error-map.js";
       }).join("")}
       </tbody></table></div></div>`:"";
 
-    return head("Duyệt đăng ký",`${pending.length} đăng ký đang cần xử lý`,
+    const emergencyTable=emergencyWeek.length?`<div class="card" style="margin-bottom:16px">
+      <h3>🚨 Danh sách đăng ký bổ sung · ${emergencyWeek.length}</h3>
+      <div class="callout" style="margin-bottom:12px">
+        Danh sách này để giáo viên biết mọi đăng ký bổ sung. Chỉ các dòng AI đánh dấu cần xem mới xuất hiện thêm ở phần <b>Cần giáo viên xử lý</b>.
+      </div>
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>Lý do bổ sung</th><th>Kết quả</th><th>Thời điểm</th><th>Thao tác</th></tr></thead>
+        <tbody>
+        ${emergencyWeek.map(r=>{
+          const s=state.users.find(u=>u.id===r.studentId);
+          const reviewLabel=["pending","processing"].includes(r.aiReviewStatus)
+            ?'<span class="ai-review-badge">🤖 AI đang kiểm tra</span>'
+            :r.status==="approved"&&r.approvalSource==="ai"
+              ?sourceBadge(r)
+              :needsTeacherReview(r)
+                ?'<span class="manual-review-badge">⚠️ Cần GV xem</span>'
+                :sourceBadge(r);
+          return `<tr>
+            <td>${esc(s?.name||"")}</td>
+            <td>${slotLabel(r.dow,r.period)}</td>
+            <td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div></td>
+            <td>${esc(r.emergencyReason||"—")}</td>
+            <td>${statusBadge(r.status)}<div style="margin-top:5px">${reviewLabel}</div></td>
+            <td>${r.emergencyRequestedAt?new Date(r.emergencyRequestedAt).toLocaleString("vi-VN"):"—"}</td>
+            <td><div class="toolbar" style="gap:5px">
+              ${r.status==="approved"&&r.approvalSource==="ai"
+                ?`<button class="btn btn-warning ai-wrong-btn" data-id="${r.id}">⚠️ AI chưa đúng</button>`
+                :""}
+              <button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button>
+            </div></td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+      </table></div>
+    </div>`:`<div class="card" style="margin-bottom:16px">${empty("🚨","Tuần này chưa có đăng ký bổ sung.")}</div>`;
+
+    return head("Duyệt đăng ký",`${pending.length} đăng ký đang cần giáo viên xử lý`,
       pending.length?`<button class="btn btn-success" id="approveAll">✓ Duyệt tất cả đang chờ</button>`:"")+
-      `<div class="card">${pending.length?pending.map(approvalItem).join(""):empty("🎉","Không có đăng ký cần xử lý.")}</div>`+
+      emergencyTable+
+      `<div class="card"><h3>Cần giáo viên xử lý · ${pending.length}</h3>${pending.length?pending.map(approvalItem).join(""):empty("🎉","Không có đăng ký cần giáo viên xử lý.")}</div>`+
       allTable;
   }
 
