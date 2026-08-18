@@ -1815,3 +1815,44 @@ textarea:focus{
     transition:none !important;
   }
 }
+
+/* =========================
+   V8.3.1 — BRAND FAVICON
+   Dùng favicon.png thay SVG inline cho logo thương hiệu.
+   ========================= */
+.brand-mark{
+  display:inline-grid;
+  place-items:center;
+  flex:0 0 auto;
+}
+
+.brand-logo-img{
+  display:block;
+  width:32px;
+  height:32px;
+  object-fit:contain;
+  border-radius:10px;
+  filter:drop-shadow(0 6px 10px rgba(59,130,246,.18));
+}
+
+.brand-large .brand-logo-img{
+  width:42px;
+  height:42px;
+}
+
+.sidebar .brand .brand-logo-img{
+  width:34px;
+  height:34px;
+}
+
+.mobile-brand .brand-logo-img{
+  width:36px;
+  height:36px;
+}
+
+@media(max-width:520px){
+  .brand-large .brand-logo-img{
+    width:38px;
+    height:38px;
+  }
+}
