@@ -1914,3 +1914,75 @@ textarea:focus{
     display:grid;
   }
 }
+
+/* =========================
+   V8.3.1 — MODAL / FORM SPACING
+   Tăng khoảng thở giữa tiêu đề, nhãn và phần nhập liệu.
+   Áp dụng cho các form trong modal: sửa tài khoản, xóa tài khoản,
+   đổi/đặt lại mật khẩu và các form modal tương tự.
+   ========================= */
+
+/* Tiêu đề modal tách rõ khỏi nội dung bên dưới và chừa chỗ cho nút đóng. */
+.modal-card > h3{
+  margin:0 48px 20px 0;
+  line-height:1.28;
+}
+
+/* Nhãn của các trường nhập trong modal. */
+#modalBody form > label:not(.toggle-row):not(.search-box){
+  margin-top:16px;
+  margin-bottom:0;
+}
+
+/* Chữ nhãn -> ô nhập: 8px.
+   Loại checkbox/radio vì các loại đó thường nằm cùng hàng với chữ. */
+#modalBody label > input:not([type="checkbox"]):not([type="radio"]),
+#modalBody label > select,
+#modalBody label > textarea,
+#modalBody label > .password-field{
+  margin-top:8px;
+}
+
+/* password-field đã có khoảng cách phía ngoài, input bên trong không cộng thêm. */
+#modalBody .password-field > input{
+  margin-top:0;
+}
+
+/* Callout đầu form cách phần nhập liệu rõ hơn. */
+#modalBody form > .callout{
+  margin:0 0 2px;
+}
+
+/* Các nút hành động không dính sát trường nhập cuối. */
+#modalBody form > .toolbar,
+#modalBody form > .btn-block{
+  margin-top:18px;
+}
+
+/* Riêng hộp xóa tài khoản: tách form xác nhận khỏi cảnh báo. */
+#modalBody .danger-zone-card form{
+  margin-top:18px;
+}
+
+/* Tên học sinh trong hộp xóa có khoảng thở cân đối. */
+#modalBody .danger-zone-card > h3{
+  margin:8px 0 10px;
+}
+
+/* Mobile: vẫn thoáng nhưng tiết kiệm chiều cao. */
+@media(max-width:520px){
+  .modal-card > h3{
+    margin-bottom:16px;
+  }
+
+  #modalBody form > label:not(.toggle-row):not(.search-box){
+    margin-top:14px;
+  }
+
+  #modalBody label > input:not([type="checkbox"]):not([type="radio"]),
+  #modalBody label > select,
+  #modalBody label > textarea,
+  #modalBody label > .password-field{
+    margin-top:7px;
+  }
+}
