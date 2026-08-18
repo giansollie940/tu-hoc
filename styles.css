@@ -1856,3 +1856,61 @@ textarea:focus{
     height:38px;
   }
 }
+
+/* =========================
+   V8.3.1 — COLLAPSIBLE SIDEBAR
+   Laptop/desktop: sidebar mặc định ẩn để mở rộng nội dung chính.
+   Mobile: giữ cơ chế drawer trượt từ trái như hiện tại.
+   ========================= */
+
+.sidebar-toggle-btn{
+  display:grid;
+  flex:0 0 auto;
+}
+
+/* Laptop / desktop */
+@media(min-width:801px){
+  .app-shell{
+    grid-template-columns:auto minmax(0,1fr);
+  }
+
+  .sidebar{
+    width:0;
+    min-width:0;
+    padding-left:0;
+    padding-right:0;
+    border-right:0;
+    overflow:hidden;
+    transition:
+      width .22s ease,
+      padding-left .22s ease,
+      padding-right .22s ease,
+      border-color .22s ease;
+  }
+
+  .sidebar.open{
+    width:245px;
+    padding-left:16px;
+    padding-right:16px;
+    border-right:1px solid var(--line);
+  }
+
+  /* Giữ nội dung sidebar ổn định trong lúc đóng/mở. */
+  .sidebar .brand,
+  .sidebar .side-nav,
+  .sidebar .sidebar-quote{
+    min-width:213px;
+  }
+
+  .main-area{
+    min-width:0;
+    width:100%;
+  }
+}
+
+/* Mobile vẫn là drawer phủ từ trái, dùng cùng class .open */
+@media(max-width:800px){
+  .sidebar-toggle-btn{
+    display:grid;
+  }
+}
