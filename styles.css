@@ -1696,41 +1696,57 @@ textarea:focus{
   display:block;
   width:100%;
 }
+
+/* Chừa khoảng trống cho icon mắt ở bên trong ô mật khẩu. */
 .password-field input{
-  padding-right:52px;
+  padding-right:54px;
 }
+
+/* Vùng bấm vẫn đủ lớn, nhưng phần nhìn chỉ còn icon nhỏ trong input. */
 .password-toggle{
   position:absolute;
-  right:5px;
+  right:3px;
   top:50%;
   transform:translateY(-50%);
-  width:42px;
-  height:42px;
+  width:44px;
+  height:44px;
+  padding:0;
   border:0;
-  border-radius:13px;
+  border-radius:999px;
   display:grid;
   place-items:center;
-  color:#6673a9;
-  background:linear-gradient(145deg,#f6f8ff,#eeeefe);
-  box-shadow:
-    3px 4px 8px rgba(108,117,163,.10),
-    inset 0 1px 0 rgba(255,255,255,.9);
+  color:#7283bd;
+  background:transparent;
+  box-shadow:none;
 }
 .password-toggle:hover{
-  color:#596cd0;
-  background:linear-gradient(145deg,#eef5ff,#eee8ff);
+  color:#5369c8;
+  background:rgba(255,255,255,.34);
 }
 .password-toggle:focus-visible{
-  outline:3px solid rgba(126,156,246,.5);
-  outline-offset:2px;
+  outline:2px solid rgba(96,165,250,.72);
+  outline-offset:-3px;
+  background:rgba(255,255,255,.42);
 }
 .password-toggle svg{
-  width:20px;
-  height:20px;
+  width:18px;
+  height:18px;
 }
 .password-toggle.is-visible{
-  color:#8c65c6;
-  background:linear-gradient(145deg,#f3eaff,#ffeef7);
+  color:#7c5cc4;
+  background:rgba(255,255,255,.38);
+}
+
+/* Login: tạo khoảng thở rõ giữa chữ nhãn và khung nhập. */
+#loginForm > label{
+  margin:16px 0 0;
+}
+#loginForm > label > input,
+#loginForm > label > .password-field{
+  margin-top:8px;
+}
+#loginForm input{
+  min-height:46px;
 }
 
 /* Device AI */
