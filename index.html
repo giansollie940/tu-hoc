@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="64x64" href="assets/images/favicon.png">
 
   <title>Sổ Tự Học</title>
-  <link rel="stylesheet" href="styles.css?v=8.3.1-brand-favicon1">
+  <link rel="stylesheet" href="styles.css?v=8.3.1-sidebar-toggle1">
 </head>
 <body>
   <div id="toastHost" class="toast-host" aria-live="polite"></div>
@@ -99,7 +99,15 @@
 
     <main class="main-area">
       <header class="topbar">
-        <button id="menuBtn" class="icon-btn mobile-only" aria-label="Mở menu">☰</button>
+        <button
+          id="menuBtn"
+          class="icon-btn sidebar-toggle-btn"
+          type="button"
+          aria-label="Mở menu"
+          aria-controls="sidebar"
+          aria-expanded="false"
+          title="Mở/đóng menu"
+        >☰</button>
         <div class="topbar-title">
           <span id="pageEyebrow">Sổ Tự Học</span>
           <strong id="pageTitle">Trang chủ</strong>
@@ -163,6 +171,6 @@
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.95.0/dist/umd/supabase.js"></script>
   <script src="supabase-service.js?v=8.3.1-clean1"></script>
-  <script type="module" src="app.js?v=8.3.1-clean1"></script>
+  <script type="module" src="app.js?v=8.3.1-sidebar-toggle1"></script>
 </body>
 </html>
