@@ -1986,3 +1986,85 @@ textarea:focus{
     margin-top:7px;
   }
 }
+
+/* =========================
+   V8.3.1 — OWL EYES + LEGS IMPROVE
+   - Mắt cú theo chuột trên toàn trang (JS cập nhật biến)
+   - Chân cú có chuyển động nhẹ
+   ========================= */
+
+.wise-owl-pet{
+  --owl-look-x:0px;
+  --owl-look-y:0px;
+  --owl-leg-left-rot:-1.2deg;
+  --owl-leg-right-rot:1.2deg;
+  --owl-leg-left-lift:0px;
+  --owl-leg-right-lift:0px;
+}
+
+.owl-body{
+  overflow:visible;
+}
+
+.owl-layer-stage{
+  position:relative;
+  overflow:visible;
+}
+
+/* Tạo 2 chân cú bằng CSS, không cần thêm HTML */
+.owl-layer-stage::before,
+.owl-layer-stage::after{
+  content:"";
+  position:absolute;
+  bottom:7%;
+  width:10.8%;
+  height:19%;
+  z-index:8;
+  border-radius:999px 999px 38% 38%;
+  box-shadow:
+    inset 0 1.2px 0 rgba(255,255,255,.28),
+    inset 0 -1.6px 0 rgba(120,72,32,.16),
+    0 4px 10px rgba(122,82,40,.12);
+  background:
+    linear-gradient(90deg,
+      transparent 0 18%,
+      rgba(156,96,44,.22) 18% 22%,
+      transparent 22% 44%,
+      rgba(156,96,44,.22) 44% 48%,
+      transparent 48% 70%,
+      rgba(156,96,44,.22) 70% 74%,
+      transparent 74% 100%),
+    linear-gradient(180deg,
+      #bd7544 0 64%,
+      #ffcf93 64% 100%);
+  transform-origin:50% 10%;
+  transition:filter .2s ease;
+  pointer-events:none;
+}
+
+.owl-layer-stage::before{
+  left:42%;
+  transform:translate(-50%, var(--owl-leg-left-lift)) rotate(var(--owl-leg-left-rot));
+}
+
+.owl-layer-stage::after{
+  left:58%;
+  transform:translate(-50%, var(--owl-leg-right-lift)) rotate(var(--owl-leg-right-rot));
+}
+
+.wise-owl-pet:hover .owl-layer-stage::before,
+.wise-owl-pet:hover .owl-layer-stage::after{
+  filter:brightness(1.03);
+}
+
+@media (prefers-reduced-motion: reduce){
+  .wise-owl-pet{
+    --owl-look-x:0px;
+    --owl-look-y:0px;
+    --owl-leg-left-rot:-1.2deg;
+    --owl-leg-right-rot:1.2deg;
+    --owl-leg-left-lift:0px;
+    --owl-leg-right-lift:0px;
+  }
+}
+
