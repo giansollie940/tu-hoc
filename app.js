@@ -1,9 +1,8 @@
 import { renderDeviceChoice } from "./features/registration/registration-form.js";
 import {
-  renderPasswordDialog,
-  renderPasswordField
+  passwordChecklistState,
+  renderPasswordDialog
 } from "./features/account/password-dialog.js";
-import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
@@ -21,41 +20,6 @@ import { friendlyAppError } from "./utils/error-map.js";
   const $ = s => document.querySelector(s);
   const content=$("#content"), loginView=$("#loginView"), appView=$("#appView");
   const modal=$("#modal"), modalBody=$("#modalBody"), modalTitle=$("#modalTitle");
-
-  function sanitizeTemplateHtml(html){
-    const template=document.createElement("template");
-    template.innerHTML=String(html??"");
-
-    template.content
-      .querySelectorAll("script,iframe,object,embed,base,meta,link")
-      .forEach(node=>node.remove());
-
-    template.content.querySelectorAll("*").forEach(node=>{
-      [...node.attributes].forEach(attribute=>{
-        const name=attribute.name.toLowerCase();
-        const value=attribute.value.trim();
-
-        if(name.startsWith("on")||name==="srcdoc"){
-          node.removeAttribute(attribute.name);
-          return;
-        }
-
-        if(
-          ["href","src","xlink:href","formaction"].includes(name)
-          && /^(?:javascript|vbscript|data:text\/html)/i.test(value)
-        ){
-          node.removeAttribute(attribute.name);
-        }
-      });
-    });
-
-    return template.innerHTML;
-  }
-
-  function setSafeHtml(target,html){
-    if(target)target.innerHTML=sanitizeTemplateHtml(html);
-  }
-
   const safeErrorMessage=(error,fallback)=>{
     const mapped=friendlyAppError(error);
     return mapped.code==="UNKNOWN"?fallback:mapped.message;
@@ -506,17 +470,9 @@ import { friendlyAppError } from "./utils/error-map.js";
   function initials(name){ return name.split(" ").slice(-2).map(x=>x[0]).join("").toUpperCase(); }
   function statusBadge(status){ return `<span class="status ${status||"missing"}">${statusLabel[status]||"Chưa đăng ký"}</span>`; }
   function toast(msg,type=""){ const el=document.createElement("div"); el.className=`toast ${type}`; el.textContent=msg; $("#toastHost").appendChild(el); setTimeout(()=>el.remove(),2800); }
-  function openModal(title,html){ modalTitle.textContent=title; setSafeHtml(modalBody,html); modal.classList.remove("hidden"); }
-  function closeModal(){ modal.classList.add("hidden"); modalBody.replaceChildren(); }
-  function audit(action,entityId,detail=""){
-    state.audit.unshift({
-      at:new Date().toISOString(),
-      userId:currentUser?.id,
-      action,
-      entityId,
-      detail
-    });
-  }
+  function openModal(title,html){ modalTitle.textContent=title; modalBody.innerHTML=html; modal.classList.remove("hidden"); }
+  function closeModal(){ modal.classList.add("hidden"); modalBody.innerHTML=""; }
+  function audit(action,entityId,detail=""){ state.audit.unshift({at:new Date().toISOString(),userId:currentUser?.id,action,entityId,detail}); saveState(); }
 
   function scheduleForWeek(weekId){
     const overrides=(state.overrides||[]).filter(o=>o.weekId===weekId);
@@ -637,9 +593,9 @@ import { friendlyAppError } from "./utils/error-map.js";
     }
     loginView.classList.add("hidden"); appView.classList.remove("hidden");
     $("#profileName").textContent=currentUser.name; $("#profileRole").textContent=roleLabel[currentUser.role]; $("#profileAvatar").textContent=initials(currentUser.name);
-    setSafeHtml($("#sideNav"),navs[currentUser.role].map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}">${navIconFor(n[0])}<span class="nav-label">${n[2]}</span></button>`).join(""));
-    $("#sideNav").querySelectorAll("[data-route]").forEach(b=>b.onclick=()=>{route=b.dataset.route; $("#sidebar").classList.remove("open"); renderShell(); render();});
-    setSafeHtml($("#globalWeekSelect"),state.weeks.map(w=>`<option value="${w.id}" ${w.id===state.currentWeekId?"selected":""}>Tuần ${w.number} · ${fmtDateShort(w.startDate)}–${fmtDateShort(w.endDate)}</option>`).join(""));
+    $("#sideNav").innerHTML=navs[currentUser.role].map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}">${navIconFor(n[0])}<span class="nav-label">${n[2]}</span></button>`).join("");
+    $("#sideNav").querySelectorAll("[data-route]").forEach(b=>b.onclick=()=>{route=b.dataset.route; setSidebarOpen(false); renderShell(); render();});
+    $("#globalWeekSelect").innerHTML=state.weeks.map(w=>`<option value="${w.id}" ${w.id===state.currentWeekId?"selected":""}>Tuần ${w.number} · ${fmtDateShort(w.startDate)}–${fmtDateShort(w.endDate)}</option>`).join("");
 
     const notifBtn=$("#notificationBtn"), notifBadge=$("#notificationBadge");
     if(currentUser.role==="teacher"){
@@ -692,9 +648,19 @@ import { friendlyAppError } from "./utils/error-map.js";
     if(e.target?.id==="changeMyPasswordBtn"){ changeOwnPasswordModal(); }
   });
   $("#notificationBtn")?.addEventListener("click",()=>openTeacherNotifications());
-  $("#menuBtn").onclick=()=>$("#sidebar").classList.toggle("open");
+  const menuBtn=$("#menuBtn"), sidebar=$("#sidebar");
+  const setSidebarOpen=(open)=>{
+    sidebar?.classList.toggle("open",Boolean(open));
+    menuBtn?.setAttribute("aria-expanded",String(Boolean(open)));
+    menuBtn?.setAttribute("aria-label",open?"Đóng menu":"Mở menu");
+  };
+  menuBtn.onclick=()=>setSidebarOpen(!sidebar.classList.contains("open"));
   $("#modalClose").onclick=closeModal; modal.addEventListener("click",e=>{if(e.target===modal)closeModal();});
-  document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
+  document.addEventListener("keydown",e=>{
+    if(e.key!=="Escape")return;
+    closeModal();
+    setSidebarOpen(false);
+  });
 
   async function openTeacherNotifications(){
     if(currentUser?.role!=="teacher")return;
@@ -730,7 +696,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     openModal("Đổi mật khẩu",renderPasswordDialog());
     const newPasswordInput=$("#newOwnPassword");
     const updateChecklist=()=>{
-      const rules=validateStudentPassword(newPasswordInput.value);
+      const rules=passwordChecklistState(newPasswordInput.value);
       modalBody.querySelector('[data-password-rule="length"]')?.classList.toggle("valid",rules.hasMinLength);
       modalBody.querySelector('[data-password-rule="mixed"]')?.classList.toggle("valid",rules.hasLetterAndNumber);
     };
@@ -741,7 +707,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       e.preventDefault();
       const current=$("#currentOwnPassword").value;
       const p1=newPasswordInput.value, p2=$("#newOwnPassword2").value;
-      const rules=validateStudentPassword(p1);
+      const rules=passwordChecklistState(p1);
       if(!rules.hasMinLength||!rules.hasLetterAndNumber){toast("Mật khẩu mới chưa đạt đủ hai tiêu chí.","warn");return;}
       if(p1!==p2){toast("Hai mật khẩu chưa khớp.","warn");return;}
       const submit=e.submitter;
@@ -764,7 +730,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
   function weekBanner(){
     const w=week();
-    const image=currentUser?.role==="teacher"?"assets/images/teacher-dashboard-illustration.png":"assets/images/student-cards.png";
+    const image=currentUser?.role==="teacher"?"assets/images/teacher-dashboard-illustration.svg":"assets/images/student-cards.svg";
     return `<div class="banner"><div>
       <div class="eyebrow-pill">📅 ${currentUser?.role==="teacher"?"Tuần đang xem":"Bạn đang đăng ký cho"}</div>
       <h2>Tuần ${w.number} · ${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</h2>
@@ -1218,13 +1184,13 @@ import { friendlyAppError } from "./utils/error-map.js";
         );
 
         const renderDetails=(filter="all")=>{
-          setSafeHtml(modalBody,renderSessionDetails({
+          modalBody.innerHTML=renderSessionDetails({
             session,
             users:state.users||[],
             registrations,
             role:currentUser.role,
             filter
-          }));
+          });
           modalBody.querySelectorAll("[data-session-filter]").forEach(filterButton=>{
             filterButton.addEventListener("click",()=>renderDetails(filterButton.dataset.sessionFilter));
           });
@@ -1687,12 +1653,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             </select>
           </label>
           <label>Mật khẩu tạm
-            ${renderPasswordField({
-              id:"newStudentPassword",
-              autocomplete:"new-password",
-              required:false,
-              placeholder:"Để trống để tự sinh"
-            })}
+            <input id="newStudentPassword" type="text" minlength="8" autocomplete="off" placeholder="Để trống để tự sinh">
             <small>Nếu tự nhập: ít nhất 8 ký tự và có cả chữ lẫn số.</small>
           </label>
           <div class="toolbar">
@@ -1713,7 +1674,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         if(!/^[A-Z0-9._-]{2,32}$/.test(changes.code)){
           toast("Mã chỉ dùng chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.","warn");return;
         }
-        const passwordRules=validateStudentPassword(changes.password);
+        const passwordRules=passwordChecklistState(changes.password);
         if(changes.password && (!passwordRules.hasMinLength||!passwordRules.hasLetterAndNumber)){
           toast("Mật khẩu cần ít nhất 8 ký tự và có cả chữ lẫn số.","warn");return;
         }
@@ -1851,19 +1812,15 @@ import { friendlyAppError } from "./utils/error-map.js";
       openModal("Đặt lại mật khẩu",`
         <div class="callout"><b>${esc(u.name)}</b> · ${esc(u.code)}</div>
         <form id="teacherResetPasswordForm">
-          <label>Mật khẩu tạm mới
-            ${renderPasswordField({id:"teacherNewPassword",autocomplete:"new-password"})}
-          </label>
+          <label>Mật khẩu tạm mới<span class="password-field"><input id="teacherNewPassword" type="password" minlength="8" autocomplete="new-password" required><button class="password-toggle" type="button" data-password-target="teacherNewPassword" aria-label="Hiện mật khẩu" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12s3.4-5 9-5 9 5 9 5-3.4 5-9 5-9-5-9-5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="2"/></svg></button></span></label>
           <small>Ít nhất 8 ký tự và có cả chữ lẫn số.</small>
-          <label>Nhập lại mật khẩu
-            ${renderPasswordField({id:"teacherNewPassword2",autocomplete:"new-password"})}
-          </label>
+          <label>Nhập lại mật khẩu<span class="password-field"><input id="teacherNewPassword2" type="password" minlength="8" autocomplete="new-password" required><button class="password-toggle" type="button" data-password-target="teacherNewPassword2" aria-label="Hiện mật khẩu" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12s3.4-5 9-5 9 5 9 5-3.4 5-9 5-9-5-9-5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="2"/></svg></button></span></label>
           <button class="btn btn-primary btn-block" type="submit">Đặt lại mật khẩu</button>
         </form>`);
       $("#teacherResetPasswordForm").onsubmit=async e=>{
         e.preventDefault();
         const p1=$("#teacherNewPassword").value,p2=$("#teacherNewPassword2").value;
-        const rules=validateStudentPassword(p1);
+        const rules=passwordChecklistState(p1);
         if(!rules.hasMinLength||!rules.hasLetterAndNumber){toast("Mật khẩu chưa đạt đủ hai tiêu chí.","warn");return;}
         if(p1!==p2){toast("Hai mật khẩu chưa khớp.","warn");return;}
         try{
@@ -1885,27 +1842,10 @@ import { friendlyAppError } from "./utils/error-map.js";
       <div class="card"><h3>12 tuần đầu năm học</h3>${rows.map(x=>`<div class="bar-row"><span>Tuần ${x.w.number}</span><div class="bar-track"><div class="bar-fill" style="width:${x.rate}%"></div></div><b>${x.rate}%</b></div>`).join("")}
       <button id="exportCsv" class="btn btn-ghost" style="margin-top:12px">⬇ Xuất CSV tuần đang xem</button></div>`;
   }
-  function csvCell(value){
-    let text=String(value??"");
-    if(/^[=+\-@]/.test(text))text="'"+text;
-    return `"${text.replace(/"/g,'""')}"`;
-  }
-
   function bindStats(){
     $("#exportCsv")?.addEventListener("click",()=>{
-      const slots=effectiveSchedule();
-      const lines=[
-        ["Mã","Họ tên",...slots.map(s=>`${DOW[s.dow]}-T${s.period}`)]
-          .map(csvCell)
-          .join(",")
-      ];
-      studentUsers().forEach(student=>{
-        lines.push([
-          student.code,
-          student.name,
-          ...slots.map(sl=>statusLabel[regFor(student.id,sl.dow,sl.period)?.status]||"Chưa đăng ký")
-        ].map(csvCell).join(","));
-      });
+      const slots=effectiveSchedule(), lines=[["Mã","Họ tên",...slots.map(s=>`${DOW[s.dow]}-T${s.period}`)].join(",")];
+      studentUsers().forEach(s=>lines.push([s.code,`"${s.name}"`,...slots.map(sl=>statusLabel[regFor(s.id,sl.dow,sl.period)?.status]||"Chưa đăng ký")].join(",")));
       const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"}), a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`so-tu-hoc-tuan-${week().number}.csv`;a.click();URL.revokeObjectURL(a.href);
       toast("Đã tạo file CSV.","success");
     });
@@ -2006,7 +1946,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     });
   }
 
-  function empty(icon,text){return `<div class="empty"><img class="empty-image" src="assets/images/empty-state.png" alt=""><div class="tiny muted">${icon}</div><b>${text}</b></div>`;}
+  function empty(icon,text){return `<div class="empty"><img class="empty-image" src="assets/images/empty-state.svg" alt=""><div class="tiny muted">${icon}</div><b>${text}</b></div>`;}
 
   function render(){
     if(!currentUser){renderShell();return;}
@@ -2034,7 +1974,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       else if(route==="settings")html=settingsPage();
       else html=teacherDashboard();
     }
-    setSafeHtml(content,html);
+    content.innerHTML=html;
     bindRegistrationButtons(); bindTeacherActions(); bindClassOverview(); bindSchedule(); bindWeeks(); bindStudents(); bindStats(); bindSettings();
     content.querySelector("[data-route-settings]")?.addEventListener("click",()=>{route="settings";renderShell();render();});
     $("#approveAll")?.addEventListener("click",()=>{state.registrations.filter(r=>r.weekId===state.currentWeekId&&(r.status==="submitted"||r.status==="needs_revision")).forEach(r=>{r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);});audit("Duyệt hàng loạt","registrations");saveState();toast("Đã duyệt tất cả đăng ký đang chờ.","success");render();});
