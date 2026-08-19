@@ -633,6 +633,19 @@ input:focus,select:focus,textarea:focus{
 .owl-layer-body{left:50%;top:52%;width:85%;height:85%;z-index:10}
 .owl-layer-left-wing{left:31%;top:55.15%;width:38%;height:38%;z-index:20;transform-origin:86% 38%}
 .owl-layer-right-wing{left:69%;top:55.15%;width:38%;height:38%;z-index:20;transform-origin:14% 38%}
+
+/* V8.3.2d — đầu và mắt quay cùng nhau quanh đúng vùng cổ/mặt. */
+.owl-head-group{
+  position:absolute;
+  inset:0;
+  z-index:25;
+  pointer-events:none;
+  transform-origin:50% 42%;
+  transform:
+    translate(var(--owl-head-x,0),var(--owl-head-y,0))
+    rotate(var(--owl-head-rotate,0deg));
+  will-change:transform;
+}
 .owl-layer-head{left:50%;top:29.15%;width:52%;height:52%;z-index:25}
 .owl-layer-left-pupil{
   left:39.3%;top:34.2%;width:10.5%;height:10.5%;z-index:30;
@@ -642,7 +655,7 @@ input:focus,select:focus,textarea:focus{
   left:60.6%;top:34.2%;width:10.5%;height:10.5%;z-index:31;
   transform:translate(-50%,-50%) translate(var(--owl-look-x,0),var(--owl-look-y,0));
 }
-.owl-layer-left-pupil,.owl-layer-right-pupil{transition:transform .12s ease-out}
+.owl-layer-left-pupil,.owl-layer-right-pupil{will-change:transform}
 .wise-owl-pet.owl-flap .owl-layer-left-wing{animation:owlWingLeft .42s ease-in-out 3}
 .wise-owl-pet.owl-flap .owl-layer-right-wing{animation:owlWingRight .42s ease-in-out 3}
 
@@ -2234,5 +2247,18 @@ label:not(.toggle-row):not(.week-picker):not(.week-holiday-toggle):not(.search-b
 
   #modalBody form > label:not(.toggle-row):not(.search-box){
     margin-top:16px;
+  }
+}
+
+
+
+/* V8.3.2d — khi người dùng yêu cầu giảm chuyển động, đầu/mắt đứng trung tâm. */
+@media(prefers-reduced-motion:reduce){
+  .owl-body{
+    --owl-look-x:0px!important;
+    --owl-look-y:0px!important;
+    --owl-head-x:0px!important;
+    --owl-head-y:0px!important;
+    --owl-head-rotate:0deg!important;
   }
 }
