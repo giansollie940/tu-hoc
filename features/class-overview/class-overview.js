@@ -1,6 +1,3 @@
-import { isCountedRegistration } from "../registration/registration-domain.js";
-import { summarizeSession } from "./class-summary.js";
-
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>"']/g, character => ({
     "&": "&amp;",
@@ -17,12 +14,69 @@ function activeStudents(users) {
   );
 }
 
+function isVisibleRegistration(registration) {
+  return Boolean(
+    registration
+    && !registration.isDeleted
+    && ["submitted", "needs_revision", "approved"].includes(registration.status)
+  );
+}
+
+function registrationBucket(registration) {
+  if (!isVisibleRegistration(registration)) return "missing";
+  if (registration.revisionOverdueAt) return "issue";
+  return "valid";
+}
+
 function sessionRegistrations(session, registrations) {
   return (registrations ?? []).filter(registration =>
     registration?.dow === session.dow
     && Number(registration?.period) === Number(session.period)
-    && isCountedRegistration(registration)
+    && isVisibleRegistration(registration)
   );
+}
+
+function summarizeSessionThreeWay({ registrations = [], activeStudentIds = [] } = {}) {
+  const activeIds = new Set(activeStudentIds.map(String));
+  const byStudent = new Map();
+
+  for (const registration of registrations) {
+    const studentId = String(registration?.studentId ?? "");
+    if (!activeIds.has(studentId) || !isVisibleRegistration(registration)) continue;
+
+    const bucket = registrationBucket(registration);
+    const current = byStudent.get(studentId);
+
+    // Ưu tiên issue nếu có dữ liệu bất thường; còn lại valid.
+    if (!current || bucket === "issue") {
+      byStudent.set(studentId, {
+        bucket,
+        usesElectronicDevice: registration.usesElectronicDevice === true
+      });
+    } else if (registration.usesElectronicDevice === true) {
+      current.usesElectronicDevice = true;
+    }
+  }
+
+  let validCount = 0;
+  let issueCount = 0;
+  let deviceCount = 0;
+
+  for (const value of byStudent.values()) {
+    if (value.bucket === "issue") issueCount++;
+    else validCount++;
+    if (value.usesElectronicDevice) deviceCount++;
+  }
+
+  const missingCount = Math.max(0, activeIds.size - validCount - issueCount);
+
+  return {
+    validCount,
+    issueCount,
+    missingCount,
+    deviceCount,
+    classifiedCount: validCount + issueCount + missingCount
+  };
 }
 
 function effectiveStatus(registration) {
@@ -47,7 +101,7 @@ export function renderClassOverview({
   const students = activeStudents(users);
   const cards = sessions.map(session => {
     const rows = sessionRegistrations(session, registrations);
-    const summary = summarizeSession({
+    const summary = summarizeSessionThreeWay({
       registrations: rows,
       activeStudentIds: students.map(student => student.id)
     });
@@ -61,9 +115,10 @@ export function renderClassOverview({
       "    </div>",
       '    <span class="device-total-badge">' + summary.deviceCount + " dùng thiết bị</span>",
       "  </div>",
-      '  <div class="session-summary-counts">',
-      '    <span><b>' + summary.registeredCount + "</b> đã đăng ký</span>",
-      '    <span><b>' + summary.missingCount + "</b> chưa đăng ký</span>",
+      '  <div class="session-summary-counts three-state-session-counts">',
+      '    <span class="state-valid"><b>' + summary.validCount + "</b> hợp lệ</span>",
+      '    <span class="state-issue"><b>' + summary.issueCount + "</b> báo cáo lỗi</span>",
+      '    <span class="state-missing"><b>' + summary.missingCount + "</b> chưa đăng ký</span>",
       "  </div>",
       '  <button class="btn btn-primary btn-block" type="button" data-open-session="' + key + '">Xem nội dung</button>',
       "</article>"
@@ -76,7 +131,23 @@ export function renderClassOverview({
     "    <div><h1>Theo dõi cả lớp</h1><p>Tuần " + escapeHtml(week?.number ?? "") + " · " + students.length + " thành viên</p></div>",
     "  </div>",
     sessions.length
-      ? '<div class="session-summary-grid">' + cards + "</div>"
+      ? (() => {
+          const totalExpected = students.length * sessions.length;
+          const allSessionRegs = sessions.flatMap(session => sessionRegistrations(session, registrations));
+          const valid = allSessionRegs.filter(registration => registrationBucket(registration) === "valid").length;
+          const issues = allSessionRegs.filter(registration => registrationBucket(registration) === "issue").length;
+          const missing = Math.max(0, totalExpected - valid - issues);
+          const rate = totalExpected ? Math.round(valid / totalExpected * 100) : 0;
+          return [
+            '<div class="class-three-state-summary">',
+            '  <div class="class-state-card state-valid"><b>' + valid + '</b><span>Đăng ký hợp lệ</span></div>',
+            '  <div class="class-state-card state-issue"><b>' + issues + '</b><span>Báo cáo lỗi</span></div>',
+            '  <div class="class-state-card state-missing"><b>' + missing + '</b><span>Chưa đăng ký</span></div>',
+            '  <div class="class-state-card"><b>' + rate + '%</b><span>Hoàn thành hợp lệ</span></div>',
+            '</div>',
+            '<div class="session-summary-grid">' + cards + '</div>'
+          ].join("");
+        })()
       : '<div class="empty"><b>Chưa cấu hình tiết tự học.</b></div>',
     "</section>"
   ].join("");
