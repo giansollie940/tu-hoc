@@ -8,7 +8,7 @@ import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
 } from "./features/class-overview/class-overview.js?v=8.3.2b";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.3.2d";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.3.2e";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
