@@ -8,6 +8,7 @@
     !cfg.publishableKey.includes("YOUR_PUBLISHABLE");
 
   let client = null;
+  let realtimeChannel=null;
   let snapshot = null;
   let syncQueue = Promise.resolve();
 
@@ -372,6 +373,7 @@
   }
 
   async function signOut(){
+    await unsubscribeRealtime();
     const sb = requireClient();
     const { error } = await sb.auth.signOut();
     if (error) throw error;
@@ -836,6 +838,109 @@
       : appSyncError("SYNC_ERROR",message||"Không đồng bộ được dữ liệu",error);
   }
 
+
+  function mapTeacherNotificationRealtime(row){
+    if(!row?.id)return null;
+    return {
+      id:row.id,
+      registrationId:row.registration_id,
+      studentId:row.student_id,
+      weekId:row.week_id,
+      type:row.notification_type,
+      title:row.title || "",
+      message:row.message || "",
+      isRead:row.is_read === true,
+      createdAt:row.created_at || null
+    };
+  }
+
+  function normalizeRealtimePayload(table,payload){
+    const eventType=String(payload?.eventType||"").toUpperCase();
+    const rawNew=payload?.new && Object.keys(payload.new).length ? payload.new : null;
+    const rawOld=payload?.old && Object.keys(payload.old).length ? payload.old : null;
+
+    if(table==="registrations"){
+      const id=rawNew?.id || rawOld?.id || null;
+      const deleted=eventType==="DELETE" || rawNew?.is_deleted===true;
+      return {
+        table,
+        eventType,
+        id,
+        deleted,
+        record:(!deleted && rawNew?.id)?mapReg(rawNew):null,
+        commitTimestamp:payload?.commit_timestamp || null
+      };
+    }
+
+    if(table==="teacher_notifications"){
+      const id=rawNew?.id || rawOld?.id || null;
+      return {
+        table,
+        eventType,
+        id,
+        deleted:eventType==="DELETE",
+        record:eventType==="DELETE"?null:mapTeacherNotificationRealtime(rawNew),
+        commitTimestamp:payload?.commit_timestamp || null
+      };
+    }
+
+    return {
+      table,
+      eventType,
+      id:rawNew?.id || rawOld?.id || null,
+      structural:true,
+      commitTimestamp:payload?.commit_timestamp || null
+    };
+  }
+
+  function unsubscribeRealtime(){
+    const sb=client;
+    const channel=realtimeChannel;
+    realtimeChannel=null;
+    if(!sb||!channel)return Promise.resolve();
+    return sb.removeChannel(channel).catch(error=>{
+      console.warn("Không đóng được Realtime channel.",error);
+    });
+  }
+
+  function subscribeRealtime(onChange,onStatus){
+    const sb=requireClient();
+    unsubscribeRealtime();
+
+    const channelName=`so-tu-hoc-live-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    let channel=sb.channel(channelName);
+
+    const tables=[
+      "registrations",
+      "teacher_notifications",
+      "app_settings",
+      "weeks",
+      "study_schedule",
+      "week_schedule_overrides"
+    ];
+
+    for(const table of tables){
+      channel=channel.on(
+        "postgres_changes",
+        {event:"*",schema:"public",table},
+        payload=>{
+          try{
+            onChange?.(normalizeRealtimePayload(table,payload));
+          }catch(error){
+            console.error("Realtime handler error",table,error);
+          }
+        }
+      );
+    }
+
+    channel.subscribe((status,error)=>{
+      onStatus?.(status,error||null);
+    });
+
+    realtimeChannel=channel;
+    return unsubscribeRealtime;
+  }
+
   function syncState(state,currentUser){
     if(!enabled()) return Promise.resolve();
     syncQueue=syncQueue.then(()=>syncInternal(state,currentUser)).catch(error=>{
@@ -866,6 +971,8 @@
     requestAiReview,
     deleteRegistration,
     markNotificationsRead,
+    subscribeRealtime,
+    unsubscribeRealtime,
     dateISOInTimeZone
   });
 })();

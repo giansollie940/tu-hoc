@@ -7,7 +7,7 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.3.2a";
+} from "./features/class-overview/class-overview.js?v=8.3.2b";
 import { initOwlPet } from "./ui/owl-pet.js";
 import { friendlyAppError } from "./utils/error-map.js";
 
@@ -15,6 +15,12 @@ import { friendlyAppError } from "./utils/error-map.js";
   const prod = window.SupabaseService;
   let state = null;
   let currentUser = null;
+  let realtimeStop=null;
+  let realtimeQueue=[];
+  let realtimeFlushTimer=null;
+  let realtimeStructuralRefresh=false;
+  let realtimeSubscribed=false;
+  let lastRealtimeActivity=0;
   let route="dashboard";
   let weekSelectionTouched=false;
 
@@ -658,11 +664,196 @@ import { friendlyAppError } from "./utils/error-map.js";
     };
   }
 
+
+  function realtimeInputBusy(){
+    const active=document.activeElement;
+    const activeEditor=active?.matches?.("input,textarea,select,[contenteditable='true']");
+    const modalOpen=!modal.classList.contains("hidden");
+    return Boolean(modalOpen||activeEditor);
+  }
+
+  function comparableRegistration(registration){
+    if(!registration)return null;
+    const {updatedAt,...rest}=registration;
+    return rest;
+  }
+
+  function sameRealtimeRegistration(a,b){
+    return JSON.stringify(comparableRegistration(a))===JSON.stringify(comparableRegistration(b));
+  }
+
+  function sameRealtimeNotification(a,b){
+    return JSON.stringify(a||null)===JSON.stringify(b||null);
+  }
+
+  function applyRealtimeEvent(change){
+    if(!change||!state)return false;
+
+    if(change.table==="registrations"){
+      const id=change.id||change.record?.id;
+      if(!id)return false;
+
+      const index=state.registrations.findIndex(row=>row.id===id);
+
+      if(change.deleted){
+        if(index<0)return false;
+        state.registrations.splice(index,1);
+        return true;
+      }
+
+      const incoming=change.record;
+      if(!incoming)return false;
+
+      if(index>=0){
+        if(sameRealtimeRegistration(state.registrations[index],incoming))return false;
+        state.registrations[index]=incoming;
+      }else{
+        state.registrations.push(incoming);
+      }
+      return true;
+    }
+
+    if(change.table==="teacher_notifications"){
+      if(currentUser?.role!=="teacher")return false;
+      const id=change.id||change.record?.id;
+      if(!id)return false;
+
+      const notifications=state.notifications||(state.notifications=[]);
+      const index=notifications.findIndex(row=>row.id===id);
+
+      if(change.deleted){
+        if(index<0)return false;
+        notifications.splice(index,1);
+        return true;
+      }
+
+      const incoming=change.record;
+      if(!incoming)return false;
+
+      if(index>=0){
+        if(sameRealtimeNotification(notifications[index],incoming))return false;
+        notifications[index]=incoming;
+      }else{
+        notifications.unshift(incoming);
+        if(notifications.length>100)notifications.length=100;
+      }
+      return true;
+    }
+
+    if(change.structural){
+      realtimeStructuralRefresh=true;
+    }
+
+    return false;
+  }
+
+  async function flushRealtimeQueue(){
+    clearTimeout(realtimeFlushTimer);
+    realtimeFlushTimer=null;
+
+    if(!currentUser||!state){
+      realtimeQueue=[];
+      realtimeStructuralRefresh=false;
+      return;
+    }
+
+    if(document.hidden||realtimeInputBusy()){
+      realtimeFlushTimer=setTimeout(flushRealtimeQueue,500);
+      return;
+    }
+
+    const queue=realtimeQueue;
+    realtimeQueue=[];
+
+    // Coalesce nhiều UPDATE liên tiếp của cùng một row.
+    const coalesced=new Map();
+    for(const change of queue){
+      const key=change?.id
+        ?`${change.table}:${change.id}`
+        :`${change.table}:structural`;
+      coalesced.set(key,change);
+    }
+
+    let changed=false;
+    for(const change of coalesced.values()){
+      changed=applyRealtimeEvent(change)||changed;
+    }
+
+    if(realtimeStructuralRefresh){
+      realtimeStructuralRefresh=false;
+      try{
+        await refreshFromServer(false);
+      }catch(error){
+        console.warn("Realtime structural refresh failed.",error);
+      }
+      return;
+    }
+
+    if(changed){
+      renderShell();
+      render();
+    }
+  }
+
+  function queueRealtimeChange(change){
+    lastRealtimeActivity=Date.now();
+    realtimeQueue.push(change);
+
+    clearTimeout(realtimeFlushTimer);
+    realtimeFlushTimer=setTimeout(flushRealtimeQueue,220);
+  }
+
+  function startRealtime(){
+    realtimeStop?.();
+    realtimeStop=null;
+    realtimeSubscribed=false;
+
+    if(!currentUser||!prod?.subscribeRealtime)return;
+
+    realtimeStop=prod.subscribeRealtime(
+      queueRealtimeChange,
+      (status,error)=>{
+        if(status==="SUBSCRIBED"){
+          const wasSubscribed=realtimeSubscribed;
+          realtimeSubscribed=true;
+          lastRealtimeActivity=Date.now();
+
+          // Khi vừa reconnect sau lỗi/mất mạng, tải một snapshot yên lặng.
+          if(wasSubscribed===false && realtimeQueue.length){
+            clearTimeout(realtimeFlushTimer);
+            realtimeFlushTimer=setTimeout(flushRealtimeQueue,100);
+          }
+          return;
+        }
+
+        if(["CHANNEL_ERROR","TIMED_OUT","CLOSED"].includes(status)){
+          realtimeSubscribed=false;
+          if(error)console.warn("Supabase Realtime",status,error);
+        }
+      }
+    );
+  }
+
+  function stopRealtime(){
+    clearTimeout(realtimeFlushTimer);
+    realtimeFlushTimer=null;
+    realtimeQueue=[];
+    realtimeStructuralRefresh=false;
+    realtimeSubscribed=false;
+    const stop=realtimeStop;
+    realtimeStop=null;
+    try{stop?.();}catch(error){console.warn(error);}
+  }
+
   function login(user){
     currentUser=user;
-    route="dashboard"; renderShell(); render();
+    route="dashboard";
+    renderShell();
+    render();
+    startRealtime();
   }
   async function logout(){
+    stopRealtime();
     try{ await prod.signOut(); }catch(err){ console.error(err); }
     currentUser=null;
     $("#wiseOwlPet")?.classList.add("hidden");
@@ -2340,8 +2531,29 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(aligned)await selectWeek(state.currentWeekId);
       renderShell();
       render();
-      const seconds=Math.max(30,Number(window.APP_CONFIG?.refreshSeconds||60));
-      setInterval(()=>{ if(currentUser && !document.hidden) refreshFromServer(false); },seconds*1000);
+      startRealtime();
+
+      // Polling chỉ là lớp dự phòng. Realtime xử lý luồng chính.
+      const fallbackSeconds=Math.max(120,Number(window.APP_CONFIG?.fallbackRefreshSeconds||180));
+      setInterval(()=>{
+        if(!currentUser||document.hidden||realtimeInputBusy())return;
+        refreshFromServer(false);
+      },fallbackSeconds*1000);
+
+      document.addEventListener("visibilitychange",()=>{
+        if(document.hidden||!currentUser)return;
+
+        if(realtimeQueue.length){
+          clearTimeout(realtimeFlushTimer);
+          realtimeFlushTimer=setTimeout(flushRealtimeQueue,120);
+          return;
+        }
+
+        // Sau khi tab ngủ lâu, đồng bộ một lần để bù cho WebSocket có thể bị ngắt.
+        if(Date.now()-lastRealtimeActivity>90000){
+          refreshFromServer(false);
+        }
+      });
     }else renderShell();
   }catch(err){
     console.error(err); renderShell();
