@@ -7,7 +7,7 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.3.2";
+} from "./features/class-overview/class-overview.js?v=8.3.2a";
 import { initOwlPet } from "./ui/owl-pet.js";
 import { friendlyAppError } from "./utils/error-map.js";
 
@@ -617,19 +617,45 @@ import { friendlyAppError } from "./utils/error-map.js";
   function regFor(studentId,dow,p,weekId=state.currentWeekId){
     return state.registrations.find(r=>r.studentId===studentId&&r.weekId===weekId&&r.dow===dow&&r.period===p);
   }
+  function registrationBucket(r){
+    if(!r||r.status==="draft")return "missing";
+    if(isRevisionOverdue(r))return "issue";
+    return "valid";
+  }
+
   function statsForWeek(){
     const students=studentUsers(), slots=effectiveSchedule();
     const total=students.length*slots.length;
-    let submitted=0,approved=0,needs=0,autoApproved=0,aiApproved=0;
+    let valid=0,issues=0,missing=0,approved=0,needs=0,autoApproved=0,aiApproved=0;
+
     students.forEach(s=>slots.forEach(sl=>{
       const r=regFor(s.id,sl.dow,sl.period);
-      if(r && r.status!=="draft"){submitted++;}
-      if(r?.status==="approved")approved++;
-      if(r?.status==="approved"&&["auto_rule","ai"].includes(r?.approvalSource))autoApproved++;
-      if(r?.status==="approved"&&r?.approvalSource==="ai")aiApproved++;
-      if(r?.status==="needs_revision"&&!isRevisionOverdue(r))needs++;
+      const bucket=registrationBucket(r);
+
+      if(bucket==="valid")valid++;
+      else if(bucket==="issue")issues++;
+      else missing++;
+
+      if(bucket==="valid"&&r?.status==="approved")approved++;
+      if(bucket==="valid"&&r?.status==="approved"&&["auto_rule","ai"].includes(r?.approvalSource))autoApproved++;
+      if(bucket==="valid"&&r?.status==="approved"&&r?.approvalSource==="ai")aiApproved++;
+      if(bucket==="valid"&&r?.status==="needs_revision")needs++;
     }));
-    return {students:students.length,slots:slots.length,total,submitted,approved,autoApproved,aiApproved,needs,missing:Math.max(0,total-submitted),rate:total?Math.round(submitted/total*100):0};
+
+    return {
+      students:students.length,
+      slots:slots.length,
+      total,
+      valid,
+      submitted:valid,
+      issues,
+      missing,
+      approved,
+      autoApproved,
+      aiApproved,
+      needs,
+      rate:total?Math.round(valid/total*100):0
+    };
   }
 
   function login(user){
@@ -818,14 +844,20 @@ import { friendlyAppError } from "./utils/error-map.js";
 
   function studentDashboard(){
     const slots=effectiveSchedule(), regs=slots.map(sl=>regFor(currentUser.id,sl.dow,sl.period));
-    const done=regs.filter(r=>r&&r.status!=="draft").length, total=slots.length, pct=total?Math.round(done/total*100):0;
+    const done=regs.filter(r=>registrationBucket(r)==="valid").length;
+    const issueCount=regs.filter(r=>registrationBucket(r)==="issue").length;
+    const total=slots.length, pct=total?Math.round(done/total*100):0;
     const actual=actualWeek();
     const viewingNext=actual&&week().number>actual.number;
     let html=head("Trang chủ",`Xin chào ${esc(currentUser.name)} 👋`)+weekBanner();
     if(viewingNext){
       html+=`<div class="callout next-action-week"><b>➡ Đã chuyển sang Tuần ${week().number}.</b> Các buổi còn lại của tuần trước đã bắt đầu/đã qua nên app ưu tiên tuần có buổi đăng ký tiếp theo.</div>`;
     }
-    html+=`<div class="card" style="margin-bottom:16px"><div class="toolbar"><b>Tiến độ của bạn</b><span class="right"><b>${done}/${total}</b> tiết</span></div><div class="progress" style="margin-top:10px"><span style="width:${pct}%"></span></div></div>`;
+    html+=`<div class="card" style="margin-bottom:16px">
+      <div class="toolbar"><b>Tiến độ hợp lệ của bạn</b><span class="right"><b>${done}/${total}</b> tiết</span></div>
+      <div class="progress" style="margin-top:10px"><span style="width:${pct}%"></span></div>
+      ${issueCount?`<p class="tiny revision-overdue-note" style="margin-top:10px">⚠️ ${issueCount} tiết đang ở Báo cáo lỗi và không tính vào tiến độ hợp lệ.</p>`:""}
+    </div>`;
     if(!slots.length) html+=empty("📅","Tuần này chưa có tiết tự học.");
     else html+=`<div class="grid">${slots.map((sl,i)=>studyCard(sl,regs[i])).join("")}</div>`;
     return html;
@@ -1404,7 +1436,13 @@ import { friendlyAppError } from "./utils/error-map.js";
     const pending=pendingAll.slice(0,6), st=statsForWeek();
     const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
     let html=head("Dashboard",`Tổng quan tuần ${week().number}`)+weekBanner();
-    html+=`<div class="grid grid-5" style="margin-bottom:16px">${kpi("👥",st.students,"Thành viên")}${kpi("✨",st.autoApproved,"Duyệt nhanh")}${kpi("⌛",st.missing,"Chưa gửi")}${kpi("🔔",unread||pendingAll.length,"Cần GV xem")}${kpi("📈",st.rate+"%","Tỷ lệ hoàn thành")}</div>`;
+    html+=`<div class="grid three-state-kpi-grid" style="margin-bottom:16px">
+      ${kpi("✅",st.valid,"Đăng ký hợp lệ")}
+      ${kpi("⚠️",st.issues,"Báo cáo lỗi")}
+      ${kpi("🚨",st.missing,"Chưa đăng ký")}
+      ${kpi("🔔",unread||pendingAll.length,"Cần GV xem")}
+      ${kpi("📈",st.rate+"%","Hoàn thành hợp lệ")}
+    </div>`;
     html+=`<div class="smart-approval-banner ${state.settings.smartApprovalEnabled===false?"off":"on"}">
       <div><b>${state.settings.smartApprovalEnabled===false?"⏸ Duyệt nhanh đang tắt":"✨ Duyệt nhanh đang bật"}</b>
       <span>${state.settings.smartApprovalEnabled===false
@@ -1416,7 +1454,13 @@ import { friendlyAppError } from "./utils/error-map.js";
     </div>`;
     html+=`<div class="grid grid-2"><div class="card"><h3>🔔 Cần giáo viên xử lý</h3>${pending.length?pending.map(approvalItem).join(""):empty("✅","Không còn đăng ký chờ xử lý.")}</div>
       <div class="card"><h3>Tuần hiện tại</h3><p><b>Tuần ${week().number}</b></p><p>${fmtDate(week().startDate)} – ${fmtDate(week().endDate)}</p><p><b>Kiểu deadline:</b> ${deadlineModeLabel(week().deadlineMode)}</p><p>${deadlineChip(week())}</p><p>Trạng thái: ${weekStatus(effectiveWeekStatus(week()))}</p>
-      <div class="progress"><span style="width:${st.rate}%"></span></div><p class="muted tiny">${st.submitted}/${st.total} lượt đã đăng ký</p></div></div>`;
+      <div class="progress"><span style="width:${st.rate}%"></span></div>
+      <div class="three-state-inline">
+        <span class="state-valid">✅ ${st.valid} hợp lệ</span>
+        <span class="state-issue">⚠️ ${st.issues} báo cáo lỗi</span>
+        <span class="state-missing">🚨 ${st.missing} chưa đăng ký</span>
+      </div>
+      <p class="muted tiny">${st.valid}/${st.total} lượt hoàn thành hợp lệ · ${st.valid+st.issues+st.missing}/${st.total} lượt đã phân loại</p></div></div>`;
     return html;
   }
   function kpi(icon,val,label){return `<div class="card kpi"><div class="kpi-icon">${kpiClayIcon(icon)}</div><div><div class="kpi-value">${val}</div><div class="kpi-label">${label}</div></div></div>`;}
@@ -2082,14 +2126,27 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
 
   function statsPage(){
+    const current=statsForWeek();
     const rows=state.weeks.slice(0,12).map(w=>{
       const old=state.currentWeekId; state.currentWeekId=w.id; const st=statsForWeek(); state.currentWeekId=old;
-      return {w,rate:st.rate,submitted:st.submitted,total:st.total};
+      return {w,rate:st.rate,valid:st.valid,issues:st.issues,missing:st.missing,total:st.total};
     });
-    return head("Thống kê","Tỷ lệ đăng ký theo tuần.")+
-      `<div class="grid grid-3" style="margin-bottom:16px">${kpi("📈",statsForWeek().rate+"%","Tuần đang xem")}${kpi("✅",statsForWeek().approved,"Đã duyệt")}${kpi("⚠️",statsForWeek().missing,"Còn thiếu")}</div>
-      <div class="card"><h3>12 tuần đầu năm học</h3>${rows.map(x=>`<div class="bar-row"><span>Tuần ${x.w.number}</span><div class="bar-track"><div class="bar-fill" style="width:${x.rate}%"></div></div><b>${x.rate}%</b></div>`).join("")}
-      <button id="exportCsv" class="btn btn-ghost" style="margin-top:12px">⬇ Xuất CSV tuần đang xem</button></div>`;
+    return head("Thống kê","Tỷ lệ hoàn thành hợp lệ theo tuần.")+
+      `<div class="grid grid-4" style="margin-bottom:16px">
+        ${kpi("✅",current.valid,"Đăng ký hợp lệ")}
+        ${kpi("⚠️",current.issues,"Báo cáo lỗi")}
+        ${kpi("🚨",current.missing,"Chưa đăng ký")}
+        ${kpi("📈",current.rate+"%","Hoàn thành hợp lệ")}
+      </div>
+      <div class="card"><h3>12 tuần đầu năm học</h3>
+        ${rows.map(x=>`<div class="bar-row three-state-bar-row">
+          <span>Tuần ${x.w.number}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${x.rate}%"></div></div>
+          <b>${x.rate}%</b>
+          <small>✅ ${x.valid} · ⚠️ ${x.issues} · 🚨 ${x.missing}</small>
+        </div>`).join("")}
+        <button id="exportCsv" class="btn btn-ghost" style="margin-top:12px">⬇ Xuất CSV tuần đang xem</button>
+      </div>`;
   }
   function csvCell(value){
     let text=String(value??"");
@@ -2109,7 +2166,10 @@ import { friendlyAppError } from "./utils/error-map.js";
         lines.push([
           student.code,
           student.name,
-          ...slots.map(sl=>statusLabel[regFor(student.id,sl.dow,sl.period)?.status]||"Chưa đăng ký")
+          ...slots.map(sl=>{
+            const r=regFor(student.id,sl.dow,sl.period);
+            return statusLabel[effectiveRegistrationStatus(r)]||"Chưa đăng ký";
+          })
         ].map(csvCell).join(","));
       });
       const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"}), a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`so-tu-hoc-tuan-${week().number}.csv`;a.click();URL.revokeObjectURL(a.href);

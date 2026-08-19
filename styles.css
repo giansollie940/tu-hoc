@@ -2026,3 +2026,125 @@ textarea:focus{
   font-weight:800;
 }
 
+/* =========================
+   V8.3.2a — THREE-STATE REGISTRATION COUNTS
+   Hợp lệ / Báo cáo lỗi / Chưa đăng ký
+   ========================= */
+
+.three-state-kpi-grid{
+  grid-template-columns:repeat(5,minmax(0,1fr));
+}
+
+.three-state-inline{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px;
+}
+
+.three-state-inline > span,
+.three-state-session-counts > span{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:5px 8px;
+  border-radius:10px;
+  font-size:12px;
+  font-weight:800;
+}
+
+.state-valid{
+  color:#15803d;
+}
+.state-issue{
+  color:#b45309;
+}
+.state-missing{
+  color:#b91c1c;
+}
+
+.three-state-inline .state-valid,
+.three-state-session-counts .state-valid{
+  background:#f0fdf4;
+  border:1px solid #bbf7d0;
+}
+.three-state-inline .state-issue,
+.three-state-session-counts .state-issue{
+  background:#fffbeb;
+  border:1px solid #fde68a;
+}
+.three-state-inline .state-missing,
+.three-state-session-counts .state-missing{
+  background:#fff1f2;
+  border:1px solid #fecdd3;
+}
+
+.class-three-state-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+  margin-bottom:16px;
+}
+
+.class-state-card{
+  min-width:0;
+  padding:14px 16px;
+  border:1px solid #e2edff;
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 12px 26px rgba(91,118,255,.08);
+}
+
+.class-state-card b{
+  display:block;
+  font-size:24px;
+  line-height:1.1;
+  margin-bottom:5px;
+}
+
+.class-state-card span{
+  color:#66748b;
+  font-size:12px;
+  font-weight:800;
+}
+
+.three-state-session-counts{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+}
+
+.three-state-bar-row{
+  grid-template-columns:80px minmax(100px,1fr) 54px minmax(150px,auto);
+}
+.three-state-bar-row small{
+  color:#66748b;
+  font-weight:700;
+  white-space:nowrap;
+}
+
+@media(max-width:1000px){
+  .three-state-kpi-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .class-three-state-summary{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media(max-width:560px){
+  .three-state-kpi-grid,
+  .class-three-state-summary{
+    grid-template-columns:1fr;
+  }
+
+  .three-state-bar-row{
+    grid-template-columns:64px minmax(80px,1fr) 48px;
+  }
+
+  .three-state-bar-row small{
+    grid-column:1/-1;
+    white-space:normal;
+  }
+}
+
