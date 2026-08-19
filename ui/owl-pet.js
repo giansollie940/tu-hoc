@@ -63,26 +63,25 @@ export function initOwlPet(root = document) {
     const dy = event.clientY - centerY;
     const distance = Math.hypot(dx, dy);
 
-    // Con trỏ càng gần cú thì phản ứng rõ hơn; ở xa vẫn nhìn nhẹ.
-    const activeRadius = Math.max(window.innerWidth, window.innerHeight) * 0.9;
-    const proximity = clamp(1 - distance / activeRadius, 0, 1);
-    const eyeWeight = 0.24 + proximity * 0.76;
+    // Mắt luôn nhìn theo đúng hướng con trỏ, kể cả khi con trỏ ở xa.
+    // Khoảng cách chỉ quyết định mức đạt tới biên, không làm mất hướng nhìn.
+    const eyeReachX = Math.max(bounds.width * 1.05, 88);
+    const eyeReachY = Math.max(bounds.height * 1.10, 92);
 
-    targetX = clamp(
-      (dx / Math.max(bounds.width * 0.38, 30)) * 3.6 * eyeWeight,
-      -4.0,
-      4.0
-    );
-    targetY = clamp(
-      (dy / Math.max(bounds.height * 0.34, 28)) * 2.9 * eyeWeight,
-      -3.1,
-      3.1
-    );
+    const eyeDirX = clamp(dx / eyeReachX, -1, 1);
+    const eyeDirY = clamp(dy / eyeReachY, -1, 1);
+
+    // Thu nhỏ biên độ thêm để đồng tử không chạy sát mép mắt.
+    targetX = eyeDirX * 3.35;
+    targetY = eyeDirY * 2.55;
 
     // Đầu theo sau mắt, biên độ nhỏ hơn nhiều.
     const nx = clamp(dx / Math.max(bounds.width * 1.15, 105), -1, 1);
     const ny = clamp(dy / Math.max(bounds.height * 1.35, 120), -1, 1);
-    const headWeight = 0.38 + proximity * 0.62;
+
+    // Đầu vẫn phản ứng nhẹ hơn mắt nhưng không mất hướng khi chuột ở xa.
+    const headDistance = Math.max(bounds.width * 0.9, 90);
+    const headWeight = 0.55 + clamp(distance / headDistance, 0, 1) * 0.45;
 
     targetHeadRotate = clamp(nx * 4.2 * headWeight, -4.2, 4.2);
     targetHeadX = clamp(nx * 1.6 * headWeight, -1.6, 1.6);
@@ -93,8 +92,8 @@ export function initOwlPet(root = document) {
     if (destroyed) return;
 
     // Mắt phản ứng nhanh hơn, đầu theo sau chậm hơn một chút.
-    currentX += (targetX - currentX) * 0.18;
-    currentY += (targetY - currentY) * 0.18;
+    currentX += (targetX - currentX) * 0.28;
+    currentY += (targetY - currentY) * 0.28;
 
     currentHeadRotate += (targetHeadRotate - currentHeadRotate) * 0.105;
     currentHeadX += (targetHeadX - currentHeadX) * 0.105;
