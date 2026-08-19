@@ -25,11 +25,16 @@ function sessionRegistrations(session, registrations) {
   );
 }
 
+function effectiveStatus(registration) {
+  return registration?.revisionOverdueAt ? "revision_overdue" : registration?.status;
+}
+
 function statusText(status) {
   return {
     approved: "Đã duyệt",
     submitted: "Chờ duyệt",
-    needs_revision: "Cần chỉnh sửa"
+    needs_revision: "Cần chỉnh sửa",
+    revision_overdue: "Báo cáo lỗi"
   }[status] ?? status;
 }
 
@@ -94,15 +99,19 @@ export function renderSessionDetails({
     rows = rows.filter(registration => registration.usesElectronicDevice !== true);
   } else if (filter === "needs_action") {
     rows = rows.filter(registration =>
-      ["submitted", "needs_revision"].includes(registration.status)
+      !registration.revisionOverdueAt
+      && ["submitted", "needs_revision"].includes(registration.status)
     );
+  } else if (filter === "revision_overdue") {
+    rows = rows.filter(registration => Boolean(registration.revisionOverdueAt));
   }
 
   const filterButtons = [
     ["all", "Tất cả"],
     ["device", "Dùng thiết bị"],
     ["no_device", "Không dùng thiết bị"],
-    ["needs_action", "Cần xử lý"]
+    ["needs_action", "Cần xử lý"],
+    ["revision_overdue", "Báo cáo lỗi"]
   ].map(([value, label]) =>
     '<button type="button" class="filter-chip' + (filter === value ? " active" : "") +
     '" data-session-filter="' + value + '">' + label + "</button>"
@@ -113,10 +122,14 @@ export function renderSessionDetails({
     const teacherActions = role === "teacher"
       ? [
           '<div class="session-detail-actions">',
-          registration.status !== "approved"
-            ? '<button class="btn btn-success approve-btn" data-id="' + escapeHtml(registration.id) + '">Duyệt</button>'
-            : "",
-          '<button class="btn btn-warning revise-btn" data-id="' + escapeHtml(registration.id) + '">Yêu cầu sửa</button>',
+          registration.revisionOverdueAt
+            ? ""
+            : (registration.status !== "approved"
+                ? '<button class="btn btn-success approve-btn" data-id="' + escapeHtml(registration.id) + '">Duyệt</button>'
+                : ""),
+          registration.revisionOverdueAt
+            ? ""
+            : '<button class="btn btn-warning revise-btn" data-id="' + escapeHtml(registration.id) + '">Yêu cầu sửa</button>',
           '<button class="btn btn-ghost comment-btn" data-id="' + escapeHtml(registration.id) + '">Nhận xét</button>',
           '<button class="btn btn-danger delete-reg-btn" data-id="' + escapeHtml(registration.id) + '">Xóa</button>',
           "</div>"
@@ -132,7 +145,7 @@ export function renderSessionDetails({
       registration.note ? "<p>" + escapeHtml(registration.note) + "</p>" : "",
       "  </div>",
       '  <div class="session-detail-meta">',
-      '    <span class="status ' + escapeHtml(registration.status) + '">' + escapeHtml(statusText(registration.status)) + "</span>",
+      '    <span class="status ' + escapeHtml(effectiveStatus(registration)) + '">' + escapeHtml(statusText(effectiveStatus(registration))) + "</span>",
       registration.usesElectronicDevice
         ? '<span class="device-badge yes">Có dùng thiết bị</span>'
         : '<span class="device-badge no">Không dùng thiết bị</span>',
