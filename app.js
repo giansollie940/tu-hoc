@@ -7,7 +7,7 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js";
+} from "./features/class-overview/class-overview.js?v=8.3.2";
 import { initOwlPet } from "./ui/owl-pet.js";
 import { friendlyAppError } from "./utils/error-map.js";
 
@@ -76,7 +76,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   });
 
   const roleLabel={student:"Học sinh",monitor:"Cán sự lớp",teacher:"Giáo viên"};
-  const statusLabel={approved:"Đã duyệt",submitted:"Chờ duyệt",needs_revision:"Cần chỉnh sửa",draft:"Bản nháp",missing:"Chưa đăng ký"};
+  const statusLabel={approved:"Đã duyệt",submitted:"Chờ duyệt",needs_revision:"Cần chỉnh sửa",revision_overdue:"Báo cáo lỗi",draft:"Bản nháp",missing:"Chưa đăng ký"};
   const DOW=["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6"];
   const navs={
     student:[
@@ -84,10 +84,10 @@ import { friendlyAppError } from "./utils/error-map.js";
     ],
     monitor:[
       ["dashboard","🌈","Tổng quan"],["register","✨","Đăng ký của tôi"],["class","🫶","Theo dõi cả lớp"],
-      ["missing","🚨","Danh sách thiếu"],["history","📚","Lịch sử của tôi"],["comments","💎","Nhận xét của GV"]
+      ["missing","🚨","Danh sách thiếu"],["issues","⚠️","Báo cáo lỗi"],["history","📚","Lịch sử của tôi"],["comments","💎","Nhận xét của GV"]
     ],
     teacher:[
-      ["dashboard","🌠","Dashboard"],["approvals","🪄","Duyệt đăng ký"],["class","🫶","Theo dõi cả lớp"],["schedule","🗓️","TKB tự học"],
+      ["dashboard","🌠","Dashboard"],["approvals","🪄","Duyệt đăng ký"],["issues","⚠️","Báo cáo lỗi"],["class","🫶","Theo dõi cả lớp"],["schedule","🗓️","TKB tự học"],
       ["weeks","📆","Quản lý tuần"],["students","🧑‍🎓","Quản lý học sinh"],["stats","📈","Thống kê"],["settings","🦄","Cài đặt"]
     ]
   };
@@ -96,6 +96,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   const uiIcons={
     dashboard:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 13.2 12 5l8 8.2V20a1 1 0 0 1-1 1h-4.8v-5.3H9.8V21H5a1 1 0 0 1-1-1v-6.8Z" stroke-width="2" stroke-linejoin="round"/></svg>`,
     approvals:`<svg viewBox="0 0 24 24" fill="none"><path d="M8 4h8l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke-width="2" stroke-linejoin="round"/><path d="M9 13.5l2 2 4-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    issues:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 3 21 20H3L12 3Z" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v5M12 17.5v.1" stroke-width="2" stroke-linecap="round"/></svg>`,
     class:`<svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="2.8" stroke-width="2"/><circle cx="16.5" cy="8" r="2.2" stroke-width="2"/><path d="M4.5 18c.9-2.6 3.2-4.2 5.8-4.2s4.9 1.6 5.8 4.2" stroke-width="2" stroke-linecap="round"/><path d="M14.7 17.6c.6-1.8 2.1-2.9 4-2.9 1.1 0 2.1.4 2.8 1.1" stroke-width="2" stroke-linecap="round"/></svg>`,
     schedule:`<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="15" rx="3" stroke-width="2"/><path d="M7.5 3v4M16.5 3v4M3.5 10h17M7 13h4M13 13h4M7 17h4" stroke-width="2" stroke-linecap="round"/></svg>`,
     weeks:`<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14h3M13 14h3M8 17.5h8" stroke-width="2" stroke-linecap="round"/></svg>`,
@@ -263,7 +264,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(manual)messages.push({urgent:true,text:`📋 Tuần ${w.number} còn ${manual} đăng ký cần giáo viên xử lý.`});
     }else{
       const mine=(state.registrations||[]).filter(r=>r.studentId===currentUser.id&&r.weekId===state.currentWeekId);
-      const needs=mine.filter(r=>r.status==="needs_revision").length;
+      const needs=mine.filter(r=>r.status==="needs_revision"&&!isRevisionOverdue(r)).length;
       const pending=mine.filter(r=>r.status==="submitted").length;
       if(needs)messages.push({urgent:true,text:`📝 Bạn có ${needs} đăng ký được giáo viên yêu cầu chỉnh sửa. Hãy mở “Nhận xét của GV”.`});
       if(pending)messages.push({text:`⏳ Bạn có ${pending} đăng ký đang chờ duyệt. Cú sẽ báo khi trạng thái thay đổi.`});
@@ -405,22 +406,28 @@ import { friendlyAppError } from "./utils/error-map.js";
     const date=s.slice(0,10), time=(s.split("T")[1]||"").slice(0,5);
     return `${fmtDate(date)} lúc ${time||"--:--"}`;
   }
+  function registrationDeadlineTime(){
+    const value=String(state?.settings?.registrationDeadlineTime||"20:00");
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(value)?value:"20:00";
+  }
   function deadlineModeLabel(mode){
+    const time=registrationDeadlineTime();
     return {
-      per_session_20:"20:00 tối hôm trước từng buổi",
-      week_before_20:"20:00 ngày trước khi tuần bắt đầu",
+      per_session_20:`${time} tối hôm trước từng buổi`,
+      week_before_20:`${time} ngày trước khi tuần bắt đầu`,
       specific:"Hạn cụ thể của tuần"
     }[mode||"per_session_20"] || "Hạn đăng ký";
   }
   function deadlineForSlot(w,dow=0){
     if(!w)return "";
     const mode=w.deadlineMode||"per_session_20";
+    const time=registrationDeadlineTime();
     if(mode==="per_session_20"){
       const sessionDate=dateForDow(w,dow);
-      return `${addDaysDateISO(sessionDate,-1)}T20:00`;
+      return `${addDaysDateISO(sessionDate,-1)}T${time}`;
     }
     if(mode==="week_before_20"){
-      return `${addDaysDateISO(w.startDate,-1)}T20:00`;
+      return `${addDaysDateISO(w.startDate,-1)}T${time}`;
     }
     return w.deadline||"";
   }
@@ -433,8 +440,9 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
   function deadlineChip(w,dow=null){
     const mode=w?.deadlineMode||"per_session_20";
+    const time=registrationDeadlineTime();
     if(mode==="per_session_20" && dow===null){
-      return `<span class="deadline-chip ok">⏰ Theo từng buổi: 20:00 tối hôm trước</span>`;
+      return `<span class="deadline-chip ok">⏰ Theo từng buổi: ${time} tối hôm trước</span>`;
     }
     const dl=deadlineForSlot(w,dow??0);
     if(!dl)return `<span class="deadline-chip neutral">⏰ Chưa đặt deadline</span>`;
@@ -442,7 +450,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
   function deadlineSummary(w){
     const mode=w?.deadlineMode||"per_session_20";
-    if(mode==="per_session_20") return "Mỗi buổi: 20:00 tối hôm trước";
+    if(mode==="per_session_20") return `Mỗi buổi: ${registrationDeadlineTime()} tối hôm trước`;
     if(mode==="week_before_20") return fmtDeadline(deadlineForSlot(w,0));
     return w?.deadline ? fmtDeadline(w.deadline) : "Chưa chọn hạn cụ thể";
   }
@@ -451,8 +459,27 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(n.registrationId===registrationId)n.isRead=true;
     });
   }
+  function isRevisionOverdue(registration){
+    if(!registration)return false;
+    if(registration.revisionOverdueAt)return true;
+    if(registration.status!=="needs_revision")return false;
+    const registrationWeek=state?.weeks?.find(w=>w.id===registration.weekId);
+    if(!registrationWeek)return false;
+    return sessionHasStarted(registrationWeek,registration.dow,registration.period);
+  }
+  function effectiveRegistrationStatus(registration){
+    return isRevisionOverdue(registration)?"revision_overdue":(registration?.status||"missing");
+  }
+  function revisionReportTime(registration){
+    if(registration?.revisionOverdueAt)return registration.revisionOverdueAt;
+    const registrationWeek=state?.weeks?.find(w=>w.id===registration?.weekId);
+    if(!registrationWeek)return null;
+    const start=sessionStartTime(registrationWeek,registration.dow,registration.period);
+    return Number.isFinite(start)?new Date(start).toISOString():null;
+  }
   function needsTeacherReview(registration){
-    return ["submitted","needs_revision"].includes(registration?.status)
+    return !isRevisionOverdue(registration)
+      && ["submitted","needs_revision"].includes(registration?.status)
       && !["pending","processing"].includes(registration?.aiReviewStatus);
   }
 
@@ -600,7 +627,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(r?.status==="approved")approved++;
       if(r?.status==="approved"&&["auto_rule","ai"].includes(r?.approvalSource))autoApproved++;
       if(r?.status==="approved"&&r?.approvalSource==="ai")aiApproved++;
-      if(r?.status==="needs_revision")needs++;
+      if(r?.status==="needs_revision"&&!isRevisionOverdue(r))needs++;
     }));
     return {students:students.length,slots:slots.length,total,submitted,approved,autoApproved,aiApproved,needs,missing:Math.max(0,total-submitted),rate:total?Math.round(submitted/total*100):0};
   }
@@ -810,8 +837,11 @@ import { friendlyAppError } from "./utils/error-map.js";
     const started=sessionHasStarted(w,sl.dow,sl.period);
     const pastDeadline=deadlinePassed(w,sl.dow);
     const emergency=emergencyRegistrationEligible(w,sl.dow,sl.period,r);
+    const reported=isRevisionOverdue(r);
 
-    const icon=r?.status==="approved"
+    const icon=reported
+      ?"⚠️"
+      :r?.status==="approved"
       ?"✅"
       :r?.status==="needs_revision"
         ?"📝"
@@ -825,15 +855,17 @@ import { friendlyAppError } from "./utils/error-map.js";
 
     const regularNewAllowed=!r&&effectiveStatus==="open"&&!pastDeadline&&!started;
     const approvedEditable=r?.status==="approved"&&effectiveStatus==="open"&&!pastDeadline&&!started;
-    const revisionEditable=r?.status==="needs_revision";
+    const revisionEditable=r?.status==="needs_revision"&&!reported&&!started;
     const ordinaryEditable=!!r&&["draft","submitted"].includes(r.status)&&effectiveStatus==="open"&&!pastDeadline&&!started;
     const editable=approvedEditable||revisionEditable||ordinaryEditable;
 
     let actionHtml="";
     if(r){
-      const label=approvedEditable
-        ?"Sửa đăng ký"
-        :revisionEditable
+      const label=reported
+        ?"Xem báo cáo lỗi"
+        :approvedEditable
+          ?"Sửa đăng ký"
+          :revisionEditable
           ?"Sửa theo yêu cầu"
           :ordinaryEditable
             ?"Xem / sửa"
@@ -873,6 +905,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         ${emergency?`<p class="tiny emergency-note">🚨 Deadline đã qua nhưng buổi học chưa bắt đầu. Đăng ký bổ sung sẽ được AI kiểm tra trước; chỉ trường hợp có vấn đề mới chuyển GV duyệt.</p>`:""}
         <p><b>${r?esc(r.content):"Chưa đăng ký"}</b></p>
         ${r?.note?`<p>${esc(r.note)}</p>`:""}
+        ${reported?`<p class="tiny revision-overdue-note">⚠️ Quá thời hạn chỉnh sửa trước khi tiết tự học bắt đầu. Đã chuyển sang Báo cáo lỗi.</p>`:""}
         ${r?.teacherComment?`<p style="color:#7c3aed">💬 GV: ${esc(r.teacherComment)}</p>`:""}
         ${r?.isEmergency?`<p class="tiny emergency-badge">🚨 Đăng ký bổ sung · ${esc(r.emergencyReason||"")}</p>`:""}
         ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="ai"?`<p class="tiny device-ai-badge">🤖 AI phát hiện nội dung có sử dụng thiết bị điện tử${r.deviceDetectionConfidence==null?"":` · ${Math.round(r.deviceDetectionConfidence*100)}%`}</p>`:""}
@@ -882,7 +915,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         ${["pending","processing"].includes(r?.aiReviewStatus)?`<p class="tiny ai-review-badge">🤖 AI đang đánh giá...</p>`:""}
       </div>
       <div class="study-actions">
-        ${statusBadge(r?.status||"missing")}
+        ${statusBadge(effectiveRegistrationStatus(r))}
         ${actionHtml}
       </div>
     </div>`;
@@ -940,7 +973,8 @@ import { friendlyAppError } from "./utils/error-map.js";
       &&effectiveWeekStatus(w)==="open"
       &&!pastDeadline
       &&!started;
-    const needsRevision=r?.status==="needs_revision";
+    const reported=isRevisionOverdue(r);
+    const needsRevision=r?.status==="needs_revision"&&!reported&&!started;
     const ordinaryEdit=!!r
       &&["draft","submitted"].includes(r.status)
       &&effectiveWeekStatus(w)==="open"
@@ -962,10 +996,11 @@ import { friendlyAppError } from "./utils/error-map.js";
       </div>
 
       ${approvedEdit?`<div class="callout re-review-callout"><b>✏️ Sửa đăng ký đã duyệt.</b> Khi bạn lưu thay đổi, đăng ký sẽ được gửi duyệt lại từ đầu.</div>`:""}
-      ${needsRevision?`<div class="callout"><b>GV đã yêu cầu chỉnh sửa.</b> Bạn vẫn được sửa và gửi duyệt lại dù deadline đã qua.</div>`:""}
+      ${reported?`<div class="callout warning"><b>⚠️ Báo cáo lỗi.</b> Đăng ký đã không được chỉnh sửa trước khi tiết tự học bắt đầu nên không còn ở trạng thái nhắc sửa.</div>`:""}
+      ${needsRevision?`<div class="callout"><b>GV đã yêu cầu chỉnh sửa.</b> Bạn vẫn được sửa và gửi duyệt lại sau deadline, nhưng chỉ đến trước giờ bắt đầu tiết tự học.</div>`:""}
       ${r?.isEmergency?`<div class="callout emergency-callout"><b>🚨 Đây là đăng ký bổ sung.</b> Lý do: ${esc(r.emergencyReason||"—")}</div>`:""}
       ${started?`<div class="callout warning"><b>Buổi tự học đã bắt đầu/đã qua.</b> Không thể tạo đăng ký mới hoặc sửa đăng ký bình thường.</div>`:""}
-      ${pastDeadline&&!needsRevision?`<div class="callout warning"><b>Đã qua deadline.</b> Hạn mặc định là 20:00 tối hôm trước buổi học.</div>`:""}
+      ${pastDeadline&&!needsRevision&&!reported?`<div class="callout warning"><b>Đã qua deadline.</b> Hạn tự động hiện tại là ${registrationDeadlineTime()} tối hôm trước buổi học.</div>`:""}
       ${r?.teacherComment?`<div class="callout warning"><b>Nhận xét giáo viên:</b><br>${esc(r.teacherComment)}</div>`:""}
 
       <form id="regForm">
@@ -1259,7 +1294,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     const regs=state.registrations.filter(r=>r.studentId===currentUser.id).sort((a,b)=>b.updatedAt-a.updatedAt);
     return head("Lịch sử của tôi","Xem lại đăng ký ở các tuần trước.")+
       (regs.length?`<div class="card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Tuần</th><th>Tiết</th><th>Nội dung</th><th>Trạng thái</th><th>Nhận xét GV</th></tr></thead><tbody>
-      ${regs.map(r=>{const w=state.weeks.find(x=>x.id===r.weekId);return `<tr><td>Tuần ${w?.number||"?"}</td><td>${slotLabel(r.dow,r.period)}</td><td><b>${esc(r.content)}</b>${r.isEmergency?`<div class="tiny emergency-badge">🚨 Bổ sung khẩn cấp</div>`:""}<div class="tiny muted">${esc(r.note||"")}</div></td><td>${statusBadge(r.status)}</td><td>${esc(r.teacherComment||"—")}</td></tr>`}).join("")}
+      ${regs.map(r=>{const w=state.weeks.find(x=>x.id===r.weekId);return `<tr><td>Tuần ${w?.number||"?"}</td><td>${slotLabel(r.dow,r.period)}</td><td><b>${esc(r.content)}</b>${r.isEmergency?`<div class="tiny emergency-badge">🚨 Bổ sung khẩn cấp</div>`:""}<div class="tiny muted">${esc(r.note||"")}</div></td><td>${statusBadge(effectiveRegistrationStatus(r))}</td><td>${esc(r.teacherComment||"—")}</td></tr>`}).join("")}
       </tbody></table></div></div>`:empty("🕘","Chưa có lịch sử đăng ký."));
   }
   function commentsPage(){
@@ -1275,9 +1310,12 @@ import { friendlyAppError } from "./utils/error-map.js";
       ...session,
       label:slotLabel(session.dow,session.period)
     }));
-    const registrations=(state.registrations||[]).filter(registration=>
-      registration.weekId===state.currentWeekId
-    );
+    const registrations=(state.registrations||[])
+      .filter(registration=>registration.weekId===state.currentWeekId)
+      .map(registration=>isRevisionOverdue(registration)
+        ?{...registration,revisionOverdueAt:revisionReportTime(registration)}
+        :registration
+      );
     return renderClassOverviewV830({
       week:week(),
       sessions,
@@ -1292,9 +1330,12 @@ import { friendlyAppError } from "./utils/error-map.js";
       button.addEventListener("click",()=>{
         const [dow,periodNumber]=String(button.dataset.openSession||"").split("-").map(Number);
         const session={dow,period:periodNumber,label:slotLabel(dow,periodNumber)};
-        const registrations=(state.registrations||[]).filter(registration=>
-          registration.weekId===state.currentWeekId
-        );
+        const registrations=(state.registrations||[])
+          .filter(registration=>registration.weekId===state.currentWeekId)
+          .map(registration=>isRevisionOverdue(registration)
+            ?{...registration,revisionOverdueAt:revisionReportTime(registration)}
+            :registration
+          );
 
         const renderDetails=(filter="all")=>{
           setSafeHtml(modalBody,renderSessionDetails({
@@ -1321,6 +1362,41 @@ import { friendlyAppError } from "./utils/error-map.js";
     studentUsers().forEach(s=>slots.forEach(sl=>{const r=regFor(s.id,sl.dow,sl.period);if(!r||r.status==="draft")rows.push({s,sl});}));
     return head("Danh sách chưa đăng ký",`Tuần ${week().number} · ${rows.length} lượt còn thiếu`)+
       (rows.length?`<div class="card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Học sinh</th><th>Tiết tự học</th><th>Trạng thái</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.s.name)}</td><td>${slotLabel(x.sl.dow,x.sl.period)}</td><td>${statusBadge("missing")}</td></tr>`).join("")}</tbody></table></div></div>`:empty("🎉","Cả lớp đã đăng ký đầy đủ."));
+  }
+
+  function revisionIssuesPage(){
+    const reports=(state.registrations||[])
+      .filter(r=>r.weekId===state.currentWeekId&&isRevisionOverdue(r))
+      .sort((a,b)=>String(revisionReportTime(b)||"").localeCompare(String(revisionReportTime(a)||"")));
+
+    return head(
+      "Báo cáo lỗi",
+      `Tuần ${week().number} · ${reports.length} đăng ký không được chỉnh sửa trước giờ bắt đầu tiết`
+    )+
+      (reports.length?`<div class="card">
+        <div class="callout warning" style="margin-bottom:14px">
+          Các mục ở đây <b>không còn là yêu cầu chỉnh sửa</b>. Hệ thống chỉ ghi nhận để GV và cán sự theo dõi.
+        </div>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr>
+            <th>Học sinh</th><th>Tiết tự học</th><th>Nội dung</th>
+            <th>Yêu cầu chỉnh sửa của GV</th><th>Ghi nhận lỗi</th>
+          </tr></thead>
+          <tbody>
+            ${reports.map(r=>{
+              const s=state.users.find(u=>u.id===r.studentId);
+              const reportedAt=revisionReportTime(r);
+              return `<tr>
+                <td><b>${esc(s?.name||"")}</b><div class="tiny muted">${esc(s?.code||"")}</div></td>
+                <td>${slotLabel(r.dow,r.period)}</td>
+                <td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div></td>
+                <td>${esc(r.teacherComment||"—")}</td>
+                <td>${statusBadge("revision_overdue")}<div class="tiny muted" style="margin-top:5px">${reportedAt?new Date(reportedAt).toLocaleString("vi-VN"):"—"}</div></td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table></div>
+      </div>`:empty("✅","Tuần này chưa có báo cáo lỗi chỉnh sửa quá hạn."));
   }
 
   function teacherDashboard(){
@@ -1442,7 +1518,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             <div class="tiny muted">${esc(r.note||"")}</div>
             ${r.approvalSource==="ai"&&r.aiReason?`<div class="ai-review-details">🤖 ${esc(r.aiReason)}</div>`:""}
           </td>
-          <td>${statusBadge(r.status)}</td>
+          <td>${statusBadge(effectiveRegistrationStatus(r))}</td>
           <td>${sourceBadge(r)}</td>
           <td>
             <div class="toolbar" style="gap:5px">
@@ -1476,7 +1552,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             <td>${slotLabel(r.dow,r.period)}</td>
             <td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div></td>
             <td>${esc(r.emergencyReason||"—")}</td>
-            <td>${statusBadge(r.status)}<div style="margin-top:5px">${reviewLabel}</div></td>
+            <td>${statusBadge(effectiveRegistrationStatus(r))}<div style="margin-top:5px">${reviewLabel}</div></td>
             <td>${r.emergencyRequestedAt?new Date(r.emergencyRequestedAt).toLocaleString("vi-VN"):"—"}</td>
             <td><div class="toolbar" style="gap:5px">
               ${r.status==="approved"&&r.approvalSource==="ai"
@@ -1549,7 +1625,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         </div>
         <div class="deadline-choice">
           <select class="week-deadline-mode" data-id="${w.id}" aria-label="Chế độ deadline tuần ${w.number}">
-            <option value="per_session_20" ${mode==="per_session_20"?"selected":""}>🕗 Mặc định · 20:00 tối hôm trước từng buổi</option>
+            <option value="per_session_20" ${mode==="per_session_20"?"selected":""}>🕗 Mặc định · ${registrationDeadlineTime()} tối hôm trước từng buổi</option>
             <option value="specific" ${mode==="specific"?"selected":""}>🎯 Hạn cụ thể của tuần</option>
           </select>
           <input class="week-deadline" data-id="${w.id}" type="datetime-local"
@@ -1569,7 +1645,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         <div>
           <div class="eyebrow-pill">🧭 Mốc năm học</div>
           <h3>Tuần 1 bắt đầu ngày nào?</h3>
-          <p class="muted">Trạng thái mở/khóa được tự tính theo ngày. Hạn mặc định là <b>20:00 tối hôm trước từng buổi học</b>.</p>
+          <p class="muted">Trạng thái mở/khóa được tự tính theo ngày. Hạn tự động hiện tại là <b>${registrationDeadlineTime()} tối hôm trước từng buổi học</b>.</p>
         </div>
         <div class="week-setup-grid v5-week-setup-grid">
           <label>Ngày bắt đầu Tuần 1
@@ -1578,7 +1654,7 @@ import { friendlyAppError } from "./utils/error-map.js";
           </label>
           <div class="deadline-mode-guide">
             <b>Hạn đăng ký</b>
-            <span>🕗 Mặc định: 20:00 tối hôm trước từng buổi.</span>
+            <span>🕗 Mặc định: ${registrationDeadlineTime()} tối hôm trước từng buổi.</span>
             <span>🎯 Khi thật sự cần, GV có thể đặt hạn cụ thể cho cả tuần.</span>
           </div>
           <button class="btn btn-primary glossy-action" id="applyWeekCalendar">✨ Áp dụng mốc tuần</button>
@@ -1599,7 +1675,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(!confirm(`Xếp lại lịch với Tuần 1 bắt đầu ${fmtDate(start)}? Trạng thái mở/khóa sẽ được tính tự động.`))return;
 
       try{
-        await prod.teacherRebaseWeeks(start,"20:00");
+        await prod.teacherRebaseWeeks(start,registrationDeadlineTime());
         toast("Đã xếp lại lịch. Tuần hiện tại và tuần kế tiếp sẽ tự mở.","success");
         await refreshFromServer(false);
       }catch(err){
@@ -2047,6 +2123,10 @@ import { friendlyAppError } from "./utils/error-map.js";
       <div class="card"><h3>Thông tin lớp</h3><form id="settingsForm" class="form-grid">
         <label>Tên lớp<input id="setClass" value="${esc(state.settings.className)}"></label>
         <label>Năm học<input id="setYear" value="${esc(state.settings.schoolYear)}"></label>
+        <label>Mốc deadline tự động
+          <input id="registrationDeadlineTime" type="time" step="60" value="${esc(registrationDeadlineTime())}">
+          <small>Áp dụng cho chế độ “tối hôm trước từng buổi”.</small>
+        </label>
         <label style="grid-column:1/-1">Thông báo tuần<textarea id="setAnnouncement">${esc(state.settings.announcement)}</textarea></label>
 
         <div class="smart-approval-setting" style="grid-column:1/-1">
@@ -2115,16 +2195,17 @@ import { friendlyAppError } from "./utils/error-map.js";
       state.settings.smartApprovalEnabled=$("#smartApprovalEnabled").checked;
       state.settings.aiReviewEnabled=$("#aiReviewEnabled").checked;
       state.settings.aiAutoApproveThreshold=Number($("#aiAutoApproveThreshold").value)/100;
+      state.settings.registrationDeadlineTime=$("#registrationDeadlineTime").value||"20:00";
 
       state.audit.unshift({
         at:new Date().toISOString(),userId:currentUser?.id,
         action:"Cập nhật cài đặt",entityId:"settings",
-        detail:`AI=${state.settings.aiReviewEnabled}; threshold=${state.settings.aiAutoApproveThreshold}`
+        detail:`AI=${state.settings.aiReviewEnabled}; threshold=${state.settings.aiAutoApproveThreshold}; deadline=${state.settings.registrationDeadlineTime}`
       });
 
       try{
         await saveState();
-        toast("Đã lưu cài đặt Rule + AI.","success");
+        toast(`Đã lưu cài đặt. Deadline tự động: ${registrationDeadlineTime()}.`,"success");
         showOwlMessage({
           text:state.settings.aiReviewEnabled
             ? `🤖 AI review đang bật với ngưỡng tự duyệt ${Math.round(state.settings.aiAutoApproveThreshold*100)}%.`
@@ -2150,12 +2231,14 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(route==="dashboard"||route==="class")html=classOverview();
       else if(route==="register")html=studentDashboard();
       else if(route==="missing")html=missingPage();
+      else if(route==="issues")html=revisionIssuesPage();
       else if(route==="history")html=historyPage();
       else if(route==="comments")html=commentsPage();
       else html=classOverview();
     }else{
       if(route==="dashboard")html=teacherDashboard();
       else if(route==="approvals")html=approvalsPage();
+      else if(route==="issues")html=revisionIssuesPage();
       else if(route==="class")html=classOverview();
       else if(route==="schedule")html=schedulePage();
       else if(route==="weeks")html=weeksPage();
@@ -2167,7 +2250,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     setSafeHtml(content,html);
     bindRegistrationButtons(); bindTeacherActions(); bindClassOverview(); bindSchedule(); bindWeeks(); bindStudents(); bindStats(); bindSettings();
     content.querySelector("[data-route-settings]")?.addEventListener("click",()=>{route="settings";renderShell();render();});
-    $("#approveAll")?.addEventListener("click",()=>{state.registrations.filter(r=>r.weekId===state.currentWeekId&&(r.status==="submitted"||r.status==="needs_revision")).forEach(r=>{r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);});audit("Duyệt hàng loạt","registrations");saveState();toast("Đã duyệt tất cả đăng ký đang chờ.","success");render();});
+    $("#approveAll")?.addEventListener("click",()=>{state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r)).forEach(r=>{r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);});audit("Duyệt hàng loạt","registrations");saveState();toast("Đã duyệt tất cả đăng ký đang chờ.","success");render();});
     renderShell();
   }
 

@@ -19,7 +19,7 @@
     "teacher_comment","approval_source","auto_review_reason","ai_review_status","ai_decision",
     "ai_category","ai_confidence","ai_reason","ai_model","ai_reviewed_at","ai_review_count",
     "is_emergency","emergency_reason","emergency_requested_at","uses_electronic_device",
-    "device_detection_source","device_detection_confidence","updated_at","approved_at"
+    "device_detection_source","device_detection_confidence","revision_overdue_at","updated_at","approved_at"
   ].join(",");
   const WEEK_OVERRIDE_COLUMNS="id,week_id,weekday,period_number,is_study_period,reason";
 
@@ -451,6 +451,7 @@
       usesElectronicDevice:r.uses_electronic_device===true,
       deviceDetectionSource:r.device_detection_source || "",
       deviceDetectionConfidence:r.device_detection_confidence==null?null:Number(r.device_detection_confidence),
+      revisionOverdueAt:r.revision_overdue_at || null,
       updatedAt:r.updated_at ? new Date(r.updated_at).getTime() : Date.now(),
       approvedAt:r.approved_at ? new Date(r.approved_at).getTime() : null
     };
@@ -607,7 +608,10 @@
         teacherName: settingsObj.teacher_name || "",
         smartApprovalEnabled: settingsObj.smart_approval_enabled !== false,
         aiReviewEnabled: settingsObj.ai_review_enabled !== false,
-        aiAutoApproveThreshold: Math.max(0.50,Math.min(0.99,Number(settingsObj.ai_auto_approve_threshold ?? 0.90)))
+        aiAutoApproveThreshold: Math.max(0.50,Math.min(0.99,Number(settingsObj.ai_auto_approve_threshold ?? 0.90))),
+        registrationDeadlineTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(settingsObj.per_session_deadline_time||""))
+          ? String(settingsObj.per_session_deadline_time)
+          : "20:00"
       },
       users:(()=>{
         const dirById=new Map(
@@ -785,7 +789,8 @@
           {key:"teacher_name",value:state.settings.teacherName||currentUser.name},
           {key:"smart_approval_enabled",value:state.settings.smartApprovalEnabled!==false},
           {key:"ai_review_enabled",value:state.settings.aiReviewEnabled!==false},
-          {key:"ai_auto_approve_threshold",value:Number(state.settings.aiAutoApproveThreshold||0.90)}
+          {key:"ai_auto_approve_threshold",value:Number(state.settings.aiAutoApproveThreshold||0.90)},
+          {key:"per_session_deadline_time",value:String(state.settings.registrationDeadlineTime||"20:00")}
         ];
         const { error }=await sb.from("app_settings").upsert(rows,{onConflict:"key"});
         if(error) throw error;

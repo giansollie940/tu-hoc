@@ -2005,3 +2005,24 @@ textarea:focus{
   }
 }
 
+/* =========================
+   V8.3.2 — REVISION OVERDUE REPORT
+   ========================= */
+.status.revision_overdue{
+  background:#fee2e2;
+  color:#b91c1c;
+  border:1px solid #fecaca;
+}
+.revision-overdue-note{
+  display:inline-flex;
+  align-items:center;
+  width:max-content;
+  max-width:100%;
+  padding:6px 9px;
+  border-radius:10px;
+  background:#fff1f2;
+  color:#b42342!important;
+  border:1px solid #fecdd3;
+  font-weight:800;
+}
+
