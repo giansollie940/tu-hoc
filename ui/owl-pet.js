@@ -9,24 +9,49 @@ export function initOwlPet(root = document) {
 
   let rafId = 0;
   let destroyed = false;
+
+  // Mắt
   let currentX = 0;
   let currentY = 0;
   let targetX = 0;
   let targetY = 0;
 
+  // Đầu: cố ý rất nhẹ để không tạo cảm giác "lắc cả con cú".
+  let currentHeadRotate = 0;
+  let currentHeadX = 0;
+  let currentHeadY = 0;
+  let targetHeadRotate = 0;
+  let targetHeadX = 0;
+  let targetHeadY = 0;
+
   const applyLook = () => {
     body.style.setProperty("--owl-look-x", `${currentX.toFixed(2)}px`);
     body.style.setProperty("--owl-look-y", `${currentY.toFixed(2)}px`);
+    body.style.setProperty("--owl-head-rotate", `${currentHeadRotate.toFixed(2)}deg`);
+    body.style.setProperty("--owl-head-x", `${currentHeadX.toFixed(2)}px`);
+    body.style.setProperty("--owl-head-y", `${currentHeadY.toFixed(2)}px`);
   };
 
-  const resetLook = () => {
+  const resetLook = (immediate = false) => {
     targetX = 0;
     targetY = 0;
+    targetHeadRotate = 0;
+    targetHeadX = 0;
+    targetHeadY = 0;
+
+    if (immediate) {
+      currentX = 0;
+      currentY = 0;
+      currentHeadRotate = 0;
+      currentHeadX = 0;
+      currentHeadY = 0;
+      applyLook();
+    }
   };
 
   const updateTargetFromPointer = event => {
     if (reducedMotion.matches) {
-      resetLook();
+      resetLook(true);
       return;
     }
 
@@ -38,30 +63,42 @@ export function initOwlPet(root = document) {
     const dy = event.clientY - centerY;
     const distance = Math.hypot(dx, dy);
 
+    // Con trỏ càng gần cú thì phản ứng rõ hơn; ở xa vẫn nhìn nhẹ.
     const activeRadius = Math.max(window.innerWidth, window.innerHeight) * 0.9;
     const proximity = clamp(1 - distance / activeRadius, 0, 1);
-    const weight = 0.24 + proximity * 0.76;
+    const eyeWeight = 0.24 + proximity * 0.76;
 
-    const nextX = clamp(
-      (dx / Math.max(bounds.width * 0.38, 30)) * 4.3 * weight,
+    targetX = clamp(
+      (dx / Math.max(bounds.width * 0.38, 30)) * 4.3 * eyeWeight,
       -4.8,
       4.8
     );
-    const nextY = clamp(
-      (dy / Math.max(bounds.height * 0.34, 28)) * 3.5 * weight,
+    targetY = clamp(
+      (dy / Math.max(bounds.height * 0.34, 28)) * 3.5 * eyeWeight,
       -3.8,
       3.8
     );
 
-    targetX = nextX;
-    targetY = nextY;
+    // Đầu theo sau mắt, biên độ nhỏ hơn nhiều.
+    const nx = clamp(dx / Math.max(bounds.width * 1.15, 105), -1, 1);
+    const ny = clamp(dy / Math.max(bounds.height * 1.35, 120), -1, 1);
+    const headWeight = 0.38 + proximity * 0.62;
+
+    targetHeadRotate = clamp(nx * 4.2 * headWeight, -4.2, 4.2);
+    targetHeadX = clamp(nx * 1.6 * headWeight, -1.6, 1.6);
+    targetHeadY = clamp(ny * 0.9 * headWeight, -0.9, 0.9);
   };
 
   const animate = () => {
     if (destroyed) return;
 
+    // Mắt phản ứng nhanh hơn, đầu theo sau chậm hơn một chút.
     currentX += (targetX - currentX) * 0.18;
     currentY += (targetY - currentY) * 0.18;
+
+    currentHeadRotate += (targetHeadRotate - currentHeadRotate) * 0.105;
+    currentHeadX += (targetHeadX - currentHeadX) * 0.105;
+    currentHeadY += (targetHeadY - currentHeadY) * 0.105;
 
     applyLook();
     rafId = window.requestAnimationFrame(animate);
@@ -80,7 +117,7 @@ export function initOwlPet(root = document) {
   };
 
   const onMotionPreferenceChange = () => {
-    resetLook();
+    resetLook(true);
   };
 
   applyLook();
@@ -96,6 +133,10 @@ export function initOwlPet(root = document) {
   return () => {
     destroyed = true;
     if (rafId) window.cancelAnimationFrame(rafId);
+
+    resetLook(true);
+    delete body.dataset.owlVisualReady;
+
     window.removeEventListener("pointermove", onPointerMove);
     document.removeEventListener("mouseleave", onLeavePage);
     window.removeEventListener("blur", onLeavePage);
