@@ -69,14 +69,14 @@ export function initOwlPet(root = document) {
     const eyeWeight = 0.24 + proximity * 0.76;
 
     targetX = clamp(
-      (dx / Math.max(bounds.width * 0.38, 30)) * 4.3 * eyeWeight,
-      -4.8,
-      4.8
+      (dx / Math.max(bounds.width * 0.38, 30)) * 3.6 * eyeWeight,
+      -4.0,
+      4.0
     );
     targetY = clamp(
-      (dy / Math.max(bounds.height * 0.34, 28)) * 3.5 * eyeWeight,
-      -3.8,
-      3.8
+      (dy / Math.max(bounds.height * 0.34, 28)) * 2.9 * eyeWeight,
+      -3.1,
+      3.1
     );
 
     // Đầu theo sau mắt, biên độ nhỏ hơn nhiều.
