@@ -339,11 +339,29 @@
   }
 
   async function requestAiReview(registrationId){
-    return invokeEdgeFunction(
-      "ai-review-registration",
-      {registrationId},
-      "AI không xử lý được đăng ký."
-    );
+    let lastError=null;
+
+    for(let attempt=0;attempt<2;attempt++){
+      if(attempt>0){
+        await new Promise(resolve=>setTimeout(resolve,1200));
+      }
+
+      try{
+        return await invokeEdgeFunction(
+          "ai-review-registration",
+          {registrationId},
+          "AI không xử lý được đăng ký."
+        );
+      }catch(error){
+        lastError=error;
+        const status=Number(error?.status||0);
+
+        // Lỗi quyền / payload / rate-limit không có lợi khi retry ngay.
+        if([400,401,403,404,429].includes(status))break;
+      }
+    }
+
+    throw lastError || new Error("AI không xử lý được đăng ký.");
   }
 
   async function deleteRegistration(registrationId){

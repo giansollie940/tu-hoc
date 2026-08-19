@@ -963,11 +963,11 @@ import { friendlyAppError } from "./utils/error-map.js";
       <div class="notification-panel">
         <div class="callout">
           <b>${unread.length} thông báo chưa đọc</b><br>
-          Thông báo <b>đăng ký bổ sung</b> giúp thầy/cô biết học sinh vừa gửi bổ sung; chỉ khi AI thấy vấn đề mới tạo thêm thông báo <b>cần duyệt</b>.
+          Đăng ký mới đi qua AI sẽ có thông báo <b>🤖 đang chờ AI</b> ngay lập tức. Nếu AI duyệt được, thông báo này tự đóng; nếu AI lỗi hoặc quá 2 phút, hệ thống chuyển thành <b>cần GV xử lý</b>.
         </div>
         ${items.length?items.slice(0,20).map(n=>`
           <div class="notification-item ${n.isRead?"":"unread"}">
-            <div class="notification-icon">${n.type==="emergency_notice"?"🚨":"🔔"}</div>
+            <div class="notification-icon">${n.type==="emergency_notice"?"🚨":n.type==="ai_watch"?"🤖":"🔔"}</div>
             <div><b>${esc(n.title)}</b><p>${esc(n.message||"")}</p><small>${n.createdAt?new Date(n.createdAt).toLocaleString("vi-VN"):""}</small></div>
           </div>`).join(""):`<div class="empty-mini">Không có thông báo cần duyệt.</div>`}
         <button class="btn btn-primary btn-block" id="openApprovalsFromNotifications">Mở đăng ký & danh sách bổ sung</button>
@@ -1624,6 +1624,12 @@ import { friendlyAppError } from "./utils/error-map.js";
 
   function teacherDashboard(){
     const pendingAll=state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r));
+    const aiWaiting=state.registrations.filter(r=>
+      r.weekId===state.currentWeekId
+      &&r.status==="submitted"
+      &&r.approvalSource==="manual"
+      &&["pending","processing"].includes(r.aiReviewStatus)
+    );
     const pending=pendingAll.slice(0,6), st=statsForWeek();
     const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
     let html=head("Dashboard",`Tổng quan tuần ${week().number}`)+weekBanner();
@@ -1634,6 +1640,14 @@ import { friendlyAppError } from "./utils/error-map.js";
       ${kpi("🔔",unread||pendingAll.length,"Cần GV xem")}
       ${kpi("📈",st.rate+"%","Hoàn thành hợp lệ")}
     </div>`;
+    if(aiWaiting.length){
+      html+=`<div class="callout ai-waiting-callout" style="margin-bottom:16px">
+        <div class="toolbar">
+          <span><b>🤖 ${aiWaiting.length} đăng ký đang chờ AI.</b> GV đã được thông báo ngay; nếu AI không phản hồi trong 2 phút, backend tự chuyển sang danh sách cần GV xử lý.</span>
+          <button class="btn btn-ghost right" type="button" data-route-approvals="1">Xem hàng đợi AI</button>
+        </div>
+      </div>`;
+    }
     html+=`<div class="smart-approval-banner ${state.settings.smartApprovalEnabled===false?"off":"on"}">
       <div><b>${state.settings.smartApprovalEnabled===false?"⏸ Duyệt nhanh đang tắt":"✨ Duyệt nhanh đang bật"}</b>
       <span>${state.settings.smartApprovalEnabled===false
@@ -1727,6 +1741,12 @@ import { friendlyAppError } from "./utils/error-map.js";
   function approvalsPage(){
     const pending=state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r));
     const allWeek=state.registrations.filter(r=>r.weekId===state.currentWeekId);
+    const aiWaiting=allWeek
+      .filter(r=>!r.isEmergency
+        &&r.status==="submitted"
+        &&r.approvalSource==="manual"
+        &&["pending","processing"].includes(r.aiReviewStatus))
+      .sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
     const emergencyWeek=allWeek
       .filter(r=>r.isEmergency)
       .sort((a,b)=>String(b.emergencyRequestedAt||"").localeCompare(String(a.emergencyRequestedAt||"")));
@@ -1764,6 +1784,28 @@ import { friendlyAppError } from "./utils/error-map.js";
         </tr>`;
       }).join("")}
       </tbody></table></div></div>`:"";
+
+    const aiWaitingTable=aiWaiting.length?`<div class="card" style="margin-bottom:16px">
+      <h3>🤖 AI đang kiểm tra · ${aiWaiting.length}</h3>
+      <div class="callout" style="margin-bottom:12px">
+        Đây là đăng ký mới đã vào hàng đợi AI. Nếu AI không phản hồi trong <b>2 phút</b>, hệ thống tự đánh dấu lỗi AI và chuyển xuống <b>Cần giáo viên xử lý</b>.
+      </div>
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>AI</th><th>Cập nhật</th></tr></thead>
+        <tbody>
+        ${aiWaiting.map(r=>{
+          const s=state.users.find(u=>u.id===r.studentId);
+          return `<tr>
+            <td><b>${esc(s?.name||"")}</b><div class="tiny muted">${esc(s?.code||"")}</div></td>
+            <td>${slotLabel(r.dow,r.period)}</td>
+            <td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div></td>
+            <td><span class="ai-review-badge">🤖 ${r.aiReviewStatus==="processing"?"Đang đọc":"Đang chờ"}</span></td>
+            <td>${r.updatedAt?new Date(r.updatedAt).toLocaleString("vi-VN"):"—"}</td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+      </table></div>
+    </div>`:"";
 
     const emergencyTable=emergencyWeek.length?`<div class="card" style="margin-bottom:16px">
       <h3>🚨 Danh sách đăng ký bổ sung · ${emergencyWeek.length}</h3>
@@ -1803,6 +1845,7 @@ import { friendlyAppError } from "./utils/error-map.js";
 
     return head("Duyệt đăng ký",`${pending.length} đăng ký đang cần giáo viên xử lý`,
       pending.length?`<button class="btn btn-success" id="approveAll">✓ Duyệt tất cả đang chờ</button>`:"")+
+      aiWaitingTable+
       emergencyTable+
       `<div class="card"><h3>Cần giáo viên xử lý · ${pending.length}</h3>${pending.length?pending.map(approvalItem).join(""):empty("🎉","Không có đăng ký cần giáo viên xử lý.")}</div>`+
       allTable;
@@ -2501,6 +2544,9 @@ import { friendlyAppError } from "./utils/error-map.js";
     setSafeHtml(content,html);
     bindRegistrationButtons(); bindTeacherActions(); bindClassOverview(); bindSchedule(); bindWeeks(); bindStudents(); bindStats(); bindSettings();
     content.querySelector("[data-route-settings]")?.addEventListener("click",()=>{route="settings";renderShell();render();});
+    content.querySelectorAll("[data-route-approvals]").forEach(button=>{
+      button.addEventListener("click",()=>{route="approvals";renderShell();render();});
+    });
     $("#approveAll")?.addEventListener("click",()=>{state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r)).forEach(r=>{r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);});audit("Duyệt hàng loạt","registrations");saveState();toast("Đã duyệt tất cả đăng ký đang chờ.","success");render();});
     renderShell();
   }
