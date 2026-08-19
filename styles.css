@@ -2148,3 +2148,91 @@ textarea:focus{
   }
 }
 
+/* =====================================================================
+   V8.3.2c — GLOBAL FORM SPACING
+   Tạo khoảng thở nhất quán giữa nhãn, ô nhập và dòng hướng dẫn.
+   Không tác động checkbox/toggle, week picker hay search box dạng ngang.
+   ===================================================================== */
+
+:root{
+  --form-label-control-gap:11px;
+  --form-help-gap:7px;
+}
+
+/* Nhãn trường nhập thông thường: dễ đọc hơn, không dính sát control. */
+label:not(.toggle-row):not(.week-picker):not(.week-holiday-toggle):not(.search-box){
+  line-height:1.4;
+}
+
+/* Áp dụng cho mọi input/select/textarea/password-field là con trực tiếp của label. */
+label:not(.toggle-row):not(.week-picker):not(.week-holiday-toggle):not(.search-box)
+  > input:not([type="checkbox"]):not([type="radio"]),
+label:not(.toggle-row):not(.week-picker):not(.week-holiday-toggle):not(.search-box)
+  > select,
+label:not(.toggle-row):not(.week-picker):not(.week-holiday-toggle):not(.search-box)
+  > textarea,
+label:not(.toggle-row):not(.week-picker):not(.week-holiday-toggle):not(.search-box)
+  > .password-field{
+  margin-top:var(--form-label-control-gap);
+}
+
+/* Các rule cũ trong modal/login có specificity cao hơn nên ghi đè rõ ràng ở đây. */
+#loginForm > label > input,
+#loginForm > label > .password-field,
+#modalBody label:not(.toggle-row):not(.search-box)
+  > input:not([type="checkbox"]):not([type="radio"]),
+#modalBody label:not(.toggle-row):not(.search-box) > select,
+#modalBody label:not(.toggle-row):not(.search-box) > textarea,
+#modalBody label:not(.toggle-row):not(.search-box) > .password-field{
+  margin-top:var(--form-label-control-gap);
+}
+
+/* Input nằm trong password-field không cộng thêm khoảng cách lần thứ hai. */
+label > .password-field > input,
+#loginForm > label > .password-field > input,
+#modalBody label > .password-field > input{
+  margin-top:0;
+}
+
+/* Dòng hướng dẫn dưới trường cũng có khoảng thở riêng. */
+label:not(.toggle-row):not(.week-picker):not(.week-holiday-toggle):not(.search-box) > small{
+  display:block;
+  margin-top:var(--form-help-gap);
+  line-height:1.45;
+}
+
+/* Các form dạng lưới: tăng khoảng cách giữa từng trường để nhìn thoáng hơn. */
+.form-grid{
+  row-gap:18px;
+}
+
+/* Modal: khoảng cách trường với trường và phần nút cuối form. */
+#modalBody form > label:not(.toggle-row):not(.search-box){
+  margin-top:18px;
+}
+
+#modalBody form > label:not(.toggle-row):not(.search-box):first-child{
+  margin-top:0;
+}
+
+#modalBody form > .toolbar:last-child,
+#modalBody form > .modal-actions:last-child,
+#modalBody form > button[type="submit"]:last-child{
+  margin-top:20px;
+}
+
+/* Trên điện thoại vẫn giữ khoảng cách rõ nhưng tiết kiệm chiều cao. */
+@media(max-width:600px){
+  :root{
+    --form-label-control-gap:9px;
+    --form-help-gap:6px;
+  }
+
+  .form-grid{
+    row-gap:16px;
+  }
+
+  #modalBody form > label:not(.toggle-row):not(.search-box){
+    margin-top:16px;
+  }
+}
