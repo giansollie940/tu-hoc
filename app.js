@@ -1906,13 +1906,12 @@ import { friendlyAppError } from "./utils/error-map.js";
         </div>
       </div>`;
     }
-    html+=`<div class="smart-approval-banner ${state.settings.smartApprovalEnabled===false?"off":"on"}">
-      <div><b>${state.settings.smartApprovalEnabled===false?"⏸ Duyệt nhanh đang tắt":"✨ Duyệt nhanh đang bật"}</b>
-      <span>${state.settings.smartApprovalEnabled===false
-        ?"Mọi đăng ký gửi mới sẽ chờ GV duyệt."
-        :state.settings.aiReviewEnabled===false
-          ?"Rule rõ ràng được tự duyệt; trường hợp còn lại chuyển GV."
-          :`Groq AI kiểm tra mọi đăng ký gửi mới; chỉ tự duyệt từ ${Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100)}% tin cậy.`}</span></div>
+    const aiAutomationEnabled=state.settings.smartApprovalEnabled!==false&&state.settings.aiReviewEnabled!==false;
+    html+=`<div class="smart-approval-banner ${aiAutomationEnabled?"on":"off"}">
+      <div><b>${aiAutomationEnabled?"🤖 Duyệt tự động bằng AI đang bật":"⏸ Duyệt tự động bằng AI đang tắt"}</b>
+      <span>${aiAutomationEnabled
+        ?`Groq AI kiểm tra mọi đăng ký gửi mới; chỉ tự duyệt từ ${Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100)}% tin cậy.`
+        :"Mọi đăng ký gửi mới sẽ chuyển giáo viên duyệt."}</span></div>
       <button class="btn btn-ghost" data-route-settings="1">Cài đặt</button>
     </div>`;
     html+=`<div class="grid grid-2"><div class="card"><h3>🔔 Cần giáo viên xử lý</h3>${pending.length?pending.map(approvalItem).join(""):empty("✅","Không còn đăng ký chờ xử lý.")}</div>
@@ -2711,7 +2710,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     const revisionThreshold=Math.round(Number(state.settings.aiRevisionActionThreshold||0.85)*100);
     const memory=state.aiFeedbackMemoryStats||{};
     const memoryLast=memory.lastFeedbackAt?new Date(memory.lastFeedbackAt).toLocaleString("vi-VN"):"Chưa có";
-    return head("Cài đặt","Cấu hình lớp học, duyệt nhanh và AI.")+`<div class="grid grid-2">
+    return head("Cài đặt","Cấu hình lớp học và duyệt tự động bằng AI.")+`<div class="grid grid-2">
       <div class="card"><h3>Thông tin lớp</h3><form id="settingsForm" class="form-grid">
         <label>Tên lớp<input id="setClass" value="${esc(state.settings.className)}"></label>
         <label>Năm học<input id="setYear" value="${esc(state.settings.schoolYear)}"></label>
@@ -2723,22 +2722,14 @@ import { friendlyAppError } from "./utils/error-map.js";
 
         <div class="smart-approval-setting" style="grid-column:1/-1">
           <label class="toggle-row">
-            <input id="smartApprovalEnabled" type="checkbox" ${state.settings.smartApprovalEnabled!==false?"checked":""}>
+            <input id="smartApprovalEnabled" type="checkbox" ${state.settings.smartApprovalEnabled!==false&&state.settings.aiReviewEnabled!==false?"checked":""}>
             <span>
-              <b>✨ Duyệt nhanh thông minh</b>
-              <small>Khi AI bật, mọi đăng ký gửi mới/gửi lại được Groq kiểm tra trước; chỉ trường hợp không đủ chắc chắn mới chuyển GV.</small>
+              <b>🤖 Duyệt tự động bằng AI</b>
+              <small>Bật: Groq kiểm tra đăng ký mới/gửi lại và học từ phản hồi GV. Tắt: mọi đăng ký chuyển GV duyệt.</small>
             </span>
           </label>
 
           <div class="ai-settings-card">
-            <label class="toggle-row">
-              <input id="aiReviewEnabled" type="checkbox" ${state.settings.aiReviewEnabled!==false?"checked":""}>
-              <span>
-                <b>🤖 Groq AI-first</b>
-                <small>AI đánh giá đăng ký mới và kiểm tra lại việc HS đã đáp ứng phản hồi GV hay chưa.</small>
-              </span>
-            </label>
-
             <div class="ai-threshold-row">
               <span><b>Ngưỡng AI được tự duyệt</b><br><small>AI dưới ngưỡng này luôn chuyển GV.</small></span>
               <span id="aiThresholdValue" class="ai-threshold-value">${threshold}%</span>
@@ -2746,7 +2737,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             </div>
 
             <div class="callout" style="margin-top:10px">
-              <b>Luồng V8.3.2l:</b> đăng ký mới dùng ngưỡng <b>${threshold}%</b>. Khi HS sửa theo phản hồi GV,
+              <b>Luồng Smart Approval V2:</b> đăng ký mới dùng ngưỡng <b>${threshold}%</b>. Khi HS sửa theo phản hồi GV,
               AI tách riêng <b>đã đáp ứng / chưa đáp ứng / không chắc</b> và chỉ tự hành động khi độ chắc chắn đạt <b>${revisionThreshold}%</b>.
               Nếu chưa đủ chắc chắn → <b>GV duyệt</b>.
             </div>
@@ -2793,24 +2784,25 @@ import { friendlyAppError } from "./utils/error-map.js";
       state.settings.className=$("#setClass").value.trim();
       state.settings.schoolYear=$("#setYear").value.trim();
       state.settings.announcement=$("#setAnnouncement").value.trim();
-      state.settings.smartApprovalEnabled=$("#smartApprovalEnabled").checked;
-      state.settings.aiReviewEnabled=$("#aiReviewEnabled").checked;
+      const aiAutomationEnabled=$("#smartApprovalEnabled").checked;
+      state.settings.smartApprovalEnabled=aiAutomationEnabled;
+      state.settings.aiReviewEnabled=aiAutomationEnabled;
       state.settings.aiAutoApproveThreshold=Number($("#aiAutoApproveThreshold").value)/100;
       state.settings.registrationDeadlineTime=$("#registrationDeadlineTime").value||"20:00";
 
       state.audit.unshift({
         at:new Date().toISOString(),userId:currentUser?.id,
         action:"Cập nhật cài đặt",entityId:"settings",
-        detail:`AI=${state.settings.aiReviewEnabled}; threshold=${state.settings.aiAutoApproveThreshold}; deadline=${state.settings.registrationDeadlineTime}`
+        detail:`AI_AUTO=${aiAutomationEnabled}; threshold=${state.settings.aiAutoApproveThreshold}; deadline=${state.settings.registrationDeadlineTime}`
       });
 
       try{
         await saveState();
         toast(`Đã lưu cài đặt. Deadline tự động: ${registrationDeadlineTime()}.`,"success");
         showOwlMessage({
-          text:state.settings.aiReviewEnabled
-            ? `🤖 AI review đang bật với ngưỡng tự duyệt ${Math.round(state.settings.aiAutoApproveThreshold*100)}%.`
-            : "👤 AI review đang tắt; các trường hợp rule không tự duyệt sẽ chuyển giáo viên.",
+          text:aiAutomationEnabled
+            ? `🤖 Duyệt tự động bằng AI đang bật với ngưỡng ${Math.round(state.settings.aiAutoApproveThreshold*100)}%.`
+            : "👤 Duyệt tự động bằng AI đang tắt; mọi đăng ký sẽ chuyển giáo viên duyệt.",
           force:true
         });
         await refreshFromServer(false);
