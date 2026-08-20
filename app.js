@@ -489,7 +489,8 @@ import { friendlyAppError } from "./utils/error-map.js";
   function needsTeacherReview(registration){
     return !isRevisionOverdue(registration)
       && ["submitted","needs_revision"].includes(registration?.status)
-      && !["pending","processing"].includes(registration?.aiReviewStatus);
+      && !["pending","processing"].includes(registration?.aiReviewStatus)
+      && !(registration?.status==="needs_revision"&&registration?.aiDecision==="request_revision");
   }
 
 
@@ -1219,6 +1220,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         ${r?.note?`<p>${esc(r.note)}</p>`:""}
         ${reported?`<p class="tiny revision-overdue-note">⚠️ Quá thời hạn chỉnh sửa trước khi tiết tự học bắt đầu. Đã chuyển sang Báo cáo lỗi.</p>`:""}
         ${r?.teacherComment?`<p style="color:#7c3aed">💬 GV: ${esc(r.teacherComment)}</p>`:""}
+        ${r?.aiDecision==="request_revision"&&r?.aiReason?`<p class="tiny ai-review-badge">🤖 <b>AI kiểm tra lại:</b> ${esc(r.aiReason)}</p>`:""}
         ${r?.isEmergency?`<p class="tiny emergency-badge">🚨 Đăng ký bổ sung · ${esc(r.emergencyReason||"")}</p>`:""}
         ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="ai"?`<p class="tiny device-ai-badge">🤖 AI phát hiện nội dung có sử dụng thiết bị điện tử${r.deviceDetectionConfidence==null?"":` · ${Math.round(r.deviceDetectionConfidence*100)}%`}</p>`:""}
         ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="rule"?`<p class="tiny device-rule-badge">🔎 Hệ thống phát hiện nội dung có nhắc đến thiết bị điện tử · đang chờ AI xác nhận</p>`:""}
@@ -1309,11 +1311,12 @@ import { friendlyAppError } from "./utils/error-map.js";
 
       ${approvedEdit?`<div class="callout re-review-callout"><b>✏️ Sửa đăng ký đã duyệt.</b> Khi bạn lưu thay đổi, đăng ký sẽ được gửi duyệt lại từ đầu.</div>`:""}
       ${reported?`<div class="callout warning"><b>⚠️ Báo cáo lỗi.</b> Đăng ký đã không được chỉnh sửa trước khi tiết tự học bắt đầu nên không còn ở trạng thái nhắc sửa.</div>`:""}
-      ${needsRevision?`<div class="callout"><b>GV đã yêu cầu chỉnh sửa.</b> Bạn vẫn được sửa và gửi duyệt lại sau deadline, nhưng chỉ đến trước giờ bắt đầu tiết tự học.</div>`:""}
+      ${needsRevision?`<div class="callout"><b>Đăng ký đang cần chỉnh sửa theo phản hồi GV.</b> Bạn vẫn được sửa và gửi duyệt lại sau deadline, nhưng chỉ đến trước giờ bắt đầu tiết tự học.</div>`:""}
       ${r?.isEmergency?`<div class="callout emergency-callout"><b>🚨 Đây là đăng ký bổ sung.</b> Lý do: ${esc(r.emergencyReason||"—")}</div>`:""}
       ${started?`<div class="callout warning"><b>Buổi tự học đã bắt đầu/đã qua.</b> Không thể tạo đăng ký mới hoặc sửa đăng ký bình thường.</div>`:""}
       ${pastDeadline&&!needsRevision&&!reported?`<div class="callout warning"><b>Đã qua deadline.</b> Hạn tự động hiện tại là ${registrationDeadlineTime()} tối hôm trước buổi học.</div>`:""}
       ${r?.teacherComment?`<div class="callout warning"><b>Nhận xét giáo viên:</b><br>${esc(r.teacherComment)}</div>`:""}
+      ${r?.aiDecision==="request_revision"&&r?.aiReason?`<div class="callout"><b>🤖 AI kiểm tra lại:</b><br>${esc(r.aiReason)}<br><small>Vui lòng chỉnh sửa tiếp theo phản hồi giáo viên trước đó.</small></div>`:""}
 
       <form id="regForm">
         <label>Nội dung tự học *
@@ -1384,6 +1387,8 @@ import { friendlyAppError } from "./utils/error-map.js";
         rr.aiDecision="";
         rr.aiCategory="";
         rr.aiConfidence=null;
+        rr.aiRevisionStatus="";
+        rr.aiRevisionConfidence=null;
         rr.aiReason="";
       }
 
@@ -1424,6 +1429,8 @@ import { friendlyAppError } from "./utils/error-map.js";
             if(fresh?.status==="approved"&&fresh?.approvalSource==="ai"){
               const pct=fresh.aiConfidence==null?"":` (${Math.round(fresh.aiConfidence*100)}%)`;
               toast(`AI đã duyệt${pct}.`,"success");
+            }else if(fresh?.status==="needs_revision"&&fresh?.aiDecision==="request_revision"){
+              toast("AI kiểm tra lại: nội dung vẫn chưa đáp ứng phản hồi GV. Vui lòng chỉnh sửa tiếp.","warn");
             }else{
               toast("Đã chuyển giáo viên duyệt.","success");
             }
@@ -2701,6 +2708,9 @@ import { friendlyAppError } from "./utils/error-map.js";
 
   function settingsPage(){
     const threshold=Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100);
+    const revisionThreshold=Math.round(Number(state.settings.aiRevisionActionThreshold||0.85)*100);
+    const memory=state.aiFeedbackMemoryStats||{};
+    const memoryLast=memory.lastFeedbackAt?new Date(memory.lastFeedbackAt).toLocaleString("vi-VN"):"Chưa có";
     return head("Cài đặt","Cấu hình lớp học, duyệt nhanh và AI.")+`<div class="grid grid-2">
       <div class="card"><h3>Thông tin lớp</h3><form id="settingsForm" class="form-grid">
         <label>Tên lớp<input id="setClass" value="${esc(state.settings.className)}"></label>
@@ -2716,7 +2726,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             <input id="smartApprovalEnabled" type="checkbox" ${state.settings.smartApprovalEnabled!==false?"checked":""}>
             <span>
               <b>✨ Duyệt nhanh thông minh</b>
-              <small>Bật luồng Rule → AI → GV. Tắt mục này thì mọi đăng ký đều chờ GV.</small>
+              <small>Khi AI bật, mọi đăng ký gửi mới/gửi lại được Groq kiểm tra trước; chỉ trường hợp không đủ chắc chắn mới chuyển GV.</small>
             </span>
           </label>
 
@@ -2724,8 +2734,8 @@ import { friendlyAppError } from "./utils/error-map.js";
             <label class="toggle-row">
               <input id="aiReviewEnabled" type="checkbox" ${state.settings.aiReviewEnabled!==false?"checked":""}>
               <span>
-                <b>🤖 Dùng AI cho trường hợp mơ hồ</b>
-                <small>Rule rõ ràng vẫn xử lý trước; AI chỉ nhận các câu mà rule chưa đủ chắc chắn.</small>
+                <b>🤖 Groq AI-first</b>
+                <small>AI đánh giá đăng ký mới và kiểm tra lại việc HS đã đáp ứng phản hồi GV hay chưa.</small>
               </span>
             </label>
 
@@ -2736,9 +2746,18 @@ import { friendlyAppError } from "./utils/error-map.js";
             </div>
 
             <div class="callout" style="margin-top:10px">
-              <b>Mặc định V7:</b> rule chặn giải trí/mạng xã hội; nội dung học tập cực rõ có thể được rule duyệt;
-              trường hợp còn lại gửi AI. AI chỉ tự duyệt nếu kết luận là <b>học tập</b> hoặc <b>dùng thiết bị cho học tập</b>
-              và độ tin cậy đạt ngưỡng trên. Nếu AI lỗi hoặc chưa chắc → <b>GV duyệt</b>.
+              <b>Luồng V8.3.2l:</b> đăng ký mới dùng ngưỡng <b>${threshold}%</b>. Khi HS sửa theo phản hồi GV,
+              AI tách riêng <b>đã đáp ứng / chưa đáp ứng / không chắc</b> và chỉ tự hành động khi độ chắc chắn đạt <b>${revisionThreshold}%</b>.
+              Nếu chưa đủ chắc chắn → <b>GV duyệt</b>.
+            </div>
+
+            <div class="callout" style="margin-top:10px">
+              <b>🧠 Bộ nhớ phản hồi GV</b><br>
+              Đã ghi nhận: <b>${Number(memory.totalFeedback||0)}</b> phản hồi ·
+              AI duyệt → GV yêu cầu sửa: <b>${Number(memory.revisionAfterAiApprove||0)}</b> ·
+              AI chuyển GV → GV duyệt: <b>${Number(memory.approveAfterAiManual||0)}</b> ·
+              AI yêu cầu sửa → GV duyệt: <b>${Number(memory.approveAfterAiRevision||0)}</b>.<br>
+              <small>Cập nhật gần nhất: ${esc(memoryLast)}. Mỗi lần duyệt, hệ thống đọc tối đa <b>${Number(memory.candidateLimit||80)}</b> phản hồi ứng viên rồi chọn tối đa <b>${Number(memory.selectedLimit||25)}</b> ví dụ theo độ gần đây + tương đồng + bất đồng AI↔GV.</small>
             </div>
 
             <div class="tiny muted" style="margin-top:8px">

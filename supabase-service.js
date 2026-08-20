@@ -18,7 +18,7 @@
   const REGISTRATION_COLUMNS=[
     "id","student_id","week_id","weekday","period_number","content","note","status",
     "teacher_comment","approval_source","auto_review_reason","ai_review_status","ai_decision",
-    "ai_category","ai_confidence","ai_reason","ai_model","ai_reviewed_at","ai_review_count",
+    "ai_category","ai_confidence","ai_revision_status","ai_revision_confidence","ai_reason","ai_model","ai_reviewed_at","ai_review_count",
     "is_emergency","emergency_reason","emergency_requested_at","uses_electronic_device",
     "device_detection_source","device_detection_confidence","revision_overdue_at","updated_at","approved_at"
   ].join(",");
@@ -507,6 +507,8 @@
       aiDecision:r.ai_decision || "",
       aiCategory:r.ai_category || "",
       aiConfidence:r.ai_confidence==null?null:Number(r.ai_confidence),
+      aiRevisionStatus:r.ai_revision_status || "",
+      aiRevisionConfidence:r.ai_revision_confidence==null?null:Number(r.ai_revision_confidence),
       aiReason:r.ai_reason || "",
       aiModel:r.ai_model || "",
       aiReviewedAt:r.ai_reviewed_at || null,
@@ -618,8 +620,18 @@
       .select("id,student_code,full_name,role,class_name,active")
       .order("full_name");
 
+    const memoryStatsPromise=profile.role==="teacher"
+      ? sb.rpc("get_ai_feedback_memory_stats").then(result=>{
+          if(result.error){
+            console.warn("Không tải được thống kê bộ nhớ AI.",result.error);
+            return {data:[],error:null};
+          }
+          return result;
+        })
+      : Promise.resolve({data:[],error:null});
+
     const [
-      profilesRes, yearsRes, periodsRes, scheduleRes, settingsRes, notificationsRes
+      profilesRes, yearsRes, periodsRes, scheduleRes, settingsRes, notificationsRes, memoryStatsRes
     ] = await Promise.all([
       membersQuery,
       sb.from("school_years").select("id,name,start_date,end_date,is_active").order("start_date",{ascending:false}),
@@ -630,7 +642,8 @@
         ? sb.from("teacher_notifications")
           .select("id,registration_id,student_id,week_id,notification_type,title,message,is_read,created_at")
           .order("created_at",{ascending:false}).limit(100)
-        : Promise.resolve({data:[],error:null})
+        : Promise.resolve({data:[],error:null}),
+      memoryStatsPromise
     ]);
     for (const r of [profilesRes,yearsRes,periodsRes,scheduleRes,settingsRes,notificationsRes]){
       if (r.error) throw r.error;
@@ -675,6 +688,7 @@
         smartApprovalEnabled: settingsObj.smart_approval_enabled !== false,
         aiReviewEnabled: settingsObj.ai_review_enabled !== false,
         aiAutoApproveThreshold: Math.max(0.50,Math.min(0.99,Number(settingsObj.ai_auto_approve_threshold ?? 0.90))),
+        aiRevisionActionThreshold: Math.max(0.50,Math.min(0.99,Number(settingsObj.ai_revision_auto_approve_threshold ?? 0.85))),
         registrationDeadlineTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(settingsObj.per_session_deadline_time||""))
           ? String(settingsObj.per_session_deadline_time)
           : "20:00"
@@ -717,6 +731,19 @@
       schedule:(scheduleRes.data || []).map(s=>({dow:Number(s.weekday)-1,period:s.period_number})),
       overrides:weekData.overrides,
       registrations,
+      aiFeedbackMemoryStats:(()=>{
+        const raw=Array.isArray(memoryStatsRes?.data)?memoryStatsRes.data[0]:memoryStatsRes?.data;
+        return {
+          totalFeedback:Number(raw?.total_feedback||0),
+          revisionAfterAiApprove:Number(raw?.revision_after_ai_approve||0),
+          approveAfterAiManual:Number(raw?.approve_after_ai_manual||0),
+          approveAfterAiRevision:Number(raw?.approve_after_ai_revision||0),
+          lastFeedbackAt:raw?.last_feedback_at||null,
+          memoryEnabled:raw?.memory_enabled!==false,
+          candidateLimit:Number(raw?.candidate_limit||80),
+          selectedLimit:Number(raw?.selected_limit||25)
+        };
+      })(),
       notifications:(notificationsRes.data || []).map(n=>({
         id:n.id,
         registrationId:n.registration_id,
