@@ -393,6 +393,23 @@
       .filter(isUuid);
   }
 
+  async function prepareRegistrationAiRereview(registrationId){
+    if(!isUuid(registrationId)){
+      throw new Error("Mã đăng ký không hợp lệ.");
+    }
+
+    const sb=requireClient();
+    const {data,error}=await sb.rpc("prepare_registration_ai_rereview",{
+      p_registration_id:registrationId
+    });
+
+    if(error)throw friendlySyncError(error);
+    if(data!==true){
+      throw new Error("Đăng ký không còn phù hợp để AI duyệt lại.");
+    }
+    return true;
+  }
+
   async function deleteRegistration(registrationId){
     if(!isUuid(registrationId)){
       throw new Error("Mã đăng ký không hợp lệ.");
@@ -1017,6 +1034,7 @@
     emergencyRegister,
     requestAiReview,
     prepareSessionAiRereview,
+    prepareRegistrationAiRereview,
     deleteRegistration,
     markNotificationsRead,
     subscribeRealtime,

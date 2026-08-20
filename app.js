@@ -21,6 +21,9 @@ import { friendlyAppError } from "./utils/error-map.js";
   let realtimeStructuralRefresh=false;
   let realtimeSubscribed=false;
   let lastRealtimeActivity=0;
+  let aiRecoveryTimer=null;
+  let aiRecoveryRunning=false;
+  const aiRecoveryAttemptedAt=new Map();
   let route="dashboard";
   let weekSelectionTouched=false;
 
@@ -665,6 +668,79 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
 
 
+  function pendingAiRecoveryCandidates(){
+    if(!currentUser||!state||state.settings?.aiReviewEnabled===false)return [];
+
+    const now=Date.now();
+    const ownOnly=currentUser.role!=="teacher";
+    const minAge=currentUser.role==="teacher"?1800:600;
+
+    return (state.registrations||[])
+      .filter(registration=>
+        registration.status==="submitted"
+        &&registration.aiReviewStatus==="pending"
+        &&registration.isDeleted!==true
+        &&(!ownOnly||registration.studentId===currentUser.id)
+        &&(
+          currentUser.role!=="teacher"
+          || registration.weekId===state.currentWeekId
+        )
+        &&now-Number(registration.updatedAt||0)>=minAge
+        &&now-Number(aiRecoveryAttemptedAt.get(registration.id)||0)>=30000
+      )
+      .sort((a,b)=>Number(a.updatedAt||0)-Number(b.updatedAt||0));
+  }
+
+  function schedulePendingAiRecovery(delay=1200){
+    if(!currentUser||document.hidden)return;
+    clearTimeout(aiRecoveryTimer);
+    aiRecoveryTimer=setTimeout(()=>{
+      recoverPendingAiReviews().catch(error=>{
+        console.warn("AI recovery queue",error);
+      });
+    },Math.max(200,Number(delay)||1200));
+  }
+
+  async function recoverPendingAiReviews(){
+    if(aiRecoveryRunning||!currentUser||document.hidden)return;
+
+    const limit=currentUser.role==="teacher"?6:2;
+    const candidates=pendingAiRecoveryCandidates().slice(0,limit);
+    if(!candidates.length)return;
+
+    aiRecoveryRunning=true;
+    let touched=false;
+
+    try{
+      for(const registration of candidates){
+        aiRecoveryAttemptedAt.set(registration.id,Date.now());
+
+        try{
+          const result=await prod.requestAiReview(registration.id);
+          touched=true;
+
+          if(result?.fallbackToManual){
+            console.warn("AI recovery fallback",registration.id,result?.reason||"");
+          }
+        }catch(error){
+          console.warn("AI recovery request failed",registration.id,error);
+        }
+
+        await new Promise(resolve=>setTimeout(resolve,350));
+      }
+
+      if(touched){
+        await refreshFromServer(false);
+      }
+    }finally{
+      aiRecoveryRunning=false;
+
+      if(pendingAiRecoveryCandidates().length){
+        schedulePendingAiRecovery(2500);
+      }
+    }
+  }
+
   function realtimeInputBusy(){
     const active=document.activeElement;
     const activeEditor=active?.matches?.("input,textarea,select,[contenteditable='true']");
@@ -799,6 +875,14 @@ import { friendlyAppError } from "./utils/error-map.js";
     lastRealtimeActivity=Date.now();
     realtimeQueue.push(change);
 
+    if(
+      change?.table==="registrations"
+      &&change?.record?.status==="submitted"
+      &&change?.record?.aiReviewStatus==="pending"
+    ){
+      schedulePendingAiRecovery(currentUser?.role==="teacher"?1800:650);
+    }
+
     clearTimeout(realtimeFlushTimer);
     realtimeFlushTimer=setTimeout(flushRealtimeQueue,220);
   }
@@ -817,6 +901,7 @@ import { friendlyAppError } from "./utils/error-map.js";
           const wasSubscribed=realtimeSubscribed;
           realtimeSubscribed=true;
           lastRealtimeActivity=Date.now();
+          schedulePendingAiRecovery(currentUser?.role==="teacher"?1800:800);
 
           // Khi vừa reconnect sau lỗi/mất mạng, tải một snapshot yên lặng.
           if(wasSubscribed===false && realtimeQueue.length){
@@ -836,7 +921,11 @@ import { friendlyAppError } from "./utils/error-map.js";
 
   function stopRealtime(){
     clearTimeout(realtimeFlushTimer);
+    clearTimeout(aiRecoveryTimer);
     realtimeFlushTimer=null;
+    aiRecoveryTimer=null;
+    aiRecoveryRunning=false;
+    aiRecoveryAttemptedAt.clear();
     realtimeQueue=[];
     realtimeStructuralRefresh=false;
     realtimeSubscribed=false;
@@ -1564,7 +1653,13 @@ import { friendlyAppError } from "./utils/error-map.js";
             &&Number(registration.period)===Number(session.period)
             &&registration.isDeleted!==true
             &&!isRevisionOverdue(registration)
-            &&["submitted","approved"].includes(registration.status)
+            &&(
+              registration.status==="approved"
+              ||(
+                registration.status==="submitted"
+                &&!["pending","processing"].includes(registration.aiReviewStatus)
+              )
+            )
           )
         );
 
@@ -1587,7 +1682,7 @@ import { friendlyAppError } from "./utils/error-map.js";
                     <b>🤖 AI duyệt lại theo buổi</b>
                     <div class="tiny muted" style="margin-top:4px">
                       ${aiEnabled
-                        ?`${candidates.length} đăng ký có thể gọi AI duyệt lại. Bỏ qua bản nháp, yêu cầu sửa và báo cáo lỗi.`
+                        ?`${candidates.length} đăng ký có thể gọi AI duyệt lại. Bỏ qua bản nháp, yêu cầu sửa, báo cáo lỗi và đăng ký AI đang chờ/đang xử lý.`
                         :"AI đang tắt trong Cài đặt."}
                     </div>
                   </div>
@@ -1646,6 +1741,8 @@ import { friendlyAppError } from "./utils/error-map.js";
 
               let ids=[];
               let success=0;
+              let manualFallback=0;
+              let skipped=0;
               let failed=0;
 
               try{
@@ -1672,25 +1769,39 @@ import { friendlyAppError } from "./utils/error-map.js";
                   }
 
                   try{
-                    await prod.requestAiReview(ids[i]);
-                    success++;
+                    await prod.prepareRegistrationAiRereview(ids[i]);
+                    const result=await prod.requestAiReview(ids[i]);
+
+                    if(result?.fallbackToManual){
+                      manualFallback++;
+                    }else if(result?.skipped){
+                      skipped++;
+                    }else{
+                      success++;
+                    }
                   }catch(error){
                     failed++;
                     console.error("Session AI re-review",ids[i],error);
                   }
 
                   if(i<ids.length-1){
-                    await new Promise(resolve=>setTimeout(resolve,180));
+                    await new Promise(resolve=>setTimeout(resolve,450));
                   }
                 }
 
                 await refreshFromServer(false);
-                aiProgress=`Hoàn tất: ${success}/${ids.length} AI đã phản hồi${failed?` · ${failed} lỗi sẽ được fail-safe chuyển GV`:""}.`;
+                const issues=manualFallback+failed;
+                aiProgress=
+                  `Hoàn tất ${ids.length} đăng ký: ${success} AI phản hồi`+
+                  `${manualFallback?` · ${manualFallback} chuyển GV`:""}`+
+                  `${skipped?` · ${skipped} bỏ qua`:""}`+
+                  `${failed?` · ${failed} lỗi gọi`:""}.`;
+
                 toast(
-                  failed
-                    ?`AI đã xử lý ${success}/${ids.length}; ${failed} đăng ký lỗi sẽ chuyển GV xử lý.`
+                  issues
+                    ?`AI xử lý trực tiếp ${success}/${ids.length}; ${issues} đăng ký đã/chờ chuyển GV xử lý.`
                     :`AI đã duyệt lại xong ${success}/${ids.length} đăng ký.`,
-                  failed?"warn":"success"
+                  issues?"warn":"success"
                 );
               }catch(error){
                 console.error("Prepare session AI re-review",error);
@@ -1785,7 +1896,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         ?"Mọi đăng ký gửi mới sẽ chờ GV duyệt."
         :state.settings.aiReviewEnabled===false
           ?"Rule rõ ràng được tự duyệt; trường hợp còn lại chuyển GV."
-          :`Rule xử lý trường hợp rõ; AI đọc trường hợp mơ hồ và chỉ tự duyệt từ ${Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100)}% tin cậy.`}</span></div>
+          :`Groq AI kiểm tra mọi đăng ký gửi mới; chỉ tự duyệt từ ${Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100)}% tin cậy.`}</span></div>
       <button class="btn btn-ghost" data-route-settings="1">Cài đặt</button>
     </div>`;
     html+=`<div class="grid grid-2"><div class="card"><h3>🔔 Cần giáo viên xử lý</h3>${pending.length?pending.map(approvalItem).join(""):empty("✅","Không còn đăng ký chờ xử lý.")}</div>
@@ -2692,6 +2803,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         if(aligned)await selectWeek(state.currentWeekId);
       }
       renderShell(); render();
+      schedulePendingAiRecovery(currentUser?.role==="teacher"?1800:800);
       if(showToast) toast("Đã đồng bộ dữ liệu mới nhất.","success");
     }catch(err){ console.error(err); if(showToast) toast(safeErrorMessage(err,"Không tải được dữ liệu mới. Vui lòng thử lại."),"warn"); }
   }
