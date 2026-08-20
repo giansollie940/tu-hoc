@@ -70,6 +70,11 @@ import { friendlyAppError } from "./utils/error-map.js";
     return mapped.code==="UNKNOWN"?fallback:mapped.message;
   };
 
+  function isAiAutomationEnabled(settings=state?.settings){
+    return settings?.smartApprovalEnabled!==false
+      && settings?.aiReviewEnabled!==false;
+  }
+
   document.addEventListener("click",event=>{
     const toggle=event.target.closest?.(".password-toggle");
     if(!toggle)return;
@@ -636,7 +641,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   function statsForWeek(){
     const students=studentUsers(), slots=effectiveSchedule();
     const total=students.length*slots.length;
-    let valid=0,issues=0,missing=0,approved=0,needs=0,autoApproved=0,aiApproved=0;
+    let valid=0,issues=0,missing=0,needs=0;
 
     students.forEach(s=>slots.forEach(sl=>{
       const r=regFor(s.id,sl.dow,sl.period);
@@ -646,9 +651,6 @@ import { friendlyAppError } from "./utils/error-map.js";
       else if(bucket==="issue")issues++;
       else missing++;
 
-      if(bucket==="valid"&&r?.status==="approved")approved++;
-      if(bucket==="valid"&&r?.status==="approved"&&["auto_rule","ai"].includes(r?.approvalSource))autoApproved++;
-      if(bucket==="valid"&&r?.status==="approved"&&r?.approvalSource==="ai")aiApproved++;
       if(bucket==="valid"&&r?.status==="needs_revision")needs++;
     }));
 
@@ -660,9 +662,6 @@ import { friendlyAppError } from "./utils/error-map.js";
       submitted:valid,
       issues,
       missing,
-      approved,
-      autoApproved,
-      aiApproved,
       needs,
       rate:total?Math.round(valid/total*100):0
     };
@@ -670,7 +669,7 @@ import { friendlyAppError } from "./utils/error-map.js";
 
 
   function pendingAiRecoveryCandidates(){
-    if(!currentUser||!state||state.settings?.aiReviewEnabled===false)return [];
+    if(!currentUser||!state||!isAiAutomationEnabled())return [];
 
     const now=Date.now();
     const ownOnly=currentUser.role!=="teacher";
@@ -1223,8 +1222,6 @@ import { friendlyAppError } from "./utils/error-map.js";
         ${r?.aiDecision==="request_revision"&&r?.aiReason?`<p class="tiny ai-review-badge">🤖 <b>AI kiểm tra lại:</b> ${esc(r.aiReason)}</p>`:""}
         ${r?.isEmergency?`<p class="tiny emergency-badge">🚨 Đăng ký bổ sung · ${esc(r.emergencyReason||"")}</p>`:""}
         ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="ai"?`<p class="tiny device-ai-badge">🤖 AI phát hiện nội dung có sử dụng thiết bị điện tử${r.deviceDetectionConfidence==null?"":` · ${Math.round(r.deviceDetectionConfidence*100)}%`}</p>`:""}
-        ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="rule"?`<p class="tiny device-rule-badge">🔎 Hệ thống phát hiện nội dung có nhắc đến thiết bị điện tử · đang chờ AI xác nhận</p>`:""}
-        ${r?.approvalSource==="auto_rule"?`<p class="tiny auto-approved-note">✨ Đã được duyệt nhanh theo quy tắc</p>`:""}
         ${r?.status==="approved"&&r?.approvalSource==="ai"?`<p class="tiny auto-approved-note">🤖 AI đã duyệt${r.aiConfidence==null?"":` · ${Math.round(r.aiConfidence*100)}%`}</p>`:""}
         ${["pending","processing"].includes(r?.aiReviewStatus)?`<p class="tiny ai-review-badge">🤖 AI đang đánh giá...</p>`:""}
       </div>
@@ -1328,8 +1325,8 @@ import { friendlyAppError } from "./utils/error-map.js";
             placeholder="Nêu bài, trang hoặc mục tiêu cụ thể...">${esc(r?.note||"")}</textarea>
         </label>
         ${renderDeviceChoice({checked:r?.usesElectronicDevice===true,disabled:locked})}
-        ${r?.usesElectronicDevice&&r?.deviceDetectionSource&&r.deviceDetectionSource!=="student"
-          ?`<p class="tiny device-detection-hint">🤖 Hệ thống đã nhận diện nội dung có sử dụng thiết bị điện tử dù bạn chưa bật công tắc.</p>`
+        ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="ai"
+          ?`<p class="tiny device-detection-hint">🤖 AI đã nhận diện nội dung có sử dụng thiết bị điện tử dù bạn chưa bật công tắc.</p>`
           :""}
 
         ${locked
@@ -1453,8 +1450,6 @@ import { friendlyAppError } from "./utils/error-map.js";
           toast("Đã sửa đăng ký và gửi duyệt lại.","success");
         }else if(status==="draft"){
           toast("Đã lưu nháp.","success");
-        }else if(rr.status==="approved"&&rr.approvalSource==="auto_rule"){
-          toast("Đã gửi và được duyệt nhanh theo quy tắc.","success");
         }else if(rr.status==="approved"&&rr.approvalSource==="ai"){
           toast("Đã gửi và được AI duyệt.","success");
         }else{
@@ -1690,7 +1685,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             );
 
           const candidates=sessionAiCandidates();
-          const aiEnabled=state.settings.aiReviewEnabled!==false;
+          const aiEnabled=isAiAutomationEnabled();
           const aiToolbar=currentUser.role==="teacher"
             ?`<div class="card" style="margin-bottom:14px;box-shadow:none">
                 <div class="toolbar">
@@ -1906,7 +1901,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         </div>
       </div>`;
     }
-    const aiAutomationEnabled=state.settings.smartApprovalEnabled!==false&&state.settings.aiReviewEnabled!==false;
+    const aiAutomationEnabled=isAiAutomationEnabled();
     html+=`<div class="smart-approval-banner ${aiAutomationEnabled?"on":"off"}">
       <div><b>${aiAutomationEnabled?"🤖 Duyệt tự động bằng AI đang bật":"⏸ Duyệt tự động bằng AI đang tắt"}</b>
       <span>${aiAutomationEnabled
@@ -2050,7 +2045,6 @@ import { friendlyAppError } from "./utils/error-map.js";
         const pct=r.aiConfidence==null?"":` ${Math.round(r.aiConfidence*100)}%`;
         return `<span class="ai-review-badge">🤖 AI${pct}</span>`;
       }
-      if(r.approvalSource==="auto_rule")return '<span class="auto-review-badge">✨ Rule</span>';
       return '<span class="manual-review-badge">👤 GV</span>';
     };
 
@@ -2722,7 +2716,7 @@ import { friendlyAppError } from "./utils/error-map.js";
 
         <div class="smart-approval-setting" style="grid-column:1/-1">
           <label class="toggle-row">
-            <input id="smartApprovalEnabled" type="checkbox" ${state.settings.smartApprovalEnabled!==false&&state.settings.aiReviewEnabled!==false?"checked":""}>
+            <input id="smartApprovalEnabled" type="checkbox" ${isAiAutomationEnabled()?"checked":""}>
             <span>
               <b>🤖 Duyệt tự động bằng AI</b>
               <small>Bật: Groq kiểm tra đăng ký mới/gửi lại và học từ phản hồi GV. Tắt: mọi đăng ký chuyển GV duyệt.</small>
@@ -2737,7 +2731,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             </div>
 
             <div class="callout" style="margin-top:10px">
-              <b>Luồng Smart Approval V2:</b> đăng ký mới dùng ngưỡng <b>${threshold}%</b>. Khi HS sửa theo phản hồi GV,
+              <b>Luồng AI-only:</b> Groq là bộ máy tự duyệt duy nhất; không còn tự duyệt theo từ khóa. Đăng ký mới dùng ngưỡng <b>${threshold}%</b>. Khi HS sửa theo phản hồi GV,
               AI tách riêng <b>đã đáp ứng / chưa đáp ứng / không chắc</b> và chỉ tự hành động khi độ chắc chắn đạt <b>${revisionThreshold}%</b>.
               Nếu chưa đủ chắc chắn → <b>GV duyệt</b>.
             </div>
