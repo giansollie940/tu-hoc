@@ -1223,7 +1223,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="ai"?`<p class="tiny device-ai-badge">🤖 AI phát hiện nội dung có sử dụng thiết bị điện tử${r.deviceDetectionConfidence==null?"":` · ${Math.round(r.deviceDetectionConfidence*100)}%`}</p>`:""}
         ${r?.usesElectronicDevice&&r?.deviceDetectionSource==="rule"?`<p class="tiny device-rule-badge">🔎 Hệ thống phát hiện nội dung có nhắc đến thiết bị điện tử · đang chờ AI xác nhận</p>`:""}
         ${r?.approvalSource==="auto_rule"?`<p class="tiny auto-approved-note">✨ Đã được duyệt nhanh theo quy tắc</p>`:""}
-        ${r?.approvalSource==="ai"?`<p class="tiny auto-approved-note">🤖 AI đã duyệt${r.aiConfidence==null?"":` · ${Math.round(r.aiConfidence*100)}%`}</p>`:""}
+        ${r?.status==="approved"&&r?.approvalSource==="ai"?`<p class="tiny auto-approved-note">🤖 AI đã duyệt${r.aiConfidence==null?"":` · ${Math.round(r.aiConfidence*100)}%`}</p>`:""}
         ${["pending","processing"].includes(r?.aiReviewStatus)?`<p class="tiny ai-review-badge">🤖 AI đang đánh giá...</p>`:""}
       </div>
       <div class="study-actions">
@@ -1402,9 +1402,18 @@ import { friendlyAppError } from "./utils/error-map.js";
       try{
         await saveState();
 
+        if(status==="submitted"){
+          try{
+            await refreshFromServer(false);
+            rr=regFor(currentUser.id,dow,p) || rr;
+          }catch(refreshError){
+            console.warn("Refresh registration before AI invoke",refreshError);
+          }
+        }
+
         if(status==="submitted"&&rr.aiReviewStatus==="pending"){
           setOwlThinking(true,"🤖 Cú Thông Thái đang nhờ Groq AI đọc ngữ cảnh đăng ký này...");
-          toast(wasApproved?"Đã lưu thay đổi; AI đang duyệt lại...":"AI đang đánh giá trường hợp chưa rõ...","success");
+          toast((wasApproved||rr.teacherComment)?"Đã lưu thay đổi; AI đang duyệt lại theo phản hồi GV...":"AI đang đánh giá đăng ký...","success");
           try{
             await prod.requestAiReview(rr.id);
             await refreshFromServer(false);
@@ -1942,6 +1951,14 @@ import { friendlyAppError } from "./utils/error-map.js";
         r.teacherComment=$("#aiWrongComment").value.trim();
         r.status="needs_revision";
         r.approvalSource="manual";
+        r.approvedAt=null;
+        r.aiReviewStatus="not_needed";
+        r.aiDecision="";
+        r.aiCategory="";
+        r.aiConfidence=null;
+        r.aiReason="";
+        r.aiModel="";
+        r.aiReviewedAt=null;
         markLocalNotificationReadByReg(r.id);
         audit("GV sửa quyết định AI",r.id,r.teacherComment);
         try{
@@ -1978,7 +1995,36 @@ import { friendlyAppError } from "./utils/error-map.js";
   function teacherComment(id,needsRevision){
     const r=state.registrations.find(x=>x.id===id); if(!r)return;
     openModal(needsRevision?"Yêu cầu chỉnh sửa":"Nhận xét đăng ký",`<form id="commentForm"><label>Nhận xét<textarea id="teacherComment" required>${esc(r.teacherComment||"")}</textarea></label><button class="btn ${needsRevision?"btn-warning":"btn-primary"} btn-block">${needsRevision?"Gửi yêu cầu sửa":"Lưu nhận xét"}</button></form>`);
-    $("#commentForm").onsubmit=e=>{e.preventDefault();r.teacherComment=$("#teacherComment").value.trim();if(needsRevision){r.status="needs_revision";markLocalNotificationReadByReg(r.id);}audit(needsRevision?"Yêu cầu chỉnh sửa":"Nhận xét",r.id,r.teacherComment);saveState();closeModal();toast("Đã lưu phản hồi.","success");render();};
+    $("#commentForm").onsubmit=async e=>{
+      e.preventDefault();
+      r.teacherComment=$("#teacherComment").value.trim();
+      if(needsRevision){
+        r.status="needs_revision";
+        r.approvalSource="manual";
+        r.approvedAt=null;
+        r.aiReviewStatus="not_needed";
+        r.aiDecision="";
+        r.aiCategory="";
+        r.aiConfidence=null;
+        r.aiReason="";
+        r.aiModel="";
+        r.aiReviewedAt=null;
+        markLocalNotificationReadByReg(r.id);
+      }
+      audit(needsRevision?"Yêu cầu chỉnh sửa":"Nhận xét",r.id,r.teacherComment);
+      try{
+        await saveState();
+        await refreshFromServer(false);
+        closeModal();
+        toast(needsRevision
+          ?"Đã yêu cầu sửa. Kết quả AI cũ đã chuyển vào lịch sử phản hồi."
+          :"Đã lưu phản hồi.","success");
+        render();
+      }catch(error){
+        console.error(error);
+        toast(safeErrorMessage(error,"Không lưu được phản hồi."),"warn");
+      }
+    };
   }
   function approvalsPage(){
     const pending=state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r));
@@ -1994,7 +2040,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       .sort((a,b)=>String(b.emergencyRequestedAt||"").localeCompare(String(a.emergencyRequestedAt||"")));
 
     const sourceBadge=r=>{
-      if(r.approvalSource==="ai"){
+      if(r.status==="approved"&&r.approvalSource==="ai"){
         const pct=r.aiConfidence==null?"":` ${Math.round(r.aiConfidence*100)}%`;
         return `<span class="ai-review-badge">🤖 AI${pct}</span>`;
       }
