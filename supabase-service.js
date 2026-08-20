@@ -364,6 +364,35 @@
     throw lastError || new Error("AI không xử lý được đăng ký.");
   }
 
+  async function prepareSessionAiRereview({weekId,dow,period}){
+    if(!isUuid(weekId)){
+      throw new Error("Tuần không hợp lệ.");
+    }
+
+    const weekday=Number(dow)+1;
+    const periodNumber=Number(period);
+
+    if(!Number.isInteger(weekday)||weekday<1||weekday>5){
+      throw new Error("Thứ tự ngày học không hợp lệ.");
+    }
+    if(!Number.isInteger(periodNumber)||periodNumber<1||periodNumber>9){
+      throw new Error("Tiết học không hợp lệ.");
+    }
+
+    const sb=requireClient();
+    const {data,error}=await sb.rpc("prepare_session_ai_rereview",{
+      p_week_id:weekId,
+      p_weekday:weekday,
+      p_period_number:periodNumber
+    });
+
+    if(error)throw friendlySyncError(error);
+
+    return (data||[])
+      .map(row=>String(row?.registration_id||""))
+      .filter(isUuid);
+  }
+
   async function deleteRegistration(registrationId){
     if(!isUuid(registrationId)){
       throw new Error("Mã đăng ký không hợp lệ.");
@@ -987,6 +1016,7 @@
     teacherRebaseWeeks,
     emergencyRegister,
     requestAiReview,
+    prepareSessionAiRereview,
     deleteRegistration,
     markNotificationsRead,
     subscribeRealtime,

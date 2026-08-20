@@ -1553,25 +1553,156 @@ import { friendlyAppError } from "./utils/error-map.js";
       button.addEventListener("click",()=>{
         const [dow,periodNumber]=String(button.dataset.openSession||"").split("-").map(Number);
         const session={dow,period:periodNumber,label:slotLabel(dow,periodNumber)};
-        const registrations=(state.registrations||[])
-          .filter(registration=>registration.weekId===state.currentWeekId)
-          .map(registration=>isRevisionOverdue(registration)
-            ?{...registration,revisionOverdueAt:revisionReportTime(registration)}
-            :registration
-          );
+        let aiBusy=false;
+        let aiProgress="";
+        let activeFilter="all";
 
-        const renderDetails=(filter="all")=>{
-          setSafeHtml(modalBody,renderSessionDetails({
+        const sessionAiCandidates=()=>(
+          (state.registrations||[]).filter(registration=>
+            registration.weekId===state.currentWeekId
+            &&registration.dow===session.dow
+            &&Number(registration.period)===Number(session.period)
+            &&registration.isDeleted!==true
+            &&!isRevisionOverdue(registration)
+            &&["submitted","approved"].includes(registration.status)
+          )
+        );
+
+        const renderDetails=(filter=activeFilter)=>{
+          activeFilter=filter;
+
+          const registrations=(state.registrations||[])
+            .filter(registration=>registration.weekId===state.currentWeekId)
+            .map(registration=>isRevisionOverdue(registration)
+              ?{...registration,revisionOverdueAt:revisionReportTime(registration)}
+              :registration
+            );
+
+          const candidates=sessionAiCandidates();
+          const aiEnabled=state.settings.aiReviewEnabled!==false;
+          const aiToolbar=currentUser.role==="teacher"
+            ?`<div class="card" style="margin-bottom:14px;box-shadow:none">
+                <div class="toolbar">
+                  <div>
+                    <b>🤖 AI duyệt lại theo buổi</b>
+                    <div class="tiny muted" style="margin-top:4px">
+                      ${aiEnabled
+                        ?`${candidates.length} đăng ký có thể gọi AI duyệt lại. Bỏ qua bản nháp, yêu cầu sửa và báo cáo lỗi.`
+                        :"AI đang tắt trong Cài đặt."}
+                    </div>
+                  </div>
+                  <button
+                    class="btn btn-primary right"
+                    type="button"
+                    data-session-ai-rereview="1"
+                    ${aiBusy||!aiEnabled||!candidates.length?"disabled":""}>
+                    ${aiBusy?"⏳ Đang gọi AI...":"🤖 Gọi AI duyệt lại buổi này"}
+                  </button>
+                </div>
+                <div id="sessionAiRereviewProgress" class="tiny ${aiProgress?"":"hidden"}" style="margin-top:10px">
+                  ${esc(aiProgress)}
+                </div>
+              </div>`
+            :"";
+
+          setSafeHtml(modalBody,aiToolbar+renderSessionDetails({
             session,
             users:state.users||[],
             registrations,
             role:currentUser.role,
             filter
           }));
+
           modalBody.querySelectorAll("[data-session-filter]").forEach(filterButton=>{
             filterButton.addEventListener("click",()=>renderDetails(filterButton.dataset.sessionFilter));
           });
-          if(currentUser.role==="teacher")bindTeacherActions(modalBody);
+
+          if(currentUser.role==="teacher"){
+            bindTeacherActions(modalBody);
+
+            modalBody.querySelector("[data-session-ai-rereview]")?.addEventListener("click",async()=>{
+              if(aiBusy)return;
+
+              const candidatesNow=sessionAiCandidates();
+              if(!candidatesNow.length){
+                toast("Buổi này không có đăng ký phù hợp để AI duyệt lại.","warn");
+                return;
+              }
+
+              const approvedCount=candidatesNow.filter(r=>r.status==="approved").length;
+              const confirmText=
+                `Gọi AI duyệt lại ${candidatesNow.length} đăng ký của ${session.label}?\n\n`+
+                (approvedCount
+                  ?`${approvedCount} đăng ký đang được duyệt sẽ tạm chuyển sang trạng thái chờ AI.\n`
+                  :"")+
+                `Bản nháp, Cần chỉnh sửa và Báo cáo lỗi sẽ không bị thay đổi.\n`+
+                `Nếu AI không phản hồi quá 2 phút, hệ thống sẽ chuyển GV xử lý.`;
+
+              if(!window.confirm(confirmText))return;
+
+              aiBusy=true;
+              aiProgress="Đang chuẩn bị hàng đợi AI...";
+              renderDetails(activeFilter);
+
+              let ids=[];
+              let success=0;
+              let failed=0;
+
+              try{
+                ids=await prod.prepareSessionAiRereview({
+                  weekId:state.currentWeekId,
+                  dow:session.dow,
+                  period:session.period
+                });
+
+                if(!ids.length){
+                  aiBusy=false;
+                  aiProgress="Không có đăng ký nào được đưa vào hàng đợi AI.";
+                  renderDetails(activeFilter);
+                  toast("Không có đăng ký phù hợp để duyệt lại.","warn");
+                  return;
+                }
+
+                for(let i=0;i<ids.length;i++){
+                  aiProgress=`AI đang xử lý ${i+1}/${ids.length} đăng ký...`;
+                  const progressEl=modalBody.querySelector("#sessionAiRereviewProgress");
+                  if(progressEl){
+                    progressEl.textContent=aiProgress;
+                    progressEl.classList.remove("hidden");
+                  }
+
+                  try{
+                    await prod.requestAiReview(ids[i]);
+                    success++;
+                  }catch(error){
+                    failed++;
+                    console.error("Session AI re-review",ids[i],error);
+                  }
+
+                  if(i<ids.length-1){
+                    await new Promise(resolve=>setTimeout(resolve,180));
+                  }
+                }
+
+                await refreshFromServer(false);
+                aiProgress=`Hoàn tất: ${success}/${ids.length} AI đã phản hồi${failed?` · ${failed} lỗi sẽ được fail-safe chuyển GV`:""}.`;
+                toast(
+                  failed
+                    ?`AI đã xử lý ${success}/${ids.length}; ${failed} đăng ký lỗi sẽ chuyển GV xử lý.`
+                    :`AI đã duyệt lại xong ${success}/${ids.length} đăng ký.`,
+                  failed?"warn":"success"
+                );
+              }catch(error){
+                console.error("Prepare session AI re-review",error);
+                aiProgress="Không khởi động được lượt AI duyệt lại.";
+                toast(safeErrorMessage(error,"Không gọi được AI duyệt lại theo buổi."),"warn");
+                try{await refreshFromServer(false);}catch{}
+              }finally{
+                aiBusy=false;
+                renderDetails(activeFilter);
+              }
+            });
+          }
         };
 
         openModal("Nội dung · "+session.label,"");
