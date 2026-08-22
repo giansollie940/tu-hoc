@@ -7,8 +7,8 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.4.3";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.4.3";
+} from "./features/class-overview/class-overview.js?v=8.4.4";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.4.4";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -1342,18 +1342,41 @@ import { friendlyAppError } from "./utils/error-map.js";
 
   function head(title,sub="",action=""){
     $("#pageTitle").textContent=title; $("#pageEyebrow").textContent=`Lớp ${state.settings.className} · ${state.settings.schoolYear}`;
-    return `<div class="page-head"><div><h1>${title}</h1><p>${sub}</p></div>${action}</div>`;
+    return `<div class="page-head page-shell-head">
+      <div class="page-shell-head-copy">
+        <span class="page-shell-kicker">SỔ TỰ HỌC · ${esc(state.settings.className)}</span>
+        <h1>${title}</h1>
+        <p>${sub}</p>
+      </div>
+      ${action?`<div class="page-shell-actions">${action}</div>`:""}
+    </div>`;
   }
   function weekBanner(){
     const w=week();
-    const image=isManager()?"assets/images/teacher-dashboard-illustration.png":"assets/images/student-cards.png";
-    return `<div class="banner"><div>
-      <div class="eyebrow-pill">📅 ${isManager()?"Tuần đang xem":"Bạn đang đăng ký cho"}</div>
-      <h2>Tuần ${w.number} · ${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</h2>
-      <div class="deadline-row">${deadlineChip(w)} <span class="week-state-pill">${weekStatus(w.status)}</span></div>
-      <p>${esc(state.settings.announcement)}</p>
-      ${!isManager()?`<p class="tiny banner-help">Dùng ô <b>“Chọn tuần đăng ký”</b> ở góc trên để chuyển sang tuần khác.</p>`:""}
-      </div><img class="banner-image" src="${image}" alt="Minh họa hoạt động tự học"></div>`;
+    const manager=isManager();
+    const image=manager?"assets/images/teacher-dashboard-illustration.png":"assets/images/student-cards.png";
+    const title=manager?`Tổng quan tuần ${w.number}`:`Kế hoạch tự học tuần ${w.number}`;
+    const helper=manager
+      ?"Theo dõi tình hình đăng ký, ưu tiên các trường hợp cần giáo viên xử lý."
+      :"Xem tiến độ, hoàn thiện từng buổi tự học và theo dõi phản hồi của giáo viên.";
+    return `<section class="learning-hero dashboard-section ${manager?"learning-hero-manager":"learning-hero-student"}">
+      <div class="learning-hero-copy">
+        <span class="learning-hero-badge">${uiIcon("today")} ${manager?"TUẦN ĐANG XEM":"TUẦN ĐANG ĐĂNG KÝ"}</span>
+        <h2>${title}</h2>
+        <p class="learning-hero-lead">${helper}</p>
+        <div class="learning-hero-meta">
+          <span><small>Thời gian</small><b>${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</b></span>
+          <span><small>Trạng thái</small><b>${weekStatus(w.status)}</b></span>
+          <span><small>Hạn đăng ký</small><b>${deadlineChip(w)}</b></span>
+        </div>
+        ${state.settings.announcement?`<div class="learning-hero-announcement">${uiIcon("comment")}<span>${esc(state.settings.announcement)}</span></div>`:""}
+        ${!manager?`<p class="tiny learning-hero-helper">Dùng ô <b>Chọn tuần đăng ký</b> ở thanh trên để chuyển sang tuần khác.</p>`:""}
+      </div>
+      <div class="learning-hero-media">
+        <img class="learning-hero-image" src="${image}" alt="Minh họa hoạt động tự học">
+        <span class="learning-hero-glow" aria-hidden="true"></span>
+      </div>
+    </section>`;
   }
 
   function studentDashboard(){
@@ -1365,17 +1388,30 @@ import { friendlyAppError } from "./utils/error-map.js";
     const viewingNext=actual&&week().number>actual.number;
     let html=head("Trang chủ",`Xin chào ${esc(currentUser.name)} 👋`)+weekBanner();
     if(viewingNext){
-      html+=`<div class="callout next-action-week"><b>➡ Đã chuyển sang Tuần ${week().number}.</b> Các buổi còn lại của tuần trước đã bắt đầu/đã qua nên app ưu tiên tuần có buổi đăng ký tiếp theo.</div>`;
+      html+=`<div class="callout next-action-week dashboard-section"><b>➡ Đã chuyển sang Tuần ${week().number}.</b> Các buổi còn lại của tuần trước đã bắt đầu/đã qua nên app ưu tiên tuần có buổi đăng ký tiếp theo.</div>`;
     }
-    html+=`<div class="card" style="margin-bottom:16px">
-      <div class="toolbar"><b>Tiến độ hợp lệ của bạn</b><span class="right"><b>${done}/${total}</b> tiết</span></div>
-      <div class="progress" style="margin-top:10px"><span style="width:${pct}%"></span></div>
-      ${issueCount?`<p class="tiny revision-overdue-note" style="margin-top:10px">⚠️ ${issueCount} tiết đang ở Báo cáo lỗi và không tính vào tiến độ hợp lệ.</p>`:""}
-    </div>`;
-    if(!slots.length) html+=empty("📅","Tuần này chưa có tiết tự học.");
-    else html+=`<div class="grid">${slots.map((sl,i)=>studyCard(sl,regs[i])).join("")}</div>`;
+    html+=`<section class="card dashboard-section student-progress-section">
+      <div class="section-heading-row">
+        <div><span class="section-kicker">TIẾN ĐỘ CÁ NHÂN</span><h3>Hoàn thành kế hoạch tuần</h3></div>
+        <div class="student-progress-score"><strong>${pct}%</strong><span>${done}/${total} tiết hợp lệ</span></div>
+      </div>
+      <div class="progress progress-modern"><span style="width:${pct}%"></span></div>
+      <div class="student-progress-meta">
+        <span>${uiIcon("check")} <b>${done}</b> đã hợp lệ</span>
+        <span>${uiIcon("warning")} <b>${issueCount}</b> cần chú ý</span>
+        <span>${uiIcon("schedule")} <b>${Math.max(total-done-issueCount,0)}</b> còn lại</span>
+      </div>
+      ${issueCount?`<p class="tiny revision-overdue-note">${uiIcon("warning")} ${issueCount} tiết đang ở Báo cáo lỗi và không tính vào tiến độ hợp lệ.</p>`:""}
+    </section>`;
+    html+=`<section class="dashboard-section study-plan-section">
+      <div class="section-heading-row section-heading-row-spaced">
+        <div><span class="section-kicker">LỊCH TỰ HỌC</span><h3>Các buổi trong tuần</h3><p>Chọn từng buổi để đăng ký, chỉnh sửa hoặc xem trạng thái.</p></div>
+      </div>
+      ${!slots.length?empty("📅","Tuần này chưa có tiết tự học."):`<div class="grid study-plan-grid">${slots.map((sl,i)=>studyCard(sl,regs[i])).join("")}</div>`}
+    </section>`;
     return html;
   }
+
   function studyCard(sl,r){
     const w=week();
     const pe=period(sl.period);
@@ -2121,41 +2157,68 @@ import { friendlyAppError } from "./utils/error-map.js";
     );
     const pending=pendingAll.slice(0,6), st=statsForWeek();
     const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
-    let html=head("Dashboard",`Tổng quan tuần ${week().number}`)+weekBanner();
-    html+=`<div class="grid three-state-kpi-grid" style="margin-bottom:16px">
-      ${kpi("✅",st.valid,"Đăng ký hợp lệ")}
-      ${kpi("⚠️",st.issues,"Báo cáo lỗi")}
-      ${kpi("🚨",st.missing,"Chưa đăng ký")}
-      ${kpi("🔔",unread||pendingAll.length,"Cần GV xem")}
-      ${kpi("📈",st.rate+"%","Hoàn thành hợp lệ")}
-    </div>`;
+    let html=head("Dashboard",`Tổng quan hoạt động lớp trong tuần ${week().number}`)+weekBanner();
+
+    html+=`<section class="dashboard-section dashboard-kpi-section">
+      <div class="section-heading-row section-heading-row-spaced">
+        <div><span class="section-kicker">TÌNH HÌNH TUẦN</span><h3>Chỉ số cần quan tâm</h3><p>Tổng hợp nhanh để giáo viên biết nên ưu tiên xử lý phần nào.</p></div>
+      </div>
+      <div class="grid three-state-kpi-grid modern-kpi-grid">
+        ${kpi("✅",st.valid,"Đăng ký hợp lệ")}
+        ${kpi("⚠️",st.issues,"Báo cáo lỗi")}
+        ${kpi("🚨",st.missing,"Chưa đăng ký")}
+        ${kpi("🔔",unread||pendingAll.length,"Cần GV xem")}
+        ${kpi("📈",st.rate+"%","Hoàn thành hợp lệ")}
+      </div>
+    </section>`;
+
     if(aiWaiting.length){
-      html+=`<div class="callout ai-waiting-callout" style="margin-bottom:16px">
+      html+=`<section class="callout ai-waiting-callout dashboard-section dashboard-alert-strip">
         <div class="toolbar">
-          <span><b>🤖 ${aiWaiting.length} đăng ký đang chờ AI.</b> GV đã được thông báo ngay; nếu AI không phản hồi trong 2 phút, backend tự chuyển sang danh sách cần GV xử lý.</span>
+          <span>${uiIcon("warning")} <b>${aiWaiting.length} đăng ký đang chờ AI.</b> GV đã được thông báo ngay; nếu AI không phản hồi trong 2 phút, backend tự chuyển sang danh sách cần GV xử lý.</span>
           <button class="btn btn-ghost right" type="button" data-route-approvals="1">Xem hàng đợi AI</button>
         </div>
-      </div>`;
+      </section>`;
     }
+
     const aiAutomationEnabled=isAiAutomationEnabled();
-    html+=`<div class="smart-approval-banner ${aiAutomationEnabled?"on":"off"}">
+    html+=`<section class="smart-approval-banner dashboard-section ${aiAutomationEnabled?"on":"off"}">
       <div><b>${aiAutomationEnabled?"🤖 Duyệt tự động bằng AI đang bật":"⏸ Duyệt tự động bằng AI đang tắt"}</b>
       <span>${aiAutomationEnabled
         ?`Groq AI kiểm tra mọi đăng ký gửi mới; chỉ tự duyệt từ ${Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100)}% tin cậy.`
         :"Mọi đăng ký gửi mới sẽ chuyển giáo viên duyệt."}</span></div>
       <button class="btn btn-ghost" data-route-settings="1">Cài đặt</button>
-    </div>`;
-    html+=`<div class="grid grid-2"><div class="card"><h3>🔔 Cần giáo viên xử lý</h3>${pending.length?pending.map(approvalItem).join(""):empty("✅","Không còn đăng ký chờ xử lý.")}</div>
-      <div class="card"><h3>Tuần hiện tại</h3><p><b>Tuần ${week().number}</b></p><p>${fmtDate(week().startDate)} – ${fmtDate(week().endDate)}</p><p><b>Kiểu deadline:</b> ${deadlineModeLabel(week().deadlineMode)}</p><p>${deadlineChip(week())}</p><p>Trạng thái: ${weekStatus(effectiveWeekStatus(week()))}</p>
-      <div class="progress"><span style="width:${st.rate}%"></span></div>
-      <div class="three-state-inline">
-        <span class="state-valid">✅ ${st.valid} hợp lệ</span>
-        <span class="state-issue">⚠️ ${st.issues} báo cáo lỗi</span>
-        <span class="state-missing">🚨 ${st.missing} chưa đăng ký</span>
+    </section>`;
+
+    html+=`<section class="dashboard-section dashboard-workspace">
+      <div class="card dashboard-work-card dashboard-review-card">
+        <div class="section-heading-row">
+          <div><span class="section-kicker">ƯU TIÊN XỬ LÝ</span><h3>${uiIcon("approvals")} Cần giáo viên xử lý</h3><p>Các đăng ký cần quyết định hoặc phản hồi trực tiếp.</p></div>
+          ${pendingAll.length?`<span class="section-count-badge">${pendingAll.length}</span>`:""}
+        </div>
+        <div class="dashboard-review-list">${pending.length?pending.map(approvalItem).join(""):empty("✅","Không còn đăng ký chờ xử lý.")}</div>
       </div>
-      <p class="muted tiny">${st.valid}/${st.total} lượt hoàn thành hợp lệ · ${st.valid+st.issues+st.missing}/${st.total} lượt đã phân loại</p></div></div>`;
+      <div class="card dashboard-work-card dashboard-week-card">
+        <div class="section-heading-row"><div><span class="section-kicker">TUẦN HIỆN TẠI</span><h3>Tiến độ của lớp</h3></div></div>
+        <div class="week-overview-number"><strong>${st.rate}%</strong><span>hoàn thành hợp lệ</span></div>
+        <div class="progress progress-modern"><span style="width:${st.rate}%"></span></div>
+        <div class="week-overview-meta">
+          <span><small>Tuần</small><b>${week().number}</b></span>
+          <span><small>Thời gian</small><b>${fmtDate(week().startDate)} – ${fmtDate(week().endDate)}</b></span>
+          <span><small>Deadline</small><b>${deadlineModeLabel(week().deadlineMode)}</b></span>
+          <span><small>Trạng thái</small><b>${weekStatus(effectiveWeekStatus(week()))}</b></span>
+        </div>
+        <div class="three-state-inline modern-state-inline">
+          <span class="state-valid">✅ ${st.valid} hợp lệ</span>
+          <span class="state-issue">⚠️ ${st.issues} báo cáo lỗi</span>
+          <span class="state-missing">🚨 ${st.missing} chưa đăng ký</span>
+        </div>
+        <p class="muted tiny">${st.valid}/${st.total} lượt hoàn thành hợp lệ · ${st.valid+st.issues+st.missing}/${st.total} lượt đã phân loại</p>
+      </div>
+    </section>`;
     return html;
   }
+
   function kpi(icon,val,label){return `<div class="card kpi"><div class="kpi-icon">${kpiClayIcon(icon)}</div><div><div class="kpi-value">${val}</div><div class="kpi-label">${label}</div></div></div>`;}
   function approvalItem(r){
     const s=state.users.find(u=>u.id===r.studentId);
@@ -2556,6 +2619,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     const countStudent=allUsers.filter(u=>u.role==="student").length;
     const countMonitor=allUsers.filter(u=>u.role==="monitor").length;
     const countDeleted=allUsers.filter(u=>!u.active).length;
+    const countActive=allUsers.filter(u=>u.active).length;
 
     const rows=filtered.map(u=>`
       <tr>
@@ -2565,56 +2629,65 @@ import { friendlyAppError } from "./utils/error-map.js";
             <button class="mini-icon-btn copy-code-btn" data-code="${esc(u.code)}" title="Sao chép mã đăng nhập">${uiIcon("copy")}</button>
           </div>
         </td>
-        <td><div class="person"><span class="avatar">${initials(u.name)}</span><b>${esc(u.name)}</b></div></td>
+        <td><div class="person"><span class="avatar">${initials(u.name)}</span><div class="student-person-copy"><b>${esc(u.name)}</b><small>${u.role==="monitor"?"Cán sự lớp":"Học sinh"}</small></div></div></td>
         <td>${roleLabel[u.role]||esc(u.role)}</td>
         <td>${u.active?'<span class="status approved">Hoạt động</span>':'<span class="status missing">Đã xóa</span>'}</td>
         <td>
-          <div class="toolbar" style="gap:6px;flex-wrap:wrap">
+          <div class="toolbar student-row-actions">
             ${u.active?`
-              <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">${uiIcon('edit')}<span>Sửa tài khoản</span></button>
-              <button class="btn btn-ghost reset-password-btn" data-id="${u.id}">${uiIcon('lock')}<span>Đặt lại mật khẩu</span></button>
+              <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">${uiIcon('edit')}<span>Sửa</span></button>
+              <button class="btn btn-ghost reset-password-btn" data-id="${u.id}">${uiIcon('lock')}<span>Mật khẩu</span></button>
               <button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">${uiIcon('delete')}<span>Xóa</span></button>
             `:`
               <button class="btn btn-ghost restore-user-btn" data-id="${u.id}">${uiIcon('restore')}<span>Khôi phục</span></button>
             `}
           </div>
         </td>
-      </tr>`).join("") || `<tr><td colspan="5" class="center muted" style="padding:18px">Không có học sinh phù hợp bộ lọc hiện tại.</td></tr>`;
+      </tr>`).join("") || `<tr><td colspan="5">${empty("🔎","Không có học sinh phù hợp bộ lọc hiện tại.")}</td></tr>`;
 
     return head(
       "Quản lý học sinh",
-      "V8.4.3: danh sách mặc định chỉ hiện tài khoản hoạt động; thao tác xóa là xóa mềm để giữ nguyên lịch sử đăng ký.",
-      `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>
-      </div>`
+      "Quản lý tài khoản học sinh, cán sự và trạng thái sử dụng trong lớp.",
+      `<button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>`
     )+
-      `<div class="card">
-        <div class="callout" style="margin-bottom:12px">
-          <b>Mã đăng nhập</b> được tự động lấy từ hồ sơ; nếu hồ sơ cũ thiếu mã, server sẽ lấy phần trước dấu <b>@</b> của email Auth rồi tự đồng bộ lại. App không tải/hiển thị email nội bộ. Nếu chỉ đổi <b>vai trò / trạng thái / họ tên</b> thì không cần nhập lại mã.
+      `<section class="student-management-hero dashboard-section">
+        <div class="student-management-copy">
+          <span class="section-kicker">TÀI KHOẢN LỚP HỌC</span>
+          <h2>${countActive} tài khoản đang hoạt động</h2>
+          <p>Danh sách mặc định tập trung vào tài khoản đang dùng. Học sinh đã xóa được giữ lịch sử và có thể khôi phục khi cần.</p>
+          <div class="student-management-notice">${uiIcon("warning")}<span><b>Xóa học sinh là xóa mềm.</b> Tài khoản bị vô hiệu hóa nhưng lịch sử đăng ký vẫn được giữ nguyên.</span></div>
         </div>
+        <img class="student-management-illustration" src="assets/images/student-cards.png" alt="Minh họa thẻ học sinh">
+      </section>
 
-        <div class="summary-pills">
-          <span class="summary-pill">${uiIcon("user")}Học sinh: <b>${countStudent}</b></span>
-          <span class="summary-pill">${uiIcon("students")}Cán sự: <b>${countMonitor}</b></span>
-          <span class="summary-pill">${uiIcon("delete")}Đã xóa: <b>${countDeleted}</b></span>
-          <span class="summary-pill">📋 Đang hiển thị: <b>${filtered.length}/${allUsers.length}</b></span>
+      <section class="card dashboard-section student-summary-block">
+        <div class="section-heading-row section-heading-row-spaced">
+          <div><span class="section-kicker">TỔNG QUAN</span><h3>Thành viên trong lớp</h3></div>
+          <span class="muted tiny">Đang hiển thị ${filtered.length}/${allUsers.length}</span>
         </div>
+        <div class="student-summary-grid">
+          <div class="student-summary-item"><span class="student-summary-icon">${uiIcon("user")}</span><div><small>Học sinh</small><strong>${countStudent}</strong></div></div>
+          <div class="student-summary-item"><span class="student-summary-icon">${uiIcon("students")}</span><div><small>Cán sự</small><strong>${countMonitor}</strong></div></div>
+          <div class="student-summary-item"><span class="student-summary-icon">${uiIcon("check")}</span><div><small>Hoạt động</small><strong>${countActive}</strong></div></div>
+          <div class="student-summary-item"><span class="student-summary-icon">${uiIcon("delete")}</span><div><small>Đã xóa</small><strong>${countDeleted}</strong></div></div>
+        </div>
+      </section>
 
-        <div class="students-toolbar">
-          <label class="search-box">
-            <span>🔎</span>
+      <section class="card dashboard-section student-filter-block">
+        <div class="section-heading-row"><div><span class="section-kicker">BỘ LỌC</span><h3>Tìm nhanh tài khoản</h3><p>Lọc theo mã, họ tên, vai trò hoặc trạng thái.</p></div></div>
+        <div class="students-toolbar students-toolbar-v844">
+          <label class="search-box student-search-box">
+            <span>${uiIcon("search")}</span>
             <input id="studentSearch" value="${esc(ui.query||"")}" placeholder="Tìm theo mã hoặc họ tên">
           </label>
-          <label>
-            Vai trò
+          <label class="filter-field"><span>Vai trò</span>
             <select id="studentRoleFilter">
               <option value="all" ${ui.role==="all"?"selected":""}>Tất cả</option>
               <option value="student" ${ui.role==="student"?"selected":""}>Học sinh</option>
               <option value="monitor" ${ui.role==="monitor"?"selected":""}>Cán sự lớp</option>
             </select>
           </label>
-          <label>
-            Trạng thái
+          <label class="filter-field"><span>Trạng thái</span>
             <select id="studentStatusFilter">
               <option value="active" ${ui.status==="active"?"selected":""}>Đang hoạt động</option>
               <option value="deleted" ${ui.status==="deleted"?"selected":""}>Đã xóa</option>
@@ -2623,14 +2696,20 @@ import { friendlyAppError } from "./utils/error-map.js";
           </label>
           <button class="btn btn-ghost" id="clearStudentFilters">Xóa lọc</button>
         </div>
+      </section>
 
-        <div class="table-wrap">
-          <table class="data-table">
+      <section class="card dashboard-section student-table-block">
+        <div class="section-heading-row section-heading-row-spaced">
+          <div><span class="section-kicker">DANH SÁCH</span><h3>Học sinh và cán sự</h3><p>Mã đăng nhập được đồng bộ từ hồ sơ; app không hiển thị email nội bộ.</p></div>
+          <span class="section-count-badge">${filtered.length}</span>
+        </div>
+        <div class="table-wrap student-table-wrap">
+          <table class="data-table modern-data-table">
             <thead><tr><th>Mã đăng nhập</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
-      </div>`;
+      </section>`;
   }
 
   function bindStudents(){
@@ -3283,7 +3362,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     });
   }
 
-  function empty(icon,text){return `<div class="empty"><img class="empty-image" src="assets/images/empty-state.png" alt=""><div class="tiny muted">${icon}</div><b>${text}</b></div>`;}
+  function empty(icon,text){return `<div class="empty learning-empty-state"><img class="empty-image" src="assets/images/empty-state.png" alt=""><div class="learning-empty-copy"><span class="learning-empty-icon" aria-hidden="true">${icon}</span><b>${text}</b><p>Thông tin sẽ xuất hiện tại đây khi có dữ liệu phù hợp.</p></div></div>`;}
 
   function render(){
     if(!currentUser){renderShell();return;}
