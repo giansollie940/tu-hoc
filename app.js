@@ -7,8 +7,8 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.3.2b";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.3.2f";
+} from "./features/class-overview/class-overview.js?v=8.4.1";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.4.1";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -70,9 +70,18 @@ import { friendlyAppError } from "./utils/error-map.js";
     return mapped.code==="UNKNOWN"?fallback:mapped.message;
   };
 
+  const isManager=(user=currentUser)=>["teacher","admin"].includes(user?.role);
+
+  function setGlobalLoading(active,text="Đang tải dữ liệu..."){
+    const overlay=$("#globalLoading"),label=$("#globalLoadingText"),loginCard=document.querySelector(".login-card"),loginBtn=$("#loginSubmitBtn");
+    if(label)label.textContent=text;
+    overlay?.classList.toggle("hidden",!active);
+    loginCard?.classList.toggle("is-loading",active&&loginView&&!loginView.classList.contains("hidden"));
+    if(loginBtn)loginBtn.disabled=!!active;
+  }
+
   function isAiAutomationEnabled(settings=state?.settings){
-    return settings?.smartApprovalEnabled!==false
-      && settings?.aiReviewEnabled!==false;
+    return settings?.aiAutomationEnabled!==false;
   }
 
   document.addEventListener("click",event=>{
@@ -89,7 +98,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     toggle.classList.toggle("is-visible",!showing);
   });
 
-  const roleLabel={student:"Học sinh",monitor:"Cán sự lớp",teacher:"Giáo viên"};
+  const roleLabel={student:"Học sinh",monitor:"Cán sự lớp",teacher:"Giáo viên",admin:"Quản trị viên"};
   const statusLabel={approved:"Đã duyệt",submitted:"Chờ duyệt",needs_revision:"Cần chỉnh sửa",revision_overdue:"Báo cáo lỗi",draft:"Bản nháp",missing:"Chưa đăng ký"};
   const DOW=["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6"];
   const navs={
@@ -103,6 +112,10 @@ import { friendlyAppError } from "./utils/error-map.js";
     teacher:[
       ["dashboard","🌠","Dashboard"],["approvals","🪄","Duyệt đăng ký"],["issues","⚠️","Báo cáo lỗi"],["class","🫶","Theo dõi cả lớp"],["schedule","🗓️","TKB tự học"],
       ["weeks","📆","Quản lý tuần"],["students","🧑‍🎓","Quản lý học sinh"],["stats","📈","Thống kê"],["settings","🦄","Cài đặt"]
+    ],
+    admin:[
+      ["dashboard","🌠","Dashboard"],["admin","🛡️","Quản trị lớp"],["students","🧑‍🎓","Tài khoản lớp"],["class","🫶","Theo dõi cả lớp"],
+      ["approvals","🪄","Duyệt đăng ký"],["schedule","🗓️","TKB tự học"],["weeks","📆","Quản lý tuần"],["stats","📈","Thống kê"],["settings","🦄","Cài đặt lớp"]
     ]
   };
 
@@ -149,7 +162,8 @@ import { friendlyAppError } from "./utils/error-map.js";
       register:"register",
       history:"history",
       comments:"comments",
-      missing:"missing"
+      missing:"missing",
+      admin:"settings"
     };
     return uiIcon(map[route]||"dashboard",`nav-icon nav-icon--${route}`);
   }
@@ -188,33 +202,128 @@ import { friendlyAppError } from "./utils/error-map.js";
     {text:"Học hỏi trong tuổi trẻ sẽ đánh đuổi cái không tốt của tuổi già.",author:"Leonardo da Vinci"},
     {text:"Thật sai lầm khi nghĩ rằng một khi rời khỏi trường học, bạn không bao giờ cần học thêm điều mới nữa.",author:"Sophia Loren"}
   ];
-  let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1, owlQuoteBag=[];
+  const OWL_DAILY_QUOTE_CACHE_KEY="so-tu-hoc:owl-daily-quote:v1";
+  const OWL_QUOTE_RETRY_MS=15*60*1000;
+  let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1;
+  let owlDailyQuote=null, owlDailyQuoteDate="", owlDailyQuotePromise=null, owlDailyQuoteLastAttempt=0;
 
-  function shuffleOwlQuotes(list){
-    const arr=[...list];
-    for(let i=arr.length-1;i>0;i--){
-      const j=Math.floor(Math.random()*(i+1));
-      [arr[i],arr[j]]=[arr[j],arr[i]];
+  function owlToday(){
+    try{
+      return prod?.dateISOInTimeZone?.(new Date())||new Date().toISOString().slice(0,10);
+    }catch{
+      return new Date().toISOString().slice(0,10);
     }
-    return arr;
   }
 
-  function nextOwlQuote(){
-    if(!owlQuoteBag.length) owlQuoteBag=shuffleOwlQuotes(OWL_QUOTES);
-    const next=owlQuoteBag.shift() || OWL_QUOTES[0];
-    if(owlQuoteBag.length && owlQuoteBag[0]?.text===next?.text){
-      owlQuoteBag=shuffleOwlQuotes(owlQuoteBag);
+  function localDailyOwlFallback(dateKey=owlToday()){
+    let hash=2166136261;
+    for(const char of String(dateKey||"")){
+      hash^=char.charCodeAt(0);
+      hash=Math.imul(hash,16777619);
     }
-    return next;
+    const q=OWL_QUOTES[(hash>>>0)%OWL_QUOTES.length]||OWL_QUOTES[0];
+    return {
+      ...q,
+      id:`local-${dateKey}`,
+      url:OWL_QUOTE_SOURCE,
+      date:dateKey,
+      quoteDate:dateKey,
+      stale:true,
+      cache:"local-fallback"
+    };
+  }
+
+  function normalizeOwlDailyQuote(payload,dateKey=owlToday()){
+    const q=payload?.quote||payload;
+    const text=String(q?.text||"").trim();
+    if(text.length<12)return null;
+    return {
+      id:String(q?.id||`daily-${dateKey}`),
+      text,
+      author:String(q?.author||"Khuyết danh").trim()||"Khuyết danh",
+      url:String(q?.url||payload?.sourceUrl||OWL_QUOTE_SOURCE),
+      date:dateKey,
+      quoteDate:String(payload?.quoteDate||payload?.date||dateKey),
+      stale:Boolean(payload?.stale),
+      cache:String(payload?.cache||"daily-db")
+    };
+  }
+
+  function readOwlDailyQuoteCache(dateKey=owlToday()){
+    try{
+      const raw=localStorage.getItem(OWL_DAILY_QUOTE_CACHE_KEY);
+      if(!raw)return null;
+      const saved=JSON.parse(raw);
+      if(saved?.date!==dateKey)return null;
+      return normalizeOwlDailyQuote(saved,dateKey);
+    }catch{
+      return null;
+    }
+  }
+
+  function writeOwlDailyQuoteCache(quote){
+    try{
+      localStorage.setItem(OWL_DAILY_QUOTE_CACHE_KEY,JSON.stringify(quote));
+    }catch{}
+  }
+
+  async function loadWiseOwlDailyQuote({force=false}={}){
+    const dateKey=owlToday();
+
+    if(owlDailyQuoteDate!==dateKey){
+      owlDailyQuote=readOwlDailyQuoteCache(dateKey);
+      owlDailyQuoteDate=dateKey;
+    }
+
+    if(owlDailyQuote&&!owlDailyQuote.stale&&!force)return owlDailyQuote;
+    if(!prod?.getDailyQuote)return owlDailyQuote||localDailyOwlFallback(dateKey);
+    if(owlDailyQuotePromise)return owlDailyQuotePromise;
+    if(!force&&owlDailyQuote?.stale&&Date.now()-owlDailyQuoteLastAttempt<OWL_QUOTE_RETRY_MS){
+      return owlDailyQuote;
+    }
+
+    owlDailyQuoteLastAttempt=Date.now();
+    owlDailyQuotePromise=(async()=>{
+      try{
+        const payload=await prod.getDailyQuote();
+        const quote=normalizeOwlDailyQuote(payload,dateKey);
+        if(quote){
+          owlDailyQuote=quote;
+          owlDailyQuoteDate=dateKey;
+          writeOwlDailyQuoteCache(quote);
+          return quote;
+        }
+      }catch(error){
+        console.warn("Không tải được danh ngôn trực tuyến hôm nay.",error);
+      }finally{
+        owlDailyQuotePromise=null;
+      }
+
+      if(!owlDailyQuote){
+        owlDailyQuote=localDailyOwlFallback(dateKey);
+        owlDailyQuoteDate=dateKey;
+      }
+      return owlDailyQuote;
+    })();
+
+    return owlDailyQuotePromise;
   }
 
   function nextWiseOwlQuoteInstant(){
-    const q=nextOwlQuote();
-    return {
-      ...q,
-      url:OWL_QUOTE_SOURCE,
-      poolSize:OWL_QUOTES.length
-    };
+    const dateKey=owlToday();
+    if(owlDailyQuoteDate!==dateKey){
+      owlDailyQuote=readOwlDailyQuoteCache(dateKey);
+      owlDailyQuoteDate=dateKey;
+      void loadWiseOwlDailyQuote();
+    }
+    if(!owlDailyQuote){
+      owlDailyQuote=localDailyOwlFallback(dateKey);
+      owlDailyQuoteDate=dateKey;
+      void loadWiseOwlDailyQuote();
+    }else if(owlDailyQuote.stale){
+      void loadWiseOwlDailyQuote();
+    }
+    return owlDailyQuote;
   }
 
   function setupWiseOwl(){
@@ -269,7 +378,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     const messages=[];
     const w=week();
 
-    if(currentUser.role==="teacher"){
+    if(isManager()){
       const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
       const aiPending=(state.registrations||[]).filter(r=>r.aiReviewStatus==="pending"||r.aiReviewStatus==="processing").length;
       const manual=(state.registrations||[]).filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r)).length;
@@ -372,9 +481,10 @@ import { friendlyAppError } from "./utils/error-map.js";
     }
     setupWiseOwl();
     $("#wiseOwlPet")?.classList.remove("hidden");
+    void loadWiseOwlDailyQuote();
 
     let urgentCount=0;
-    if(currentUser.role==="teacher"){
+    if(isManager()){
       urgentCount=(state.notifications||[]).filter(n=>!n.isRead).length;
     }else{
       urgentCount=(state.registrations||[]).filter(r=>
@@ -672,8 +782,8 @@ import { friendlyAppError } from "./utils/error-map.js";
     if(!currentUser||!state||!isAiAutomationEnabled())return [];
 
     const now=Date.now();
-    const ownOnly=currentUser.role!=="teacher";
-    const minAge=currentUser.role==="teacher"?1800:600;
+    const ownOnly=!isManager();
+    const minAge=isManager()?1800:600;
 
     return (state.registrations||[])
       .filter(registration=>
@@ -682,7 +792,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         &&registration.isDeleted!==true
         &&(!ownOnly||registration.studentId===currentUser.id)
         &&(
-          currentUser.role!=="teacher"
+          !isManager()
           || registration.weekId===state.currentWeekId
         )
         &&now-Number(registration.updatedAt||0)>=minAge
@@ -704,7 +814,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   async function recoverPendingAiReviews(){
     if(aiRecoveryRunning||!currentUser||document.hidden)return;
 
-    const limit=currentUser.role==="teacher"?6:2;
+    const limit=isManager()?6:2;
     const candidates=pendingAiRecoveryCandidates().slice(0,limit);
     if(!candidates.length)return;
 
@@ -790,7 +900,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     }
 
     if(change.table==="teacher_notifications"){
-      if(currentUser?.role!=="teacher")return false;
+      if(!isManager())return false;
       const id=change.id||change.record?.id;
       if(!id)return false;
 
@@ -880,7 +990,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       &&change?.record?.status==="submitted"
       &&change?.record?.aiReviewStatus==="pending"
     ){
-      schedulePendingAiRecovery(currentUser?.role==="teacher"?1800:650);
+      schedulePendingAiRecovery(isManager()?1800:650);
     }
 
     clearTimeout(realtimeFlushTimer);
@@ -901,7 +1011,7 @@ import { friendlyAppError } from "./utils/error-map.js";
           const wasSubscribed=realtimeSubscribed;
           realtimeSubscribed=true;
           lastRealtimeActivity=Date.now();
-          schedulePendingAiRecovery(currentUser?.role==="teacher"?1800:800);
+          schedulePendingAiRecovery(isManager()?1800:800);
 
           // Khi vừa reconnect sau lỗi/mất mạng, tải một snapshot yên lặng.
           if(wasSubscribed===false && realtimeQueue.length){
@@ -945,24 +1055,26 @@ import { friendlyAppError } from "./utils/error-map.js";
     stopRealtime();
     try{ await prod.signOut(); }catch(err){ console.error(err); }
     currentUser=null;
+    owlDailyQuote=null;
+    owlDailyQuoteDate="";
+    owlDailyQuoteLastAttempt=0;
     $("#wiseOwlPet")?.classList.add("hidden");
     $("#owlSpeech")?.classList.add("hidden");
     appView.classList.add("hidden"); loginView.classList.remove("hidden");
   }
   $("#loginForm").addEventListener("submit",async e=>{
     e.preventDefault();
+    const code=$("#loginId").value.trim(),password=$("#loginPassword").value;
+    if(!code){toast("Hãy nhập mã đăng nhập.","warn");return;}
+    setGlobalLoading(true,"Đang đăng nhập...");
     try{
-      const code=$("#loginId").value.trim();
-      const password=$("#loginPassword").value;
-      if(!code){ toast("Hãy nhập mã đăng nhập.","warn"); return; }
       await prod.signInCode(code,password);
       const loaded=await prod.loadState();
-      if(!loaded.currentUser?.active){ await prod.signOut(); throw new Error("Tài khoản đã bị khóa."); }
-      state=loaded.state; login(loaded.currentUser);
-      toast("Đăng nhập thành công.","success");
+      if(!loaded.currentUser?.active){await prod.signOut();throw new Error("Tài khoản đã bị khóa.");}
+      state=loaded.state;login(loaded.currentUser);toast("Đăng nhập thành công.","success");
     }catch(err){
-      console.error(err); toast("Đăng nhập không thành công. Hãy kiểm tra mã và mật khẩu.","warn");
-    }
+      console.error(err);toast("Đăng nhập không thành công. Hãy kiểm tra mã và mật khẩu.","warn");
+    }finally{setGlobalLoading(false);}
   });
   $("#syncBtn")?.classList.remove("hidden");
 
@@ -975,12 +1087,18 @@ import { friendlyAppError } from "./utils/error-map.js";
     }
     loginView.classList.add("hidden"); appView.classList.remove("hidden");
     $("#profileName").textContent=currentUser.name; $("#profileRole").textContent=roleLabel[currentUser.role]; $("#profileAvatar").textContent=initials(currentUser.name);
-    setSafeHtml($("#sideNav"),navs[currentUser.role].map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}">${navIconFor(n[0])}<span class="nav-label">${n[2]}</span></button>`).join(""));
+    setSafeHtml($("#sideNav"),(navs[currentUser.role]||navs.student).map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}">${navIconFor(n[0])}<span class="nav-label">${n[2]}</span></button>`).join(""));
     $("#sideNav").querySelectorAll("[data-route]").forEach(b=>b.onclick=()=>{route=b.dataset.route; setSidebarOpen(false); renderShell(); render();});
     setSafeHtml($("#globalWeekSelect"),state.weeks.map(w=>`<option value="${w.id}" ${w.id===state.currentWeekId?"selected":""}>Tuần ${w.number} · ${fmtDateShort(w.startDate)}–${fmtDateShort(w.endDate)}</option>`).join(""));
+    const classWrap=$("#classPickerWrap"),classSelect=$("#globalClassSelect");
+    if(isManager()){
+      classWrap?.classList.remove("hidden");
+      setSafeHtml(classSelect,(state.availableClasses||[]).map(c=>`<option value="${c.id}" ${c.id===state.activeClassId?"selected":""}>${esc(c.code||c.name)}${c.name&&c.name!==c.code?` · ${esc(c.name)}`:""}</option>`).join(""));
+      if(classSelect)classSelect.disabled=(state.availableClasses||[]).length<2;
+    }else classWrap?.classList.add("hidden");
 
     const notifBtn=$("#notificationBtn"), notifBadge=$("#notificationBadge");
-    if(currentUser.role==="teacher"){
+    if(isManager()){
       notifBtn?.classList.remove("hidden");
       const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
       if(notifBadge){
@@ -997,7 +1115,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   async function selectWeek(weekId,{announce=false}={}){
     if(!weekId)return;
     try{
-      const weekData=await prod.loadWeekData(weekId);
+      const weekData=await prod.loadWeekData(weekId,state.activeClassId||currentUser?.classId||null);
       state.registrations=(state.registrations||[])
         .filter(row=>row.weekId!==weekId)
         .concat(weekData.registrations||[]);
@@ -1018,6 +1136,17 @@ import { friendlyAppError } from "./utils/error-map.js";
   $("#globalWeekSelect").addEventListener("change",async e=>{
     weekSelectionTouched=true;
     await selectWeek(e.target.value);
+  });
+  $("#globalClassSelect")?.addEventListener("change",async e=>{
+    if(!isManager()||!e.target.value)return;
+    setGlobalLoading(true,"Đang chuyển lớp...");
+    try{
+      prod.setActiveClassId?.(currentUser.id,e.target.value);
+      const loaded=await prod.loadState(e.target.value);
+      currentUser=loaded.currentUser;state=loaded.state;route=route==="admin"&&currentUser.role!=="admin"?"dashboard":route;
+      renderShell();render();
+    }catch(error){console.error(error);toast(safeErrorMessage(error,"Không chuyển được lớp."),"warn");}
+    finally{setGlobalLoading(false);}
   });
   $("#profileBtn").addEventListener("click",()=>openModal("Tài khoản",`
     <div class="card" style="box-shadow:none">
@@ -1045,7 +1174,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   });
 
   async function openTeacherNotifications(){
-    if(currentUser?.role!=="teacher")return;
+    if(!isManager())return;
     const items=(state.notifications||[]).slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
     const unread=items.filter(n=>!n.isRead);
     openModal("Thông báo",`
@@ -1112,13 +1241,13 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
   function weekBanner(){
     const w=week();
-    const image=currentUser?.role==="teacher"?"assets/images/teacher-dashboard-illustration.png":"assets/images/student-cards.png";
+    const image=isManager()?"assets/images/teacher-dashboard-illustration.png":"assets/images/student-cards.png";
     return `<div class="banner"><div>
-      <div class="eyebrow-pill">📅 ${currentUser?.role==="teacher"?"Tuần đang xem":"Bạn đang đăng ký cho"}</div>
+      <div class="eyebrow-pill">📅 ${isManager()?"Tuần đang xem":"Bạn đang đăng ký cho"}</div>
       <h2>Tuần ${w.number} · ${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</h2>
       <div class="deadline-row">${deadlineChip(w)} <span class="week-state-pill">${weekStatus(w.status)}</span></div>
       <p>${esc(state.settings.announcement)}</p>
-      ${currentUser?.role!=="teacher"?`<p class="tiny banner-help">Dùng ô <b>“Chọn tuần đăng ký”</b> ở góc trên để chuyển sang tuần khác.</p>`:""}
+      ${!isManager()?`<p class="tiny banner-help">Dùng ô <b>“Chọn tuần đăng ký”</b> ở góc trên để chuyển sang tuần khác.</p>`:""}
       </div><img class="banner-image" src="${image}" alt="Minh họa hoạt động tự học"></div>`;
   }
 
@@ -1686,7 +1815,7 @@ import { friendlyAppError } from "./utils/error-map.js";
 
           const candidates=sessionAiCandidates();
           const aiEnabled=isAiAutomationEnabled();
-          const aiToolbar=currentUser.role==="teacher"
+          const aiToolbar=isManager()
             ?`<div class="card" style="margin-bottom:14px;box-shadow:none">
                 <div class="toolbar">
                   <div>
@@ -1723,7 +1852,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             filterButton.addEventListener("click",()=>renderDetails(filterButton.dataset.sessionFilter));
           });
 
-          if(currentUser.role==="teacher"){
+          if(isManager()){
             bindTeacherActions(modalBody);
 
             modalBody.querySelector("[data-session-ai-rereview]")?.addEventListener("click",async()=>{
@@ -1758,6 +1887,7 @@ import { friendlyAppError } from "./utils/error-map.js";
 
               try{
                 ids=await prod.prepareSessionAiRereview({
+                  classId:state.activeClassId,
                   weekId:state.currentWeekId,
                   dow:session.dow,
                   period:session.period
@@ -2223,7 +2353,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             <span>🕗 Mặc định: ${registrationDeadlineTime()} tối hôm trước từng buổi.</span>
             <span>🎯 Khi thật sự cần, GV có thể đặt hạn cụ thể cho cả tuần.</span>
           </div>
-          <button class="btn btn-primary glossy-action" id="applyWeekCalendar">✨ Áp dụng mốc tuần</button>
+          ${currentUser.role==="admin"?`<button class="btn btn-primary glossy-action" id="applyWeekCalendar">✨ Áp dụng mốc tuần</button>`:`<div class="callout">Mốc Tuần 1 do quản trị viên thiết lập.</div>`}
         </div>
         ${first?`<div class="calendar-preview">Tuần 1 hiện tại: <b>${fmtDate(first.startDate)} – ${fmtDate(first.endDate)}</b></div>`:""}
       </div>
@@ -2349,14 +2479,14 @@ import { friendlyAppError } from "./utils/error-map.js";
           <div class="toolbar" style="gap:6px;flex-wrap:wrap">
             <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">${uiIcon('edit')}<span>Sửa tài khoản</span></button>
             <button class="btn btn-ghost reset-password-btn" data-id="${u.id}">${uiIcon('lock')}<span>Đặt lại mật khẩu</span></button>
-            <button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">${uiIcon('delete')}<span>Xóa tài khoản</span></button>
+            <button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">${uiIcon('delete')}<span>Khóa tài khoản</span></button>
           </div>
         </td>
       </tr>`).join("") || `<tr><td colspan="5" class="center muted" style="padding:18px">Không có học sinh phù hợp bộ lọc hiện tại.</td></tr>`;
 
     return head(
       "Quản lý học sinh",
-      "Bản 8.2.5: Cú Thông Thái được vẽ lại bằng SVG chibi, menu/biểu tượng giáo viên được làm mới và đã bổ sung tăng cường bảo mật phía trình duyệt.",
+      "V8.4.0: quản lý học sinh theo lớp được phân quyền; khóa tài khoản vẫn giữ nguyên lịch sử đăng ký.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>
       </div>`
@@ -2479,7 +2609,7 @@ import { friendlyAppError } from "./utils/error-map.js";
           code:$("#newStudentCode").value.trim().toUpperCase(),
           fullName:$("#newStudentName").value.trim(),
           role:$("#newStudentRole").value,
-          className:state.settings.className,
+          classId:state.activeClassId,
           password:$("#newStudentPassword").value.trim()
         };
         if(!/^[A-Z0-9._-]{2,32}$/.test(changes.code)){
@@ -2535,6 +2665,10 @@ import { friendlyAppError } from "./utils/error-map.js";
               <option value="monitor" ${u.role==="monitor"?"selected":""}>Cán sự lớp</option>
             </select>
           </label>
+          ${currentUser.role==="admin"?`<label>Lớp
+            <select id="editUserClass">${(state.availableClasses||[]).map(c=>`<option value="${c.id}" ${c.id===(u.classId||state.activeClassId)?"selected":""}>${esc(c.code||c.name)}</option>`).join("")}</select>
+            <small>Chỉ quản trị viên gốc được chuyển lớp.</small>
+          </label>`:""}
           <label style="display:flex;align-items:center;gap:8px">
             <input id="editUserActive" type="checkbox" style="width:auto" ${u.active?"checked":""}>
             Tài khoản đang hoạt động
@@ -2562,7 +2696,8 @@ import { friendlyAppError } from "./utils/error-map.js";
           code:changeCode ? $("#editUserCode").value.trim().toUpperCase() : u.code,
           fullName:$("#editUserName").value.trim(),
           role:$("#editUserRole").value,
-          active:$("#editUserActive").checked
+          active:$("#editUserActive").checked,
+          classId:currentUser.role==="admin"?($("#editUserClass")?.value||u.classId||state.activeClassId):(u.classId||state.activeClassId)
         };
         if(changeCode && !/^[A-Z0-9._-]{2,32}$/.test(changes.code)){
           toast("Mã chỉ dùng chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.","warn");return;
@@ -2580,15 +2715,14 @@ import { friendlyAppError } from "./utils/error-map.js";
 
     content.querySelectorAll(".delete-user-btn").forEach(btn=>btn.addEventListener("click",()=>{
       const u=state.users.find(x=>x.id===btn.dataset.id); if(!u)return;
-      openModal("Xóa tài khoản học sinh",`
+      openModal("Khóa tài khoản học sinh",`
         <div class="danger-zone-card">
           <div class="danger-zone-icon">🗑️</div>
           <h3>${esc(u.name)}</h3>
           <p>Mã đăng nhập: <b>${esc(u.code)}</b></p>
           <div class="callout warning">
-            <b>Thao tác này không thể hoàn tác.</b><br>
-            Tài khoản đăng nhập sẽ bị xóa/không thể dùng lại, nhưng lịch sử đăng ký tự học của học sinh vẫn được giữ để GV tra cứu.
-            Mã <b>${esc(u.code)}</b> sẽ được giải phóng để có thể cấp lại cho tài khoản mới.
+            <b>Tài khoản sẽ được khóa, không xóa lịch sử.</b><br>
+            Học sinh không thể đăng nhập cho đến khi được mở lại. Lịch sử đăng ký vẫn được giữ và mã <b>${esc(u.code)}</b> không được cấp cho tài khoản khác.
           </div>
           <form id="deleteUserForm">
             <label>Nhập lại mã <b>${esc(u.code)}</b> để xác nhận
@@ -2596,7 +2730,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             </label>
             <div class="toolbar">
               <button class="btn btn-ghost" type="button" id="cancelDeleteUser">Hủy</button>
-              <button class="btn btn-danger right" type="submit">Xóa tài khoản</button>
+              <button class="btn btn-danger right" type="submit">Khóa tài khoản</button>
             </div>
           </form>
         </div>`);
@@ -2610,10 +2744,10 @@ import { friendlyAppError } from "./utils/error-map.js";
         try{
             await prod.teacherDeleteUser(u.id,confirmCode);
             closeModal();
-            toast(`Đã xóa tài khoản ${u.code}; lịch sử được giữ lại.`,"success");
+            toast(`Đã khóa tài khoản ${u.code}; lịch sử được giữ lại.`,"success");
             await refreshFromServer(false);
         }catch(err){
-          console.error(err);toast(safeErrorMessage(err,"Không xóa được tài khoản. Vui lòng thử lại."),"warn");
+          console.error(err);toast(safeErrorMessage(err,"Không khóa được tài khoản. Vui lòng thử lại."),"warn");
         }
       };
     }));
@@ -2699,6 +2833,142 @@ import { friendlyAppError } from "./utils/error-map.js";
     });
   }
 
+  function adminPage(){
+    if(currentUser?.role!=="admin")return head("Quản trị lớp","Chỉ quản trị viên gốc được sử dụng mục này.")+empty("🔒","Không có quyền truy cập.");
+    const activeClasses=state.availableClasses||[];
+    return head("Quản trị lớp","Tạo/lưu trữ lớp, quản lý giáo viên và phân quyền theo lớp.",`<button class="btn btn-primary" id="adminReloadClasses">↻ Làm mới</button>`)+`
+      <div class="admin-class-grid">
+        <div class="card">
+          <div class="toolbar"><h3>Lớp đang hoạt động</h3><button class="btn btn-primary right" id="adminCreateClass">＋ Tạo lớp</button></div>
+          <div class="admin-class-list">
+            ${activeClasses.length?activeClasses.map(c=>`<div class="admin-class-item"><div><b>${esc(c.code)}</b><div class="tiny muted">${esc(c.name||c.code)}</div></div><button class="btn btn-ghost admin-open-class" data-id="${c.id}">Mở lớp</button></div>`).join(""):empty("🏫","Chưa có lớp đang hoạt động.")}
+          </div>
+          <div class="tiny muted" style="margin-top:10px">Danh sách đầy đủ, kể cả lớp đã khóa, nằm ở khung quản trị bên phải.</div>
+        </div>
+        <div class="card">
+          <div class="toolbar"><h3>Danh mục lớp & giáo viên</h3><button class="btn btn-primary right" id="adminCreateTeacher">＋ Tạo GV</button></div>
+          <div id="adminClassDirectory"><div class="loading-inline"><span class="diamond-mini" aria-hidden="true"></span> Đang tải dữ liệu quản trị...</div></div>
+        </div>
+      </div>`;
+  }
+
+  function bindAdmin(){
+    if(currentUser?.role!=="admin")return;
+
+    const openActiveClass=classId=>{
+      const select=$("#globalClassSelect");
+      if(!select||![...select.options].some(o=>o.value===classId)){
+        toast("Lớp đang bị khóa nên không thể mở làm lớp làm việc.","warn");
+        return;
+      }
+      select.value=classId;
+      select.dispatchEvent(new Event("change"));
+    };
+
+    const loadDirectory=async()=>{
+      setGlobalLoading(true,"Đang tải phân quyền lớp...");
+      try{
+        const data=await prod.adminManageClasses("list");
+        const classes=data.classes||[],teachers=data.teachers||[],assignments=data.assignments||[];
+        const box=$("#adminClassDirectory");if(!box)return;
+        const classCards=classes.map(c=>{
+          const active=c.active!==false;
+          return `<div class="card admin-directory-class ${active?"":"is-inactive"}" style="box-shadow:none;margin-bottom:10px">
+            <div class="toolbar" style="align-items:flex-start">
+              <div><b>${esc(c.code)} · ${esc(c.name||c.code)}</b><div class="tiny ${active?"muted":"danger-text"}">${active?"Đang hoạt động":"Đã khóa"}</div></div>
+              <div class="toolbar right" style="gap:6px">
+                ${active?`<button class="btn btn-ghost admin-directory-open" data-id="${c.id}">Mở lớp</button>`:""}
+                <button class="btn btn-ghost admin-edit-class" data-id="${c.id}" data-code="${esc(c.code)}" data-name="${esc(c.name||c.code)}">Sửa</button>
+                <button class="btn btn-ghost ${active?"danger":""} admin-toggle-class" data-id="${c.id}" data-active="${active}">${active?"Khóa lớp":"Kích hoạt"}</button>
+              </div>
+            </div>
+            ${active?`<div class="form-grid admin-assignment-grid" style="margin-top:8px">${teachers.map(t=>{const on=assignments.some(a=>a.class_id===c.id&&a.teacher_id===t.id&&a.active!==false);return `<label class="toggle-row"><input class="admin-teacher-assignment" type="checkbox" data-class="${c.id}" data-teacher="${t.id}" ${on?"checked":""} ${t.active===false?"disabled":""}><span><b>${esc(t.full_name||t.student_code||"GV")}</b><small>${esc(t.student_code||"")}${t.active===false?" · Đã khóa":""}</small></span></label>`}).join("")||`<span class="muted">Chưa có giáo viên.</span>`}</div>`:`<div class="callout" style="margin-top:8px">Lớp đã khóa: không thể phân quyền mới hoặc nhận học sinh mới.</div>`}
+          </div>`;
+        }).join("")||`<p class="muted">Chưa có lớp nào.</p>`;
+
+        const teacherCards=teachers.map(t=>`<div class="admin-class-item"><div><b>${esc(t.full_name||t.student_code||"GV")}</b><div class="tiny muted">${esc(t.student_code||"")} · ${t.active!==false?"Đang hoạt động":"Đã khóa"}</div></div><button class="btn btn-ghost admin-toggle-teacher" data-id="${t.id}" data-active="${t.active!==false}" data-code="${esc(t.student_code||"")}" data-name="${esc(t.full_name||"")}">${t.active!==false?"Khóa":"Mở khóa"}</button></div>`).join("")||`<p class="muted">Chưa có giáo viên.</p>`;
+
+        setSafeHtml(box,`<div class="admin-directory-section"><h4>Toàn bộ lớp</h4>${classCards}</div><div class="card" style="box-shadow:none;margin-top:14px"><h4>Giáo viên</h4>${teacherCards}</div>`);
+
+        box.querySelectorAll(".admin-directory-open").forEach(btn=>btn.addEventListener("click",()=>openActiveClass(btn.dataset.id)));
+        box.querySelectorAll(".admin-teacher-assignment").forEach(el=>el.addEventListener("change",async()=>{
+          try{
+            await prod.adminManageClasses(el.checked?"assign_teacher":"unassign_teacher",{classId:el.dataset.class,teacherId:el.dataset.teacher});
+            toast("Đã cập nhật phân quyền giáo viên.","success");
+          }catch(error){
+            el.checked=!el.checked;
+            toast(safeErrorMessage(error,"Không cập nhật được phân quyền."),"warn");
+          }
+        }));
+        box.querySelectorAll(".admin-toggle-teacher").forEach(btn=>btn.addEventListener("click",async()=>{
+          try{
+            await prod.teacherUpdateUser(btn.dataset.id,{changeCode:false,code:btn.dataset.code,fullName:btn.dataset.name,role:"teacher",active:btn.dataset.active!=="true"});
+            toast("Đã cập nhật trạng thái giáo viên.","success");
+            await loadDirectory();
+          }catch(error){toast(safeErrorMessage(error,"Không cập nhật được giáo viên."),"warn");}
+        }));
+        box.querySelectorAll(".admin-edit-class").forEach(btn=>btn.addEventListener("click",()=>{
+          openModal("Sửa thông tin lớp",`<form id="adminEditClassForm"><label>Mã lớp<input id="adminEditClassCode" required maxlength="40" value="${esc(btn.dataset.code||"")}"></label><label>Tên lớp<input id="adminEditClassName" required maxlength="120" value="${esc(btn.dataset.name||"")}"></label><div class="toolbar"><button type="button" class="btn btn-ghost" id="cancelEditClass">Hủy</button><button class="btn btn-primary right">Lưu</button></div></form>`);
+          $("#cancelEditClass").onclick=closeModal;
+          $("#adminEditClassForm").onsubmit=async e=>{
+            e.preventDefault();setGlobalLoading(true,"Đang cập nhật lớp...");
+            try{
+              await prod.adminManageClasses("update_class",{classId:btn.dataset.id,code:$("#adminEditClassCode").value.trim(),name:$("#adminEditClassName").value.trim()});
+              closeModal();toast("Đã cập nhật lớp.","success");await refreshFromServer(false);
+            }catch(error){toast(safeErrorMessage(error,"Không cập nhật được lớp."),"warn");}
+            finally{setGlobalLoading(false);}
+          };
+        }));
+        box.querySelectorAll(".admin-toggle-class").forEach(btn=>btn.addEventListener("click",async()=>{
+          const isActive=btn.dataset.active==="true";
+          if(isActive&&!confirm("Khóa lớp này? Hệ thống chỉ cho phép khi không còn học sinh/cán sự đang hoạt động trong lớp."))return;
+          setGlobalLoading(true,isActive?"Đang khóa lớp...":"Đang kích hoạt lớp...");
+          try{
+            await prod.adminManageClasses("update_class",{classId:btn.dataset.id,active:!isActive});
+            toast(isActive?"Đã khóa lớp.":"Đã kích hoạt lớp.","success");
+            await refreshFromServer(false);
+          }catch(error){toast(safeErrorMessage(error,isActive?"Không khóa được lớp.":"Không kích hoạt được lớp."),"warn");}
+          finally{setGlobalLoading(false);}
+        }));
+      }catch(error){
+        console.error(error);toast(safeErrorMessage(error,"Không tải được dữ liệu quản trị."),"warn");
+        const box=$("#adminClassDirectory");if(box)setSafeHtml(box,`<div class="callout warning">Không tải được danh mục lớp/giáo viên. Bấm “Làm mới” để thử lại.</div>`);
+      }finally{setGlobalLoading(false);}
+    };
+
+    $("#adminReloadClasses")?.addEventListener("click",loadDirectory);
+    content.querySelectorAll(".admin-open-class").forEach(btn=>btn.addEventListener("click",()=>openActiveClass(btn.dataset.id)));
+
+    $("#adminCreateTeacher")?.addEventListener("click",()=>{
+      openModal("Tạo tài khoản giáo viên",`<form id="adminCreateTeacherForm"><label>Mã đăng nhập<input id="adminTeacherCode" required maxlength="32" placeholder="VD: GV-HIEU"></label><label>Họ và tên<input id="adminTeacherName" required maxlength="120"></label><label>Mật khẩu tạm${renderPasswordField({id:"adminTeacherPassword",autocomplete:"new-password",required:false,placeholder:"Để trống để tự sinh"})}</label><button class="btn btn-primary btn-block">Tạo giáo viên</button></form>`);
+      $("#adminCreateTeacherForm")?.addEventListener("submit",async e=>{
+        e.preventDefault();setGlobalLoading(true,"Đang tạo giáo viên...");
+        try{
+          const result=await prod.teacherCreateUser({code:$("#adminTeacherCode").value.trim(),fullName:$("#adminTeacherName").value.trim(),role:"teacher",password:$("#adminTeacherPassword").value.trim()});
+          openModal("Đã tạo giáo viên",`<div class="success-account-card"><div class="success-icon">👩‍🏫</div><h3>${esc(result.user?.fullName||"")}</h3><p>Mã đăng nhập</p><div class="credential-box">${esc(result.user?.code||"")}</div><p>Mật khẩu tạm</p><div class="credential-box">${esc(result.password||"")}</div><div class="callout warning">Lưu mật khẩu này trước khi đóng.</div><button class="btn btn-primary btn-block" id="finishCreateTeacher">Đã lưu</button></div>`);
+          $("#finishCreateTeacher").onclick=()=>{closeModal();loadDirectory();};
+        }catch(error){toast(safeErrorMessage(error,"Không tạo được giáo viên."),"warn");}
+        finally{setGlobalLoading(false);}
+      });
+    });
+
+    $("#adminCreateClass")?.addEventListener("click",()=>{
+      openModal("Tạo lớp mới",`<form id="adminCreateClassForm"><label>Mã lớp<input id="adminClassCode" required maxlength="40" placeholder="VD: 7A1"></label><label>Tên lớp<input id="adminClassName" required maxlength="120" placeholder="VD: Lớp 7A1"></label><button class="btn btn-primary btn-block">Tạo lớp</button></form>`);
+      $("#adminCreateClassForm")?.addEventListener("submit",async e=>{
+        e.preventDefault();setGlobalLoading(true,"Đang tạo lớp...");
+        try{
+          await prod.adminManageClasses("create_class",{code:$("#adminClassCode").value.trim(),name:$("#adminClassName").value.trim(),schoolYearId:state.activeSchoolYearId});
+          closeModal();toast("Đã tạo lớp.","success");await refreshFromServer(false);
+        }catch(error){toast(safeErrorMessage(error,"Không tạo được lớp."),"warn");}
+        finally{setGlobalLoading(false);}
+      });
+    });
+
+    // The full directory is intentionally loaded on entry; the working-class
+    // picker only contains active classes and is not the administration list.
+    loadDirectory();
+  }
+
   function settingsPage(){
     const threshold=Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100);
     const revisionThreshold=Math.round(Number(state.settings.aiRevisionActionThreshold||0.85)*100);
@@ -2706,8 +2976,8 @@ import { friendlyAppError } from "./utils/error-map.js";
     const memoryLast=memory.lastFeedbackAt?new Date(memory.lastFeedbackAt).toLocaleString("vi-VN"):"Chưa có";
     return head("Cài đặt","Cấu hình lớp học và duyệt tự động bằng AI.")+`<div class="grid grid-2">
       <div class="card"><h3>Thông tin lớp</h3><form id="settingsForm" class="form-grid">
-        <label>Tên lớp<input id="setClass" value="${esc(state.settings.className)}"></label>
-        <label>Năm học<input id="setYear" value="${esc(state.settings.schoolYear)}"></label>
+        <label>Tên lớp<input id="setClass" value="${esc(state.settings.className)}" readonly></label>
+        <label>Năm học<input id="setYear" value="${esc(state.settings.schoolYear)}" readonly></label>
         <label>Mốc deadline tự động
           <input id="registrationDeadlineTime" type="time" step="60" value="${esc(registrationDeadlineTime())}">
           <small>Áp dụng cho chế độ “tối hôm trước từng buổi”.</small>
@@ -2775,10 +3045,9 @@ import { friendlyAppError } from "./utils/error-map.js";
 
     $("#settingsForm")?.addEventListener("submit",async e=>{
       e.preventDefault();
-      state.settings.className=$("#setClass").value.trim();
-      state.settings.schoolYear=$("#setYear").value.trim();
       state.settings.announcement=$("#setAnnouncement").value.trim();
       const aiAutomationEnabled=$("#smartApprovalEnabled").checked;
+      state.settings.aiAutomationEnabled=aiAutomationEnabled;
       state.settings.smartApprovalEnabled=aiAutomationEnabled;
       state.settings.aiReviewEnabled=aiAutomationEnabled;
       state.settings.aiAutoApproveThreshold=Number($("#aiAutoApproveThreshold").value)/100;
@@ -2823,7 +3092,8 @@ import { friendlyAppError } from "./utils/error-map.js";
       else if(route==="comments")html=commentsPage();
       else html=classOverview();
     }else{
-      if(route==="dashboard")html=teacherDashboard();
+      if(route==="admin"&&currentUser.role==="admin")html=adminPage();
+      else if(route==="dashboard")html=teacherDashboard();
       else if(route==="approvals")html=approvalsPage();
       else if(route==="issues")html=revisionIssuesPage();
       else if(route==="class")html=classOverview();
@@ -2835,7 +3105,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       else html=teacherDashboard();
     }
     setSafeHtml(content,html);
-    bindRegistrationButtons(); bindTeacherActions(); bindClassOverview(); bindSchedule(); bindWeeks(); bindStudents(); bindStats(); bindSettings();
+    bindRegistrationButtons(); bindTeacherActions(); bindClassOverview(); bindSchedule(); bindWeeks(); bindStudents(); bindStats(); bindSettings(); bindAdmin();
     content.querySelector("[data-route-settings]")?.addEventListener("click",()=>{route="settings";renderShell();render();});
     content.querySelectorAll("[data-route-approvals]").forEach(button=>{
       button.addEventListener("click",()=>{route="approvals";renderShell();render();});
@@ -2846,7 +3116,7 @@ import { friendlyAppError } from "./utils/error-map.js";
 
   async function refreshFromServer(showToast=true){
     try{
-      const loaded=await prod.loadState();
+      const loaded=await prod.loadState(state?.activeClassId||null);
       if(!loaded.currentUser){ await logout(); return; }
       currentUser=loaded.currentUser; state=loaded.state; route=route||"dashboard";
       if(!weekSelectionTouched&&["dashboard","register"].includes(route)){
@@ -2854,13 +3124,14 @@ import { friendlyAppError } from "./utils/error-map.js";
         if(aligned)await selectWeek(state.currentWeekId);
       }
       renderShell(); render();
-      schedulePendingAiRecovery(currentUser?.role==="teacher"?1800:800);
+      schedulePendingAiRecovery(isManager()?1800:800);
       if(showToast) toast("Đã đồng bộ dữ liệu mới nhất.","success");
     }catch(err){ console.error(err); if(showToast) toast(safeErrorMessage(err,"Không tải được dữ liệu mới. Vui lòng thử lại."),"warn"); }
   }
   $("#syncBtn")?.addEventListener("click",()=>refreshFromServer(true));
 
   try{
+    setGlobalLoading(true,"Đang tải Sổ Tự Học...");
     if(!prod?.enabled?.()) throw new Error("Thiếu URL hoặc publishable key của Supabase.");
     await prod.init();
     const loaded=await prod.loadState();
@@ -2898,5 +3169,5 @@ import { friendlyAppError } from "./utils/error-map.js";
   }catch(err){
     console.error(err); renderShell();
     toast("Supabase chưa sẵn sàng. Hãy kiểm tra cấu hình triển khai.","warn");
-  }
+  }finally{setGlobalLoading(false);}
 })();

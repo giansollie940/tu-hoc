@@ -1,0 +1,38 @@
+/* Sổ Tự Học V8.4.0 — motion + multi-class UI enhancements */
+:root{--motion-fast:160ms;--motion-normal:260ms;--ease-spring:cubic-bezier(.2,.8,.2,1)}
+.global-loading{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:rgba(241,245,249,.72);backdrop-filter:blur(7px);opacity:1;transition:opacity var(--motion-normal) ease}
+.global-loading.hidden{display:none}
+.global-loading-card{min-width:190px;padding:22px 26px;border:1px solid rgba(148,163,184,.25);border-radius:22px;background:rgba(255,255,255,.94);box-shadow:0 20px 55px rgba(30,64,175,.14);display:grid;gap:14px;justify-items:center;color:#334155}
+.diamond-loader{width:58px;height:36px;position:relative;display:flex;align-items:center;justify-content:center;gap:5px}
+.diamond-loader span{width:12px;height:12px;border-radius:3px;background:currentColor;transform:rotate(45deg) scale(.6);opacity:.35;animation:diamondPulse 1.05s ease-in-out infinite;color:#6366f1}
+.diamond-loader span:nth-child(2){animation-delay:.12s;color:#8b5cf6}.diamond-loader span:nth-child(3){animation-delay:.24s;color:#a855f7}.diamond-loader span:nth-child(4){animation-delay:.36s;color:#6366f1}
+@keyframes diamondPulse{0%,100%{transform:translateY(4px) rotate(45deg) scale(.58);opacity:.32}50%{transform:translateY(-5px) rotate(45deg) scale(1);opacity:1;filter:drop-shadow(0 7px 8px rgba(99,102,241,.25))}}
+.btn,.icon-btn,.profile-chip,.nav-btn,.password-toggle{transition:transform var(--motion-fast) var(--ease-spring),box-shadow var(--motion-fast) ease,filter var(--motion-fast) ease,background-color var(--motion-fast) ease,border-color var(--motion-fast) ease}
+.btn:hover:not(:disabled),.icon-btn:hover:not(:disabled),.profile-chip:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 9px 20px rgba(51,65,85,.12);filter:saturate(1.04)}
+.nav-btn:hover:not(:disabled){transform:translateX(3px)}
+.btn:active:not(:disabled),.icon-btn:active:not(:disabled),.profile-chip:active:not(:disabled),.nav-btn:active:not(:disabled){transform:translateY(0) scale(.975);box-shadow:none}
+.btn:disabled,.icon-btn:disabled{cursor:not-allowed;opacity:.6;transform:none!important;filter:none!important;box-shadow:none!important}
+.login-view{position:relative;overflow:hidden}
+.login-view::before,.login-view::after{content:"";position:absolute;border-radius:999px;pointer-events:none;filter:blur(1px);opacity:.5;animation:loginFloat 10s ease-in-out infinite alternate}
+.login-view::before{width:260px;height:260px;right:-70px;top:-70px;background:radial-gradient(circle,rgba(167,139,250,.28),transparent 68%)}
+.login-view::after{width:220px;height:220px;left:-80px;bottom:-70px;background:radial-gradient(circle,rgba(147,197,253,.28),transparent 68%);animation-delay:-4s}
+.login-card{position:relative;animation:loginCardIn .55s var(--ease-spring) both;transition:transform .25s var(--ease-spring),box-shadow .25s ease,border-color .25s ease}
+.login-card:hover{transform:translateY(-3px);box-shadow:0 24px 54px rgba(51,65,85,.13)}
+.login-card input{transition:border-color var(--motion-fast) ease,box-shadow var(--motion-fast) ease,transform var(--motion-fast) ease}
+.login-card input:focus{transform:translateY(-1px);box-shadow:0 0 0 4px rgba(99,102,241,.11)}
+.login-card.is-loading{pointer-events:none}
+.login-card.is-loading #loginSubmitBtn{position:relative;color:transparent}
+.login-card.is-loading #loginSubmitBtn::after{content:"";position:absolute;width:12px;height:12px;left:50%;top:50%;margin:-6px;transform:rotate(45deg);border-radius:3px;background:currentColor;color:#fff;animation:diamondButton .75s ease-in-out infinite}
+@keyframes diamondButton{0%,100%{transform:rotate(45deg) scale(.65);opacity:.55}50%{transform:rotate(135deg) scale(1);opacity:1}}
+@keyframes loginCardIn{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes loginFloat{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(18px,-12px,0) scale(1.08)}}
+.class-picker{min-width:132px}
+.session-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.session-summary-pill{padding:8px 9px;border-radius:12px;background:#f8fafc;font-size:.78rem;text-align:center;border:1px solid #e2e8f0}
+.session-filter{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.session-filter .btn.active{box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+.admin-class-grid{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(340px,1.4fr);gap:16px}.admin-class-list{display:grid;gap:8px}.admin-class-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.admin-class-item:hover{border-color:#c4b5fd;box-shadow:0 8px 22px rgba(99,102,241,.08)}
+@media(max-width:900px){.admin-class-grid{grid-template-columns:1fr}.class-picker{min-width:0}.session-summary-grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}.btn:hover,.icon-btn:hover,.profile-chip:hover,.nav-btn:hover,.login-card:hover{transform:none!important}}
+
+.session-summary-card{width:100%;text-align:left;cursor:pointer;transition:transform var(--motion-fast) var(--ease-spring),box-shadow var(--motion-fast) ease,border-color var(--motion-fast) ease}.session-summary-card:hover{transform:translateY(-3px);box-shadow:0 13px 26px rgba(51,65,85,.10);border-color:#c4b5fd}.session-summary-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.session-open-arrow{font-size:1.8rem;color:#818cf8}.session-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}.session-metrics>span{padding:8px;border-radius:12px;background:#f8fafc;font-size:.78rem;text-align:center}.metric-good{color:#166534}.metric-missing{color:#b45309}.metric-attention{color:#b91c1c}
+@media(max-width:700px){.session-metrics{grid-template-columns:1fr}.session-summary-grid{grid-template-columns:1fr}}
