@@ -512,12 +512,33 @@
     );
   }
 
+  function isInvalidStoredAuthIdentity(error){
+    if(!error)return false;
+    const message=String(error?.message||"");
+    return /User from sub claim in JWT does not exist/i.test(message);
+  }
+
+  async function clearInvalidStoredAuthSession(sb){
+    try{
+      await sb.auth.signOut({scope:"local"});
+    }catch{}
+    try{
+      const projectRef=new URL(cfg.projectUrl).hostname.split(".")[0];
+      if(projectRef)sessionStorage.removeItem(`sb-${projectRef}-auth-token`);
+    }catch{}
+    snapshot=null;
+  }
+
   async function authUser(){
     const sb=requireClient();
     const {data:sessionData,error:sessionError}=await sb.auth.getSession();
 
     if(sessionError){
       if(isMissingAuthSession(sessionError))return null;
+      if(isInvalidStoredAuthIdentity(sessionError)){
+        await clearInvalidStoredAuthSession(sb);
+        return null;
+      }
       throw sessionError;
     }
     if(!sessionData?.session)return null;
@@ -525,6 +546,10 @@
     const {data,error}=await sb.auth.getUser();
     if(error){
       if(isMissingAuthSession(error))return null;
+      if(isInvalidStoredAuthIdentity(error)){
+        await clearInvalidStoredAuthSession(sb);
+        return null;
+      }
       throw error;
     }
     return data.user||null;

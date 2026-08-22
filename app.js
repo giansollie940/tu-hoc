@@ -7,7 +7,7 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.4.2";
+} from "./features/class-overview/class-overview.js?v=8.4.2b";
 import { initOwlPet } from "./ui/owl-pet.js?v=8.4.1";
 import { friendlyAppError } from "./utils/error-map.js";
 
