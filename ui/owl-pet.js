@@ -1,6 +1,8 @@
 const MAX_PUPIL_OFFSET=3;
+const MAX_HEAD_TILT=5;
+const MAX_HEAD_SHIFT_Y=2.4;
 const SETTLE_EPSILON=0.04;
-const FOLLOW_EASE=0.22;
+const FOLLOW_EASE=0.18;
 
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 
@@ -15,39 +17,53 @@ function bindOwlStage(stage){
     stage.querySelector('.owl-layer-pupil-left'),
     stage.querySelector('.owl-layer-pupil-right')
   ].filter(Boolean);
+  const head=stage.querySelector('.owl-layer-head');
 
-  if(!pupils.length)return null;
+  if(!pupils.length||!head)return null;
 
   stage.dataset.owlReady='true';
 
   const requestedRange=Number(stage.dataset.eyeRange||MAX_PUPIL_OFFSET);
   const maxOffset=clamp(Number.isFinite(requestedRange)?requestedRange:MAX_PUPIL_OFFSET,0,MAX_PUPIL_OFFSET);
+  const requestedTilt=Number(stage.dataset.headTilt||MAX_HEAD_TILT);
+  const maxTilt=clamp(Number.isFinite(requestedTilt)?requestedTilt:MAX_HEAD_TILT,0,MAX_HEAD_TILT);
+
   let targetX=0;
   let targetY=0;
   let currentX=0;
   let currentY=0;
+  let targetTilt=0;
+  let currentTilt=0;
+  let targetHeadY=0;
+  let currentHeadY=0;
   let rafId=0;
   let flapTimer=0;
 
-  const applyPupilOffset=()=>{
+  const applyTransforms=()=>{
     const x=`${currentX.toFixed(2)}px`;
     const y=`${currentY.toFixed(2)}px`;
     pupils.forEach(pupil=>{
       pupil.style.setProperty('--owl-eye-x',x);
       pupil.style.setProperty('--owl-eye-y',y);
     });
+    stage.style.setProperty('--owl-head-rotate',`${currentTilt.toFixed(2)}deg`);
+    stage.style.setProperty('--owl-head-y',`${currentHeadY.toFixed(2)}px`);
   };
 
   const animate=()=>{
     rafId=0;
     currentX+=(targetX-currentX)*FOLLOW_EASE;
     currentY+=(targetY-currentY)*FOLLOW_EASE;
+    currentTilt+=(targetTilt-currentTilt)*FOLLOW_EASE;
+    currentHeadY+=(targetHeadY-currentHeadY)*FOLLOW_EASE;
 
     if(Math.abs(targetX-currentX)<SETTLE_EPSILON)currentX=targetX;
     if(Math.abs(targetY-currentY)<SETTLE_EPSILON)currentY=targetY;
-    applyPupilOffset();
+    if(Math.abs(targetTilt-currentTilt)<SETTLE_EPSILON)currentTilt=targetTilt;
+    if(Math.abs(targetHeadY-currentHeadY)<SETTLE_EPSILON)currentHeadY=targetHeadY;
+    applyTransforms();
 
-    if(currentX!==targetX||currentY!==targetY){
+    if(currentX!==targetX||currentY!==targetY||currentTilt!==targetTilt||currentHeadY!==targetHeadY){
       rafId=requestAnimationFrame(animate);
     }
   };
@@ -60,6 +76,8 @@ function bindOwlStage(stage){
     if(prefersReducedMotion()){
       targetX=0;
       targetY=0;
+      targetTilt=0;
+      targetHeadY=0;
       schedule();
       return;
     }
@@ -79,12 +97,16 @@ function bindOwlStage(stage){
 
     targetX=unitX*maxOffset*magnitude;
     targetY=unitY*maxOffset*magnitude;
+    targetTilt=clamp((dx/(rect.width*0.75))*maxTilt,-maxTilt,maxTilt);
+    targetHeadY=clamp((dy/(rect.height*0.75))*MAX_HEAD_SHIFT_Y,-MAX_HEAD_SHIFT_Y,MAX_HEAD_SHIFT_Y);
     schedule();
   };
 
-  const resetEyes=()=>{
+  const resetPose=()=>{
     targetX=0;
     targetY=0;
+    targetTilt=0;
+    targetHeadY=0;
     schedule();
   };
 
@@ -98,15 +120,15 @@ function bindOwlStage(stage){
   };
 
   window.addEventListener('pointermove',setTargetFromPointer,{passive:true});
-  window.addEventListener('blur',resetEyes);
-  stage.addEventListener('pointerleave',resetEyes);
+  window.addEventListener('blur',resetPose);
+  stage.addEventListener('pointerleave',resetPose);
   stage.addEventListener('click',flap);
-  applyPupilOffset();
+  applyTransforms();
 
   return ()=>{
     window.removeEventListener('pointermove',setTargetFromPointer);
-    window.removeEventListener('blur',resetEyes);
-    stage.removeEventListener('pointerleave',resetEyes);
+    window.removeEventListener('blur',resetPose);
+    stage.removeEventListener('pointerleave',resetPose);
     stage.removeEventListener('click',flap);
     clearTimeout(flapTimer);
     if(rafId)cancelAnimationFrame(rafId);
@@ -126,4 +148,4 @@ export function initOwlPet(root=document){
   };
 }
 
-export {MAX_PUPIL_OFFSET};
+export {MAX_PUPIL_OFFSET,MAX_HEAD_TILT};
