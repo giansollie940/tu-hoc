@@ -7,8 +7,8 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.4.2c";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.4.1";
+} from "./features/class-overview/class-overview.js?v=8.4.3";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.4.3";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -31,6 +31,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   const $ = s => document.querySelector(s);
   const content=$("#content"), loginView=$("#loginView"), appView=$("#appView");
   const modal=$("#modal"), modalBody=$("#modalBody"), modalTitle=$("#modalTitle");
+  const owlMotionController=initOwlPet(document);
 
   function sanitizeTemplateHtml(html){
     const template=document.createElement("template");
@@ -142,12 +143,69 @@ import { friendlyAppError } from "./utils/error-map.js";
     search:`<svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6" stroke-width="2"/><path d="m20 20-4.2-4.2" stroke-width="2" stroke-linecap="round"/></svg>`,
     filter:`<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke-width="2" stroke-linecap="round"/></svg>`,
     copy:`<svg viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="10" height="12" rx="2" stroke-width="2"/><path d="M6 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1" stroke-width="2" stroke-linecap="round"/></svg>`,
-    user:`<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke-width="2"/><path d="M5 19c1.2-2.9 4-4.7 7-4.7s5.8 1.8 7 4.7" stroke-width="2" stroke-linecap="round"/></svg>`
+    user:`<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke-width="2"/><path d="M5 19c1.2-2.9 4-4.7 7-4.7s5.8 1.8 7 4.7" stroke-width="2" stroke-linecap="round"/></svg>`,
+    save:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 4h12l2 2v14H5V4Z" stroke-width="2" stroke-linejoin="round"/><path d="M8 4v6h8V4M8 20v-6h8v6" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    close:`<svg viewBox="0 0 24 24" fill="none"><path d="m7 7 10 10M17 7 7 17" stroke-width="2" stroke-linecap="round"/></svg>`,
+    refresh:`<svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 1 1-2.34-5.66" stroke-width="2" stroke-linecap="round"/><path d="M20 4v5h-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    export:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 4v11M8 11l4 4 4-4M5 19h14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    restore:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 8a8 8 0 1 1-.5 7" stroke-width="2" stroke-linecap="round"/><path d="M5 4v4h4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    login:`<svg viewBox="0 0 24 24" fill="none"><path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" stroke-width="2" stroke-linecap="round"/><path d="M13 8l4 4-4 4M8 12h9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    check:`<svg viewBox="0 0 24 24" fill="none"><path d="m5 12.5 4.2 4.2L19 7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    warning:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 4 3.5 19h17L12 4Z" stroke-width="2" stroke-linejoin="round"/><path d="M12 9v4M12 16.5h.01" stroke-width="2" stroke-linecap="round"/></svg>`,
+    comment:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke-width="2" stroke-linejoin="round"/></svg>`,
+    key:`<svg viewBox="0 0 24 24" fill="none"><circle cx="8" cy="12" r="4" stroke-width="2"/><path d="M12 12h8M17 12v3M20 12v2" stroke-width="2" stroke-linecap="round"/></svg>`,
+    today:`<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="15" r="2" stroke-width="2"/></svg>`,
+    send:`<svg viewBox="0 0 24 24" fill="none"><path d="m4 5 16 7-16 7 3-7-3-7Z" stroke-width="2" stroke-linejoin="round"/><path d="M7 12h8" stroke-width="2" stroke-linecap="round"/></svg>`
   };
 
   function uiIcon(name, extraClass=""){
     const svg=uiIcons[name]||uiIcons.dashboard;
     return `<span class="ui-icon ${extraClass||""}" aria-hidden="true">${svg}</span>`;
+  }
+
+  function actionIconFor(button){
+    const hint=[button.dataset.uiIcon,button.id,button.className,button.textContent]
+      .filter(Boolean).join(" ").toLowerCase();
+    const rules=[
+      ["restore",/khôi phục|restore/],
+      ["delete",/xóa|delete|remove/],
+      ["save",/lưu|save/],
+      ["close",/hủy|đóng|cancel|close/],
+      ["refresh",/làm mới|đồng bộ|refresh|sync/],
+      ["export",/xuất|export|csv/],
+      ["login",/đăng nhập|login/],
+      ["add",/thêm|tạo lớp|tạo gv|tạo tài khoản|add|create/],
+      ["edit",/sửa|chỉnh|edit|yêu cầu sửa/],
+      ["key",/mật khẩu|password/],
+      ["check",/duyệt|hoàn tất|đã lưu|xác nhận/],
+      ["comment",/nhận xét|bình luận|comment/],
+      ["warning",/báo lỗi|bổ sung|chưa đúng|warning/],
+      ["today",/hôm nay|tuần theo ngày/],
+      ["copy",/sao chép|copy/],
+      ["filter",/xóa lọc|lọc|filter/],
+      ["send",/gửi|send/]
+    ];
+    return rules.find(([,pattern])=>pattern.test(hint))?.[0]||"";
+  }
+
+  function stripLeadingPictograph(button){
+    const node=[...button.childNodes].find(item=>item.nodeType===Node.TEXT_NODE&&item.textContent.trim());
+    if(!node)return;
+    node.textContent=node.textContent.replace(/^\s*(?:[✓＋⬇]|[\p{Extended_Pictographic}\uFE0F\u200D])+\s*/u,"");
+  }
+
+  function decorateActionButtons(root){
+    if(!root)return;
+    root.querySelectorAll("button.btn,button.mini-icon-btn").forEach(button=>{
+      if(button.closest(".password-field")||button.classList.contains("password-toggle"))return;
+      stripLeadingPictograph(button);
+      const iconName=actionIconFor(button);
+      if(!iconName)return;
+      if(!button.querySelector(":scope > .ui-icon")){
+        button.insertAdjacentHTML("afterbegin",uiIcon(iconName,"action-icon"));
+      }
+      button.classList.add("btn-iconized");
+    });
   }
 
   function navIconFor(route){
@@ -335,8 +393,6 @@ import { friendlyAppError } from "./utils/error-map.js";
     const speech=$("#owlSpeech");
     const closeBtn=$("#owlMuteBtn");
     if(!pet||!body||!speech)return;
-    initOwlPet(document);
-
     owlReady=true;
 
     body.addEventListener("click",()=>{
@@ -712,7 +768,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   function initials(name){ return name.split(" ").slice(-2).map(x=>x[0]).join("").toUpperCase(); }
   function statusBadge(status){ return `<span class="status ${status||"missing"}">${statusLabel[status]||"Chưa đăng ký"}</span>`; }
   function toast(msg,type=""){ const el=document.createElement("div"); el.className=`toast ${type}`; el.textContent=msg; $("#toastHost").appendChild(el); setTimeout(()=>el.remove(),2800); }
-  function openModal(title,html){ modalTitle.textContent=title; setSafeHtml(modalBody,html); modal.classList.remove("hidden"); }
+  function openModal(title,html){ modalTitle.textContent=title; setSafeHtml(modalBody,html); modal.classList.remove("hidden"); decorateActionButtons(modal); }
   function closeModal(){ modal.classList.add("hidden"); modalBody.replaceChildren(); }
   function audit(action,entityId,detail=""){
     state.audit.unshift({
@@ -2483,7 +2539,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   function weekStatus(x){return {open:"🟢 Đang mở",locked:"🔒 Đã khóa",upcoming:"🕒 Sắp tới",holiday:"🏖️ Nghỉ"}[x]||x;}
 
   function studentsPage(){
-    state.studentsUi=state.studentsUi||{query:"",role:"all",status:"all"};
+    state.studentsUi=state.studentsUi||{query:"",role:"all",status:"active"};
     const ui=state.studentsUi;
     const allUsers=state.users
       .filter(u=>u.role!=="teacher" && !String(u.code||"").startsWith("__deleted__"))
@@ -2493,37 +2549,41 @@ import { friendlyAppError } from "./utils/error-map.js";
     const filtered=allUsers.filter(u=>{
       const hitText=!q || String(u.code||"").toLowerCase().includes(q) || String(u.name||"").toLowerCase().includes(q);
       const hitRole=ui.role==="all" || u.role===ui.role;
-      const hitStatus=ui.status==="all" || (ui.status==="active"?!!u.active:!u.active);
+      const hitStatus=ui.status==="all" || (ui.status==="active"?!!u.active:(ui.status==="deleted"?!u.active:true));
       return hitText && hitRole && hitStatus;
     });
 
     const countStudent=allUsers.filter(u=>u.role==="student").length;
     const countMonitor=allUsers.filter(u=>u.role==="monitor").length;
-    const countLocked=allUsers.filter(u=>!u.active).length;
+    const countDeleted=allUsers.filter(u=>!u.active).length;
 
     const rows=filtered.map(u=>`
       <tr>
         <td>
           <div class="code-cell">
             <b class="code-badge">${esc(u.code)}</b>
-            <button class="mini-icon-btn copy-code-btn" data-code="${esc(u.code)}" title="Sao chép mã đăng nhập">📋</button>
+            <button class="mini-icon-btn copy-code-btn" data-code="${esc(u.code)}" title="Sao chép mã đăng nhập">${uiIcon("copy")}</button>
           </div>
         </td>
         <td><div class="person"><span class="avatar">${initials(u.name)}</span><b>${esc(u.name)}</b></div></td>
         <td>${roleLabel[u.role]||esc(u.role)}</td>
-        <td>${u.active?'<span class="status approved">Hoạt động</span>':'<span class="status missing">Đã khóa</span>'}</td>
+        <td>${u.active?'<span class="status approved">Hoạt động</span>':'<span class="status missing">Đã xóa</span>'}</td>
         <td>
           <div class="toolbar" style="gap:6px;flex-wrap:wrap">
-            <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">${uiIcon('edit')}<span>Sửa tài khoản</span></button>
-            <button class="btn btn-ghost reset-password-btn" data-id="${u.id}">${uiIcon('lock')}<span>Đặt lại mật khẩu</span></button>
-            <button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">${uiIcon('delete')}<span>Khóa tài khoản</span></button>
+            ${u.active?`
+              <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">${uiIcon('edit')}<span>Sửa tài khoản</span></button>
+              <button class="btn btn-ghost reset-password-btn" data-id="${u.id}">${uiIcon('lock')}<span>Đặt lại mật khẩu</span></button>
+              <button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">${uiIcon('delete')}<span>Xóa</span></button>
+            `:`
+              <button class="btn btn-ghost restore-user-btn" data-id="${u.id}">${uiIcon('restore')}<span>Khôi phục</span></button>
+            `}
           </div>
         </td>
       </tr>`).join("") || `<tr><td colspan="5" class="center muted" style="padding:18px">Không có học sinh phù hợp bộ lọc hiện tại.</td></tr>`;
 
     return head(
       "Quản lý học sinh",
-      "V8.4.0: quản lý học sinh theo lớp được phân quyền; khóa tài khoản vẫn giữ nguyên lịch sử đăng ký.",
+      "V8.4.3: danh sách mặc định chỉ hiện tài khoản hoạt động; thao tác xóa là xóa mềm để giữ nguyên lịch sử đăng ký.",
       `<div class="toolbar" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>
       </div>`
@@ -2536,7 +2596,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         <div class="summary-pills">
           <span class="summary-pill">${uiIcon("user")}Học sinh: <b>${countStudent}</b></span>
           <span class="summary-pill">${uiIcon("students")}Cán sự: <b>${countMonitor}</b></span>
-          <span class="summary-pill">${uiIcon("lock")}Đã khóa: <b>${countLocked}</b></span>
+          <span class="summary-pill">${uiIcon("delete")}Đã xóa: <b>${countDeleted}</b></span>
           <span class="summary-pill">📋 Đang hiển thị: <b>${filtered.length}/${allUsers.length}</b></span>
         </div>
 
@@ -2556,12 +2616,12 @@ import { friendlyAppError } from "./utils/error-map.js";
           <label>
             Trạng thái
             <select id="studentStatusFilter">
-              <option value="all" ${ui.status==="all"?"selected":""}>Tất cả</option>
               <option value="active" ${ui.status==="active"?"selected":""}>Đang hoạt động</option>
-              <option value="locked" ${ui.status==="locked"?"selected":""}>Đã khóa</option>
+              <option value="deleted" ${ui.status==="deleted"?"selected":""}>Đã xóa</option>
+              <option value="all" ${ui.status==="all"?"selected":""}>Tất cả</option>
             </select>
           </label>
-          <button class="btn btn-ghost" id="clearStudentFilters">🫧 Xóa lọc</button>
+          <button class="btn btn-ghost" id="clearStudentFilters">Xóa lọc</button>
         </div>
 
         <div class="table-wrap">
@@ -2574,7 +2634,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
 
   function bindStudents(){
-    state.studentsUi=state.studentsUi||{query:"",role:"all",status:"all"};
+    state.studentsUi=state.studentsUi||{query:"",role:"all",status:"active"};
 
     $("#studentSearch")?.addEventListener("input",e=>{
       state.studentsUi.query=e.target.value;
@@ -2589,7 +2649,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       render();
     });
     $("#clearStudentFilters")?.addEventListener("click",()=>{
-      state.studentsUi={query:"",role:"all",status:"all"};
+      state.studentsUi={query:"",role:"all",status:"active"};
       render();
     });
     content.querySelectorAll(".copy-code-btn").forEach(btn=>btn.addEventListener("click",async()=>{
@@ -2752,14 +2812,14 @@ import { friendlyAppError } from "./utils/error-map.js";
 
     content.querySelectorAll(".delete-user-btn").forEach(btn=>btn.addEventListener("click",()=>{
       const u=state.users.find(x=>x.id===btn.dataset.id); if(!u)return;
-      openModal("Khóa tài khoản học sinh",`
+      openModal("Xóa học sinh",`
         <div class="danger-zone-card">
-          <div class="danger-zone-icon">🗑️</div>
+          <div class="danger-zone-icon">${uiIcon("delete")}</div>
           <h3>${esc(u.name)}</h3>
           <p>Mã đăng nhập: <b>${esc(u.code)}</b></p>
           <div class="callout warning">
-            <b>Tài khoản sẽ được khóa, không xóa lịch sử.</b><br>
-            Học sinh không thể đăng nhập cho đến khi được mở lại. Lịch sử đăng ký vẫn được giữ và mã <b>${esc(u.code)}</b> không được cấp cho tài khoản khác.
+            <b>Đây là xóa mềm, không xóa lịch sử.</b><br>
+            Tài khoản sẽ bị vô hiệu hóa và biến khỏi danh sách mặc định. Lịch sử đăng ký vẫn được giữ; có thể khôi phục từ bộ lọc <b>Đã xóa</b>.
           </div>
           <form id="deleteUserForm">
             <label>Nhập lại mã <b>${esc(u.code)}</b> để xác nhận
@@ -2767,7 +2827,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             </label>
             <div class="toolbar">
               <button class="btn btn-ghost" type="button" id="cancelDeleteUser">Hủy</button>
-              <button class="btn btn-danger right" type="submit">Khóa tài khoản</button>
+              <button class="btn btn-danger right" type="submit">Xóa học sinh</button>
             </div>
           </form>
         </div>`);
@@ -2781,10 +2841,45 @@ import { friendlyAppError } from "./utils/error-map.js";
         try{
             await prod.teacherDeleteUser(u.id,confirmCode);
             closeModal();
-            toast(`Đã khóa tài khoản ${u.code}; lịch sử được giữ lại.`,"success");
+            toast(`Đã xóa ${u.code} khỏi danh sách; lịch sử được giữ lại.`,"success");
             await refreshFromServer(false);
         }catch(err){
-          console.error(err);toast(safeErrorMessage(err,"Không khóa được tài khoản. Vui lòng thử lại."),"warn");
+          console.error(err);toast(safeErrorMessage(err,"Không xóa được tài khoản. Vui lòng thử lại."),"warn");
+        }
+      };
+    }));
+
+    content.querySelectorAll(".restore-user-btn").forEach(btn=>btn.addEventListener("click",()=>{
+      const u=state.users.find(x=>x.id===btn.dataset.id); if(!u)return;
+      openModal("Khôi phục học sinh",`
+        <div class="restore-user-card">
+          <div class="restore-user-icon">${uiIcon("restore")}</div>
+          <h3>${esc(u.name)}</h3>
+          <p>Mã đăng nhập: <b>${esc(u.code)}</b></p>
+          <div class="callout">
+            Tài khoản sẽ được kích hoạt lại và học sinh có thể đăng nhập bằng mã hiện tại.
+          </div>
+          <div class="toolbar">
+            <button class="btn btn-ghost" type="button" id="cancelRestoreUser">Hủy</button>
+            <button class="btn btn-primary right" type="button" id="confirmRestoreUser">Khôi phục</button>
+          </div>
+        </div>`);
+      $("#cancelRestoreUser").onclick=closeModal;
+      $("#confirmRestoreUser").onclick=async()=>{
+        try{
+          await prod.teacherUpdateUser(u.id,{
+            changeCode:false,
+            code:u.code,
+            fullName:u.name,
+            role:u.role,
+            active:true,
+            classId:u.classId||state.activeClassId
+          });
+          closeModal();
+          toast(`Đã khôi phục tài khoản ${u.code}.`,"success");
+          await refreshFromServer(false);
+        }catch(err){
+          console.error(err);toast(safeErrorMessage(err,"Không khôi phục được tài khoản. Vui lòng thử lại."),"warn");
         }
       };
     }));
@@ -3220,6 +3315,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       else html=teacherDashboard();
     }
     setSafeHtml(content,html);
+    decorateActionButtons(content);
     bindRegistrationButtons(); bindTeacherActions(); bindClassOverview(); bindSchedule(); bindWeeks(); bindStudents(); bindStats(); bindSettings(); bindAdmin();
     content.querySelector("[data-route-settings]")?.addEventListener("click",()=>{route="settings";renderShell();render();});
     content.querySelectorAll("[data-route-approvals]").forEach(button=>{
