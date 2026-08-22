@@ -7,8 +7,8 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.4.4";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.4.4";
+} from "./features/class-overview/class-overview.js?v=8.4.5";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.4.5";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -25,6 +25,8 @@ import { friendlyAppError } from "./utils/error-map.js";
   let aiRecoveryRunning=false;
   const aiRecoveryAttemptedAt=new Map();
   let route="dashboard";
+  const SIDEBAR_COLLAPSED_KEY="so-tu-hoc:sidebar-collapsed:v1";
+  let owlRouteTimer=null;
   let approvalFilter="attention";
   let weekSelectionTouched=false;
 
@@ -155,7 +157,10 @@ import { friendlyAppError } from "./utils/error-map.js";
     comment:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3v-3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke-width="2" stroke-linejoin="round"/></svg>`,
     key:`<svg viewBox="0 0 24 24" fill="none"><circle cx="8" cy="12" r="4" stroke-width="2"/><path d="M12 12h8M17 12v3M20 12v2" stroke-width="2" stroke-linecap="round"/></svg>`,
     today:`<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="15" rx="3" stroke-width="2"/><path d="M8 3v4M16 3v4M4 10h16" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="15" r="2" stroke-width="2"/></svg>`,
-    send:`<svg viewBox="0 0 24 24" fill="none"><path d="m4 5 16 7-16 7 3-7-3-7Z" stroke-width="2" stroke-linejoin="round"/><path d="M7 12h8" stroke-width="2" stroke-linecap="round"/></svg>`
+    send:`<svg viewBox="0 0 24 24" fill="none"><path d="m4 5 16 7-16 7 3-7-3-7Z" stroke-width="2" stroke-linejoin="round"/><path d="M7 12h8" stroke-width="2" stroke-linecap="round"/></svg>`,
+    right:`<svg viewBox="0 0 24 24" fill="none"><path d="m9 5 7 7-7 7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    open:`<svg viewBox="0 0 24 24" fill="none"><path d="M5 19 19 5M11 5h8v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    shield:`<svg viewBox="0 0 24 24" fill="none"><path d="M12 3 19 6v5c0 4.6-2.8 8-7 10-4.2-2-7-5.4-7-10V6l7-3Z" stroke-width="2" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
   };
 
   function uiIcon(name, extraClass=""){
@@ -222,7 +227,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       history:"history",
       comments:"comments",
       missing:"missing",
-      admin:"settings"
+      admin:"shield"
     };
     return uiIcon(map[route]||"dashboard",`nav-icon nav-icon--${route}`);
   }
@@ -263,7 +268,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   ];
   const OWL_DAILY_QUOTE_CACHE_KEY="so-tu-hoc:owl-daily-quote:v1";
   const OWL_QUOTE_RETRY_MS=15*60*1000;
-  let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1;
+  let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1, owlLastContextKey="", owlJustGreetedUntil=0;
   let owlDailyQuote=null, owlDailyQuoteDate="", owlDailyQuotePromise=null, owlDailyQuoteLastAttempt=0;
 
   function owlToday(){
@@ -396,7 +401,6 @@ import { friendlyAppError } from "./utils/error-map.js";
     owlReady=true;
 
     body.addEventListener("click",()=>{
-      owlMessageCursor++;
       speech.classList.remove("hidden");
 
       pet.classList.remove("owl-flap");
@@ -405,9 +409,10 @@ import { friendlyAppError } from "./utils/error-map.js";
       setTimeout(()=>pet.classList.remove("owl-flap"),1350);
 
       showOwlMessage({
-        preferQuote:owlMessageCursor%3===0,
+        preferQuote:(owlMessageCursor+1)%3===0,
         force:true
       });
+      owlMessageCursor++;
     });
 
     closeBtn?.addEventListener("click",event=>{
@@ -430,9 +435,72 @@ import { friendlyAppError } from "./utils/error-map.js";
     return Number.isFinite(t)?t:Infinity;
   }
 
-  function owlContextMessages(){
+  function owlRouteContextMessages(){
     if(!currentUser||!state)return [];
     const messages=[];
+    const activeUsers=(state.users||[]).filter(u=>u.active!==false);
+    const activeLearners=activeUsers.filter(u=>["student","monitor"].includes(u.role));
+    const currentWeek=week();
+
+    if(route==="admin"&&currentUser.role==="admin"){
+      const directory=state.adminDirectory;
+      if(directory){
+        const classes=(directory.classes||[]);
+        const teachers=(directory.teachers||[]);
+        const assignments=(directory.assignments||[]).filter(a=>a.active!==false);
+        messages.push({text:`🛡️ Trang Quản trị đang có ${classes.filter(c=>c.active!==false).length} lớp hoạt động, ${teachers.filter(t=>t.active!==false).length} giáo viên hoạt động và ${assignments.length} phân quyền lớp.`});
+        const inactive=teachers.filter(t=>t.active===false).length;
+        if(inactive)messages.push({text:`👩‍🏫 Có ${inactive} giáo viên đang khóa. Root admin có thể mở lại hoặc quản lý tài khoản trong khối Giáo viên.`});
+      }else{
+        messages.push({text:"🛡️ Cú đang chờ danh mục lớp và giáo viên tải xong để tóm tắt phân quyền cho bạn."});
+      }
+    }else if(route==="students"&&isManager()){
+      const deleted=(state.users||[]).filter(u=>["student","monitor"].includes(u.role)&&u.active===false).length;
+      messages.push({text:`🧑‍🎓 Lớp hiện có ${activeLearners.length} học sinh/cán sự hoạt động${deleted?` và ${deleted} tài khoản đã xóa mềm`:""}.`});
+    }else if(route==="approvals"&&isManager()){
+      const waiting=(state.registrations||[]).filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r)).length;
+      messages.push({urgent:waiting>0,text:waiting?`📋 Tuần ${currentWeek.number} còn ${waiting} đăng ký cần thầy/cô xử lý.`:`✅ Tuần ${currentWeek.number} hiện không còn đăng ký nào cần giáo viên xử lý.`});
+    }else if(route==="class"&&isManager()){
+      const st=statsForWeek();
+      messages.push({text:`👥 Tổng quan lớp tuần ${currentWeek.number}: ${st.valid} lượt hợp lệ, ${st.issues} lượt cần chú ý và ${st.missing} lượt chưa đăng ký.`});
+    }else if(route==="schedule"&&isManager()){
+      messages.push({text:`🗓️ Thời khóa biểu tự học hiện có ${effectiveSchedule().length} tiết đang áp dụng cho lớp ${state.settings.className}.`});
+    }else if(route==="weeks"&&isManager()){
+      messages.push({text:`📆 Bạn đang xem Tuần ${currentWeek.number} · ${weekStatus(currentWeek.status)}. Hạn đăng ký: ${deadlineSummary(currentWeek)}.`});
+    }else if(route==="settings"&&isManager()){
+      messages.push({text:isAiAutomationEnabled()?`🤖 Duyệt AI đang bật ở ngưỡng ${Math.round(Number(state.settings.aiAutoApproveThreshold||.9)*100)}%.`:`👤 Duyệt AI đang tắt; đăng ký sẽ chuyển giáo viên xử lý.`});
+    }else if(["dashboard","register"].includes(route)&&!isManager()){
+      const missing=effectiveSchedule().filter(sl=>!regFor(currentUser.id,sl.dow,sl.period)).length;
+      messages.push({urgent:missing>0,text:missing?`📚 Tuần ${currentWeek.number} bạn còn ${missing} tiết chưa đăng ký nội dung tự học.`:`🌟 Tuần ${currentWeek.number} bạn đã có nội dung cho toàn bộ tiết tự học.`});
+    }else if(route==="history"&&!isManager()){
+      const mine=(state.registrations||[]).filter(r=>r.studentId===currentUser.id);
+      messages.push({text:`📚 Lịch sử của bạn đang có ${mine.length} lượt đăng ký tự học được tải từ hệ thống.`});
+    }else if(route==="comments"&&!isManager()){
+      const revisions=(state.registrations||[]).filter(r=>r.studentId===currentUser.id&&r.teacherComment).length;
+      messages.push({text:revisions?`💬 Có ${revisions} đăng ký từng nhận phản hồi của giáo viên. Bạn có thể mở từng mục để xem lại.`:"💬 Hiện chưa có phản hồi giáo viên nào trong dữ liệu của bạn."});
+    }else if(route==="dashboard"&&isManager()){
+      const waiting=(state.registrations||[]).filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r)).length;
+      messages.push({text:`🌠 Dashboard lớp ${state.settings.className}: ${activeLearners.length} học sinh/cán sự hoạt động${waiting?`, ${waiting} đăng ký cần xử lý`:""}.`});
+    }
+    return messages;
+  }
+
+  function scheduleOwlRouteContext({force=false,delay=900}={}){
+    if(!currentUser||!state)return;
+    const key=[currentUser.id,route,state.activeClassId||"",state.currentWeekId||""].join("|");
+    if(!force&&key===owlLastContextKey)return;
+    owlLastContextKey=key;
+    clearTimeout(owlRouteTimer);
+    const wait=Math.max(delay,Math.max(0,owlJustGreetedUntil-Date.now()));
+    owlRouteTimer=setTimeout(()=>{
+      const item=owlRouteContextMessages()[0];
+      if(item)showOwlMessage({text:item.text,urgent:!!item.urgent,force:true});
+    },wait);
+  }
+
+  function owlContextMessages(){
+    if(!currentUser||!state)return [];
+    const messages=[...owlRouteContextMessages()];
     const w=week();
 
     if(isManager()){
@@ -560,6 +628,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     const greetKey=`wiseOwlGreeted:${currentUser.id}`;
     if(!sessionStorage.getItem(greetKey)){
       sessionStorage.setItem(greetKey,"1");
+      owlJustGreetedUntil=Date.now()+2800;
       setTimeout(()=>showOwlMessage({
         text:`🦉 Xin chào ${currentUser.name}! Cú Thông Thái sẽ nhắc deadline, thông báo và thỉnh thoảng kể bạn một câu danh ngôn.`,
         force:true
@@ -1192,7 +1261,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     }
     loginView.classList.add("hidden"); appView.classList.remove("hidden");
     $("#profileName").textContent=currentUser.name; $("#profileRole").textContent=roleLabel[currentUser.role]; $("#profileAvatar").textContent=initials(currentUser.name);
-    setSafeHtml($("#sideNav"),(navs[currentUser.role]||navs.student).map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}">${navIconFor(n[0])}<span class="nav-label">${n[2]}</span></button>`).join(""));
+    setSafeHtml($("#sideNav"),(navs[currentUser.role]||navs.student).map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}" title="${esc(n[2])}" aria-label="${esc(n[2])}">${navIconFor(n[0])}<span class="nav-label">${n[2]}</span></button>`).join(""));
     $("#sideNav").querySelectorAll("[data-route]").forEach(b=>b.onclick=()=>{route=b.dataset.route; setSidebarOpen(false); renderShell(); render();});
     setSafeHtml($("#globalWeekSelect"),state.weeks.map(w=>`<option value="${w.id}" ${w.id===state.currentWeekId?"selected":""}>Tuần ${w.number} · ${fmtDateShort(w.startDate)}–${fmtDateShort(w.endDate)}</option>`).join(""));
     const classWrap=$("#classPickerWrap"),classSelect=$("#globalClassSelect");
@@ -1265,12 +1334,46 @@ import { friendlyAppError } from "./utils/error-map.js";
   });
   $("#notificationBtn")?.addEventListener("click",()=>openTeacherNotifications());
   const menuBtn=$("#menuBtn"), sidebar=$("#sidebar");
-  const setSidebarOpen=(open)=>{
-    sidebar?.classList.toggle("open",Boolean(open));
-    menuBtn?.setAttribute("aria-expanded",String(Boolean(open)));
-    menuBtn?.setAttribute("aria-label",open?"Đóng menu":"Mở menu");
+  const isMobileSidebar=()=>window.matchMedia("(max-width: 820px)").matches;
+  const readSidebarCollapsed=()=>{
+    try{return localStorage.getItem(SIDEBAR_COLLAPSED_KEY)==="1";}catch{return false;}
   };
-  menuBtn.onclick=()=>setSidebarOpen(!sidebar.classList.contains("open"));
+  const setSidebarOpen=(open)=>{
+    const value=Boolean(open);
+    sidebar?.classList.toggle("open",value);
+    if(isMobileSidebar()){
+      menuBtn?.setAttribute("aria-expanded",String(value));
+      menuBtn?.setAttribute("aria-label",value?"Đóng menu":"Mở menu");
+      menuBtn?.setAttribute("title",value?"Đóng menu":"Mở menu");
+    }
+  };
+  const setSidebarCollapsed=(collapsed,{persist=true}={})=>{
+    const value=Boolean(collapsed);
+    sidebar?.classList.toggle("is-collapsed",value);
+    appView?.classList.toggle("sidebar-collapsed",value);
+    if(persist){try{localStorage.setItem(SIDEBAR_COLLAPSED_KEY,value?"1":"0");}catch{}}
+    if(!isMobileSidebar()){
+      menuBtn?.setAttribute("aria-expanded",String(!value));
+      menuBtn?.setAttribute("aria-label",value?"Mở rộng menu":"Thu gọn menu");
+      menuBtn?.setAttribute("title",value?"Mở rộng menu":"Thu gọn menu");
+    }
+  };
+  const syncSidebarMode=()=>{
+    if(isMobileSidebar()){
+      sidebar?.classList.remove("is-collapsed");
+      appView?.classList.remove("sidebar-collapsed");
+      setSidebarOpen(false);
+    }else{
+      sidebar?.classList.remove("open");
+      setSidebarCollapsed(readSidebarCollapsed(),{persist:false});
+    }
+  };
+  menuBtn.onclick=()=>{
+    if(isMobileSidebar())setSidebarOpen(!sidebar.classList.contains("open"));
+    else setSidebarCollapsed(!sidebar.classList.contains("is-collapsed"));
+  };
+  window.addEventListener("resize",syncSidebarMode,{passive:true});
+  syncSidebarMode();
   $("#modalClose").onclick=closeModal; modal.addEventListener("click",e=>{if(e.target===modal)closeModal();});
   document.addEventListener("keydown",e=>{
     if(e.key!=="Escape")return;
@@ -3047,20 +3150,55 @@ import { friendlyAppError } from "./utils/error-map.js";
   function adminPage(){
     if(currentUser?.role!=="admin")return head("Quản trị lớp","Chỉ quản trị viên gốc được sử dụng mục này.")+empty("🔒","Không có quyền truy cập.");
     const activeClasses=state.availableClasses||[];
-    return head("Quản trị lớp","Tạo/lưu trữ lớp, quản lý giáo viên và phân quyền theo lớp.",`<button class="btn btn-primary" id="adminReloadClasses">↻ Làm mới</button>`)+`
-      <div class="admin-class-grid">
-        <div class="card">
-          <div class="toolbar"><h3>Lớp đang hoạt động</h3><button class="btn btn-primary right" id="adminCreateClass">＋ Tạo lớp</button></div>
-          <div class="admin-class-list">
-            ${activeClasses.length?activeClasses.map(c=>`<div class="admin-class-item"><div><b>${esc(c.code)}</b><div class="tiny muted">${esc(c.name||c.code)}</div></div><button class="btn btn-ghost admin-open-class" data-id="${c.id}">Mở lớp</button></div>`).join(""):empty("🏫","Chưa có lớp đang hoạt động.")}
+    return head(
+      "Quản trị lớp",
+      "Tách riêng quản lý lớp, giáo viên và phân quyền để thao tác nhanh và an toàn hơn.",
+      `<button class="btn btn-primary" id="adminReloadClasses">${uiIcon("refresh")}<span>Làm mới dữ liệu</span></button>`
+    )+`
+      <section class="admin-command-hero dashboard-section">
+        <div class="admin-command-copy">
+          <span class="section-kicker">ROOT ADMIN · TRUNG TÂM ĐIỀU PHỐI</span>
+          <h2>Quản lý lớp và quyền giáo viên rõ ràng theo từng khối</h2>
+          <p>Tạo lớp, quản lý tài khoản giáo viên và gán quyền phụ trách mà không trộn lẫn vào cùng một danh sách.</p>
+          <div id="adminSummaryCards" class="admin-summary-cards" aria-live="polite">
+            <span><small>Lớp hoạt động</small><b>${activeClasses.length}</b></span>
+            <span><small>Giáo viên</small><b>…</b></span>
+            <span><small>Phân quyền</small><b>…</b></span>
           </div>
-          <div class="tiny muted" style="margin-top:10px">Danh sách đầy đủ, kể cả lớp đã khóa, nằm ở khung quản trị bên phải.</div>
         </div>
-        <div class="card">
-          <div class="toolbar"><h3>Danh mục lớp & giáo viên</h3><button class="btn btn-primary right" id="adminCreateTeacher">＋ Tạo GV</button></div>
-          <div id="adminClassDirectory"><div class="loading-inline"><span class="diamond-mini" aria-hidden="true"></span> Đang tải dữ liệu quản trị...</div></div>
+        <div class="admin-command-art" aria-hidden="true">
+          <img src="assets/images/teacher-dashboard-illustration.png" alt="">
         </div>
-      </div>`;
+      </section>
+
+      <section class="admin-quick-grid dashboard-section">
+        <article class="card admin-quick-card">
+          <div class="section-heading-row section-heading-row-spaced">
+            <div><span class="section-kicker">LỚP LÀM VIỆC</span><h3>Lớp đang hoạt động</h3><p>Mở nhanh lớp để xem học sinh, lịch và đăng ký.</p></div>
+            <button class="btn btn-primary" id="adminCreateClass">${uiIcon("add")}<span>Tạo lớp</span></button>
+          </div>
+          <div class="admin-active-class-list">
+            ${activeClasses.length?activeClasses.map(c=>`<button class="admin-active-class-chip admin-open-class" data-id="${c.id}"><span>${esc(c.code)}</span><small>${esc(c.name||c.code)}</small>${uiIcon("right")}</button>`).join(""):empty("🏫","Chưa có lớp đang hoạt động.")}
+          </div>
+        </article>
+        <article class="card admin-quick-card admin-safety-card">
+          <span class="section-kicker">NGUYÊN TẮC AN TOÀN</span>
+          <h3>Quyền tài khoản được tách khỏi dữ liệu học tập</h3>
+          <ul class="admin-safety-list">
+            <li>${uiIcon("check")} Xóa giáo viên là <b>xóa mềm</b>, lịch sử vẫn được giữ.</li>
+            <li>${uiIcon("check")} Khi giáo viên bị khóa/xóa, phân công lớp đang hoạt động được vô hiệu hóa.</li>
+            <li>${uiIcon("lock")} Root admin không xuất hiện trong danh sách giáo viên có thể xóa.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="card admin-directory-shell dashboard-section">
+        <div class="section-heading-row section-heading-row-spaced admin-directory-heading">
+          <div><span class="section-kicker">DANH MỤC & PHÂN QUYỀN</span><h3>Lớp học · Giáo viên · Quyền phụ trách</h3><p>Các khối bên dưới độc lập để dễ kiểm tra trước khi thay đổi quyền.</p></div>
+          <button class="btn btn-primary" id="adminCreateTeacher">${uiIcon("add")}<span>Tạo giáo viên</span></button>
+        </div>
+        <div id="adminClassDirectory"><div class="loading-inline"><span class="diamond-mini" aria-hidden="true"></span> Đang tải dữ liệu quản trị...</div></div>
+      </section>`;
   }
 
   function bindAdmin(){
@@ -3082,40 +3220,88 @@ import { friendlyAppError } from "./utils/error-map.js";
         const data=await prod.adminManageClasses("list");
         const classes=data.classes||[],teachers=data.teachers||[],assignments=data.assignments||[];
         const box=$("#adminClassDirectory");if(!box)return;
+        state.adminDirectory={classes,teachers,assignments,loadedAt:Date.now()};
+        const activeClasses=classes.filter(c=>c.active!==false);
+        const activeTeachers=teachers.filter(t=>t.active!==false);
+        const activeAssignments=assignments.filter(a=>a.active!==false);
+        const summary=$("#adminSummaryCards");
+        if(summary)setSafeHtml(summary,`
+          <span><small>Lớp hoạt động</small><b>${activeClasses.length}</b></span>
+          <span><small>Giáo viên hoạt động</small><b>${activeTeachers.length}</b></span>
+          <span><small>Phân quyền đang bật</small><b>${activeAssignments.length}</b></span>`);
+
         const classCards=classes.map(c=>{
           const active=c.active!==false;
           const blockers=Array.isArray(c.deleteBlockers)?c.deleteBlockers:[];
           const blockerText=blockers.map(item=>item.message||item.code).filter(Boolean).join(" ");
           const assignedTeachers=teachers.filter(t=>assignments.some(a=>a.class_id===c.id&&a.teacher_id===t.id&&a.active!==false));
-          return `<div class="card admin-directory-class ${active?"":"is-inactive"}" data-admin-class-card="${c.id}" style="box-shadow:none;margin-bottom:10px">
-            <div class="toolbar admin-class-card-head" style="align-items:flex-start">
-              <div>
-                <b>${esc(c.code)} · ${esc(c.name||c.code)}</b>
-                <div class="tiny ${active?"muted":"danger-text"}">${active?"Đang hoạt động":"Đã khóa"}</div>
-                <div class="admin-class-metrics">
-                  <span>👥 <b>${Number(c.learnerCount||0)}</b> HS/cán sự active</span>
-                  <span>🗂️ <b>${Number(c.profileCount||0)}</b> hồ sơ</span>
-                  <span>📚 <b>${Number(c.registrationCount||0)}</b> đăng ký</span>
-                  <span>👩‍🏫 <b>${assignedTeachers.length}</b> GV phụ trách</span>
-                </div>
+          return `<article class="admin-class-card ${active?"":"is-inactive"}" data-admin-class-card="${c.id}">
+            <div class="admin-class-card-main">
+              <div class="admin-class-title-row">
+                <div class="admin-class-symbol">${esc(String(c.code||"L").slice(0,2))}</div>
+                <div><h4>${esc(c.code)} · ${esc(c.name||c.code)}</h4><span class="admin-status-pill ${active?"is-active":"is-inactive"}">${active?"Đang hoạt động":"Đã khóa"}</span></div>
               </div>
-              <div class="toolbar right admin-class-actions" style="gap:6px">
-                ${active?`<button class="btn btn-ghost admin-directory-open" data-id="${c.id}">Mở lớp</button>`:""}
-                <button class="btn btn-ghost admin-class-learners" data-id="${c.id}" data-code="${esc(c.code)}">Học sinh</button>
-                <button class="btn btn-ghost admin-edit-class" data-id="${c.id}" data-code="${esc(c.code)}" data-name="${esc(c.name||c.code)}">Sửa lớp</button>
-                <button class="btn btn-ghost ${active?"danger":""} admin-toggle-class" data-id="${c.id}" data-active="${active}">${active?"Khóa lớp":"Kích hoạt"}</button>
-                <button class="btn btn-danger admin-delete-class" data-id="${c.id}" data-code="${esc(c.code)}" data-can-delete="${c.canDelete===true}" ${c.canDelete===true?"":"disabled"} title="${esc(c.canDelete===true?"Xóa vĩnh viễn lớp rỗng":blockerText||"Lớp còn dữ liệu nên không thể xóa")}">Xóa lớp</button>
+              <div class="admin-class-metrics">
+                <span><small>HS/cán sự</small><b>${Number(c.learnerCount||0)}</b></span>
+                <span><small>Hồ sơ</small><b>${Number(c.profileCount||0)}</b></span>
+                <span><small>Đăng ký</small><b>${Number(c.registrationCount||0)}</b></span>
+                <span><small>GV phụ trách</small><b>${assignedTeachers.length}</b></span>
               </div>
+              ${assignedTeachers.length?`<div class="admin-class-teacher-chips">${assignedTeachers.map(t=>`<span>${esc(t.full_name||t.student_code||"GV")}</span>`).join("")}</div>`:`<div class="tiny muted">Chưa có giáo viên phụ trách.</div>`}
+              ${!c.canDelete&&blockers.length?`<div class="admin-delete-blockers"><b>Chưa thể xóa lớp:</b>${blockers.map(item=>`<span>${esc(item.message||item.code)}</span>`).join("")}</div>`:""}
             </div>
-            ${!c.canDelete&&blockers.length?`<div class="admin-delete-blockers"><b>Không thể xóa:</b> ${blockers.map(item=>`<span>${esc(item.message||item.code)}</span>`).join("")}</div>`:""}
-            ${active?`<div class="form-grid admin-assignment-grid" style="margin-top:8px">${teachers.map(t=>{const on=assignments.some(a=>a.class_id===c.id&&a.teacher_id===t.id&&a.active!==false);return `<label class="toggle-row"><input class="admin-teacher-assignment" type="checkbox" data-class="${c.id}" data-teacher="${t.id}" ${on?"checked":""} ${t.active===false?"disabled":""}><span><b>${esc(t.full_name||t.student_code||"GV")}</b><small>${esc(t.student_code||"")}${t.active===false?" · Đã khóa":""}</small></span></label>`}).join("")||`<span class="muted">Chưa có giáo viên.</span>`}</div>`:`<div class="callout" style="margin-top:8px">Lớp đã khóa: không thể phân quyền mới hoặc nhận học sinh mới.</div>`}
+            <div class="admin-class-card-actions">
+              ${active?`<button class="btn btn-ghost admin-directory-open" data-id="${c.id}">${uiIcon("open")}<span>Mở lớp</span></button>`:""}
+              <button class="btn btn-ghost admin-class-learners" data-id="${c.id}" data-code="${esc(c.code)}">${uiIcon("students")}<span>Học sinh</span></button>
+              <button class="btn btn-ghost admin-edit-class" data-id="${c.id}" data-code="${esc(c.code)}" data-name="${esc(c.name||c.code)}">${uiIcon("edit")}<span>Sửa lớp</span></button>
+              <button class="btn btn-ghost ${active?"danger":""} admin-toggle-class" data-id="${c.id}" data-active="${active}">${uiIcon(active?"lock":"restore")}<span>${active?"Khóa lớp":"Kích hoạt"}</span></button>
+              <button class="btn btn-danger admin-delete-class" data-id="${c.id}" data-code="${esc(c.code)}" data-can-delete="${c.canDelete===true}" ${c.canDelete===true?"":"disabled"} title="${esc(c.canDelete===true?"Xóa vĩnh viễn lớp rỗng":blockerText||"Lớp còn dữ liệu nên không thể xóa")}">${uiIcon("delete")}<span>Xóa lớp</span></button>
+            </div>
             <div class="admin-learner-panel hidden" id="adminClassLearners-${c.id}" data-class-id="${c.id}"></div>
-          </div>`;
+          </article>`;
         }).join("")||`<p class="muted">Chưa có lớp nào.</p>`;
 
-        const teacherCards=teachers.map(t=>`<div class="admin-class-item"><div><b>${esc(t.full_name||t.student_code||"GV")}</b><div class="tiny muted">${esc(t.student_code||"")} · ${t.active!==false?"Đang hoạt động":"Đã khóa"}</div></div><button class="btn btn-ghost admin-toggle-teacher" data-id="${t.id}" data-active="${t.active!==false}" data-code="${esc(t.student_code||"")}" data-name="${esc(t.full_name||"")}">${t.active!==false?"Khóa":"Mở khóa"}</button></div>`).join("")||`<p class="muted">Chưa có giáo viên.</p>`;
+        const permissionRows=teachers.map(t=>{
+          const assigned=activeClasses.filter(c=>assignments.some(a=>a.class_id===c.id&&a.teacher_id===t.id&&a.active!==false));
+          return `<div class="admin-permission-row ${t.active===false?"is-inactive":""}">
+            <div class="admin-permission-person"><span class="avatar">${initials(t.full_name||t.student_code||"GV")}</span><div><b>${esc(t.full_name||t.student_code||"Giáo viên")}</b><small>${esc(t.student_code||"")} · ${assigned.length} lớp</small></div></div>
+            <div class="admin-permission-classes">${activeClasses.map(c=>{
+              const on=assignments.some(a=>a.class_id===c.id&&a.teacher_id===t.id&&a.active!==false);
+              return `<label class="admin-permission-chip"><input class="admin-teacher-assignment" type="checkbox" data-class="${c.id}" data-teacher="${t.id}" ${on?"checked":""} ${t.active===false?"disabled":""}><span>${esc(c.code)}</span></label>`;
+            }).join("")||`<span class="tiny muted">Chưa có lớp hoạt động.</span>`}</div>
+          </div>`;
+        }).join("")||`<div class="learning-empty-mini">Chưa có giáo viên để phân quyền.</div>`;
 
-        setSafeHtml(box,`<div class="admin-directory-section"><h4>Toàn bộ lớp</h4>${classCards}</div><div class="card" style="box-shadow:none;margin-top:14px"><h4>Giáo viên</h4>${teacherCards}</div>`);
+        const teacherCards=teachers.map(teacher=>{
+          const assigned=classes.filter(c=>assignments.some(a=>a.class_id===c.id&&a.teacher_id===teacher.id&&a.active!==false));
+          const active=teacher.active!==false;
+          return `<article class="admin-teacher-card ${active?"":"is-inactive"}">
+            <div class="admin-teacher-card-head">
+              <div class="admin-permission-person"><span class="avatar">${initials(teacher.full_name||teacher.student_code||"GV")}</span><div><b>${esc(teacher.full_name||teacher.student_code||"Giáo viên")}</b><small>${esc(teacher.student_code||"")}</small></div></div>
+              <span class="admin-status-pill ${active?"is-active":"is-inactive"}">${active?"Hoạt động":"Đã khóa"}</span>
+            </div>
+            <div class="admin-teacher-meta"><span>${uiIcon("class")} ${assigned.length?assigned.map(c=>esc(c.code)).join(" · "):"Chưa được phân lớp"}</span></div>
+            <div class="admin-teacher-actions">
+              <button class="btn btn-ghost admin-toggle-teacher" data-id="${teacher.id}" data-active="${active}" data-code="${esc(teacher.student_code||"")}" data-name="${esc(teacher.full_name||"")}">${uiIcon(active?"lock":"restore")}<span>${active?"Khóa":"Mở khóa"}</span></button>
+              ${active?`<button class="btn btn-ghost danger admin-delete-teacher" data-id="${teacher.id}" data-code="${esc(teacher.student_code||"")}" data-name="${esc(teacher.full_name||"")}">${uiIcon("delete")}<span>Xóa giáo viên</span></button>`:""}
+            </div>
+          </article>`;
+        }).join("")||`<div class="learning-empty-mini">Chưa có giáo viên.</div>`;
+
+        setSafeHtml(box,`
+          <section class="admin-directory-section admin-class-directory">
+            <div class="admin-block-heading"><div><span class="section-kicker">01 · LỚP HỌC</span><h4>Danh mục lớp</h4><p>Quản lý trạng thái lớp và dữ liệu học sinh.</p></div><span class="section-count-badge">${classes.length}</span></div>
+            <div class="admin-class-card-grid">${classCards}</div>
+          </section>
+          <section class="admin-directory-section admin-permission-matrix">
+            <div class="admin-block-heading"><div><span class="section-kicker">02 · PHÂN QUYỀN</span><h4>Giáo viên phụ trách lớp</h4><p>Bật/tắt quyền theo ma trận; mỗi ô là một lớp đang hoạt động.</p></div><span class="section-count-badge">${activeAssignments.length}</span></div>
+            <div class="admin-permission-list">${permissionRows}</div>
+          </section>
+          <section class="admin-directory-section admin-teacher-directory">
+            <div class="admin-block-heading"><div><span class="section-kicker">03 · GIÁO VIÊN</span><h4>Tài khoản giáo viên</h4><p>Khóa, mở lại hoặc xóa mềm giáo viên. Xóa mềm giữ lịch sử và vô hiệu phân quyền lớp.</p></div><span class="section-count-badge">${teachers.length}</span></div>
+            <div class="admin-teacher-grid">${teacherCards}</div>
+          </section>`);
+        scheduleOwlRouteContext({force:true,delay:500});
 
         box.querySelectorAll(".admin-directory-open").forEach(btn=>btn.addEventListener("click",()=>openActiveClass(btn.dataset.id)));
         box.querySelectorAll(".admin-class-learners").forEach(btn=>btn.addEventListener("click",async()=>{
@@ -3180,6 +3366,38 @@ import { friendlyAppError } from "./utils/error-map.js";
             toast("Đã cập nhật trạng thái giáo viên.","success");
             await loadDirectory();
           }catch(error){toast(safeErrorMessage(error,"Không cập nhật được giáo viên."),"warn");}
+        }));
+        box.querySelectorAll(".admin-delete-teacher").forEach(btn=>btn.addEventListener("click",()=>{
+          const teacher=teachers.find(item=>item.id===btn.dataset.id);
+          if(!teacher)return;
+          openModal("Xóa giáo viên",`
+            <form id="adminDeleteTeacherForm" class="delete-confirm-form">
+              <div class="callout warning"><b>Xóa mềm tài khoản giáo viên</b><br>Tài khoản sẽ bị vô hiệu hóa, lịch sử vẫn được giữ và các phân quyền lớp đang hoạt động sẽ bị tắt.</div>
+              <div class="person admin-delete-teacher-person"><span class="avatar">${initials(teacher.full_name||teacher.student_code||"GV")}</span><div><b>${esc(teacher.full_name||"Giáo viên")}</b><div class="tiny muted">Mã: ${esc(teacher.student_code||"")}</div></div></div>
+              <label>Nhập đúng mã giáo viên để xác nhận
+                <input id="adminDeleteTeacherCode" autocomplete="off" spellcheck="false" required placeholder="${esc(teacher.student_code||"")}">
+              </label>
+              <div class="toolbar"><button type="button" class="btn btn-ghost" id="cancelDeleteTeacher">Hủy</button><button class="btn btn-danger right" type="submit">${uiIcon("delete")}<span>Xóa giáo viên</span></button></div>
+            </form>`);
+          $("#cancelDeleteTeacher").onclick=closeModal;
+          $("#adminDeleteTeacherForm").onsubmit=async event=>{
+            event.preventDefault();
+            const confirmCode=$("#adminDeleteTeacherCode").value.trim().toUpperCase();
+            if(confirmCode!==String(teacher.student_code||"").trim().toUpperCase()){
+              toast("Mã xác nhận chưa khớp với tài khoản giáo viên.","warn");
+              return;
+            }
+            setGlobalLoading(true,"Đang xóa mềm giáo viên...");
+            try{
+              await prod.teacherDeleteUser(teacher.id, confirmCode);
+              closeModal();
+              toast(`Đã xóa mềm giáo viên ${teacher.full_name||teacher.student_code||""}.`,"success");
+              await loadDirectory();
+            }catch(error){
+              console.error(error);
+              toast(safeErrorMessage(error,"Không xóa được giáo viên."),"warn");
+            }finally{setGlobalLoading(false);}
+          };
         }));
         box.querySelectorAll(".admin-edit-class").forEach(btn=>btn.addEventListener("click",()=>{
           openModal("Sửa thông tin lớp",`<form id="adminEditClassForm"><label>Mã lớp<input id="adminEditClassCode" required maxlength="40" value="${esc(btn.dataset.code||"")}"></label><label>Tên lớp<input id="adminEditClassName" required maxlength="120" value="${esc(btn.dataset.name||"")}"></label><div class="toolbar"><button type="button" class="btn btn-ghost" id="cancelEditClass">Hủy</button><button class="btn btn-primary right">Lưu</button></div></form>`);
@@ -3428,6 +3646,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       }
     });
     renderShell();
+    scheduleOwlRouteContext();
   }
 
   async function refreshFromServer(showToast=true){
