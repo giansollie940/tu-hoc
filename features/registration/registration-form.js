@@ -1,20 +1,3 @@
 export function renderDeviceChoice({checked=false,disabled=false}={}){
-  const checkedAttribute=checked?" checked":"";
-  const disabledAttribute=disabled?" disabled":"";
-
-  return [
-    '<label class="device-choice" for="usesElectronicDevice">',
-    '  <span class="device-choice-copy">',
-    '    <b>Sử dụng thiết bị điện tử</b>',
-    '    <small>Buổi này em có sử dụng thiết bị điện tử không?</small>',
-    "  </span>",
-    '  <span class="switch-control">',
-    '    <input id="usesElectronicDevice" name="usesElectronicDevice" type="checkbox"',
-    checkedAttribute,
-    disabledAttribute,
-    ">",
-    '    <span class="switch-track" aria-hidden="true"></span>',
-    "  </span>",
-    "</label>"
-  ].join("");
+  return `<label class="device-choice"><span>Sử dụng thiết bị điện tử?</span><span class="device-toggle"><input id="usesElectronicDevice" name="usesElectronicDevice" type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''}><span aria-hidden="true"></span></span><small>Chỉ bật khi em dự kiến dùng điện thoại, máy tính, internet, website, video hoặc ứng dụng để học.</small></label>`;
 }
