@@ -4,7 +4,8 @@ function regFor(registrations,userId,session){return (registrations||[]).find(r=
 export function registrationBucket(reg){
   if(!reg||reg.status==='draft')return 'missing';
   if(reg.revisionOverdueAt)return 'attention';
-  if(reg.status==='submitted'||reg.status==='needs_revision'||reg.aiReviewStatus==='error')return 'attention';
+  if(reg.status==='submitted'||reg.aiReviewStatus==='error')return 'attention';
+  if(reg.status==='needs_revision')return 'registered';
   return 'registered';
 }
 export function summarizeSession({users,registrations,session}){
@@ -18,7 +19,7 @@ export function renderClassOverview({week,sessions=[],users=[],registrations=[],
 }
 function fallbackManagerActions(reg){
   return {
-    canApprove:['submitted','needs_revision'].includes(reg?.status),
+    canApprove:reg?.status==='submitted',
     canRequestRevision:['submitted','needs_revision','approved'].includes(reg?.status),
     canComment:!!reg,
     canDelete:!!reg
