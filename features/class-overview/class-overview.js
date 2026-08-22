@@ -3,7 +3,7 @@ const activeLearners=users=>(users||[]).filter(u=>u.active!==false&&['student','
 function regFor(registrations,userId,session){return (registrations||[]).find(r=>r.studentId===userId&&Number(r.dow)===Number(session.dow)&&Number(r.period)===Number(session.period)&&r.isDeleted!==true);}
 export function registrationBucket(reg){
   if(!reg||reg.status==='draft')return 'missing';
-  if(reg.status==='revision_overdue')return 'attention';
+  if(reg.revisionOverdueAt)return 'attention';
   if(reg.status==='submitted'||reg.status==='needs_revision'||reg.aiReviewStatus==='error')return 'attention';
   return 'registered';
 }
@@ -26,7 +26,7 @@ function fallbackManagerActions(reg){
 }
 function rowHtml(row,role,getManagerActions){
   const r=row.registration;
-  const status=row.bucket==='missing'?'Chưa đăng ký':r?.revisionOverdueAt||r?.status==='revision_overdue'?'Báo cáo lỗi':r?.status==='approved'?'Đã duyệt':r?.status==='needs_revision'?'Cần chỉnh sửa':'Chờ duyệt';
+  const status=row.bucket==='missing'?'Chưa đăng ký':r?.revisionOverdueAt?'Báo cáo lỗi':r?.status==='approved'?'Đã duyệt':r?.status==='needs_revision'?'Cần chỉnh sửa':'Chờ duyệt';
   let actions='';
   if(['teacher','admin'].includes(role)&&r){
     const permissions=typeof getManagerActions==='function'?getManagerActions(r):fallbackManagerActions(r);
