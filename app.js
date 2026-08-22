@@ -7,7 +7,7 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.4.2b";
+} from "./features/class-overview/class-overview.js?v=8.4.2c";
 import { initOwlPet } from "./ui/owl-pet.js?v=8.4.1";
 import { friendlyAppError } from "./utils/error-map.js";
 
@@ -615,9 +615,8 @@ import { friendlyAppError } from "./utils/error-map.js";
     return {
       canApprove:exists
         &&!revisionOverdue
-        &&["submitted","needs_revision"].includes(status)
-        &&!aiBusy
-        &&!(status==="needs_revision"&&registration?.aiDecision==="request_revision"),
+        &&status==="submitted"
+        &&!aiBusy,
       canRequestRevision:exists
         &&!revisionOverdue
         &&!sessionStarted
@@ -630,6 +629,8 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
 
   function needsTeacherReview(registration){
+    if(!registration || registration.isDeleted===true)return false;
+    if(registration.status!=="submitted")return false;
     return registrationManagerActions(registration).canApprove;
   }
 
