@@ -7,7 +7,7 @@ import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
   renderClassOverview as renderClassOverviewV830,
   renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.4.1";
+} from "./features/class-overview/class-overview.js?v=8.4.2";
 import { initOwlPet } from "./ui/owl-pet.js?v=8.4.1";
 import { friendlyAppError } from "./utils/error-map.js";
 
@@ -25,6 +25,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   let aiRecoveryRunning=false;
   const aiRecoveryAttemptedAt=new Map();
   let route="dashboard";
+  let approvalFilter="attention";
   let weekSelectionTouched=false;
 
   const $ = s => document.querySelector(s);
@@ -601,11 +602,58 @@ import { friendlyAppError } from "./utils/error-map.js";
     const start=sessionStartTime(registrationWeek,registration.dow,registration.period);
     return Number.isFinite(start)?new Date(start).toISOString():null;
   }
+  function registrationManagerActions(registration){
+    const registrationWeek=state?.weeks?.find(w=>w.id===registration?.weekId);
+    const revisionOverdue=isRevisionOverdue(registration);
+    const sessionStarted=registrationWeek
+      ?sessionHasStarted(registrationWeek,registration?.dow,registration?.period)
+      :true;
+    const status=registration?.status||"";
+    const exists=!!registration&&registration?.isDeleted!==true;
+    const aiBusy=["pending","processing"].includes(registration?.aiReviewStatus);
+
+    return {
+      canApprove:exists
+        &&!revisionOverdue
+        &&["submitted","needs_revision"].includes(status)
+        &&!aiBusy
+        &&!(status==="needs_revision"&&registration?.aiDecision==="request_revision"),
+      canRequestRevision:exists
+        &&!revisionOverdue
+        &&!sessionStarted
+        &&["submitted","needs_revision","approved"].includes(status),
+      canComment:exists,
+      canDelete:exists,
+      sessionStarted,
+      revisionOverdue
+    };
+  }
+
   function needsTeacherReview(registration){
-    return !isRevisionOverdue(registration)
-      && ["submitted","needs_revision"].includes(registration?.status)
-      && !["pending","processing"].includes(registration?.aiReviewStatus)
-      && !(registration?.status==="needs_revision"&&registration?.aiDecision==="request_revision");
+    return registrationManagerActions(registration).canApprove;
+  }
+
+  function registrationManagerActionButtons(registration,{showAiWrong=false}={}){
+    const actions=registrationManagerActions(registration);
+    const buttons=[];
+    if(showAiWrong&&registration?.status==="approved"&&registration?.approvalSource==="ai"&&actions.canRequestRevision){
+      buttons.push(`<button class="btn btn-warning ai-wrong-btn" data-id="${registration.id}">⚠️ AI chưa đúng</button>`);
+    }
+    if(actions.canApprove){
+      buttons.push(`<button class="btn btn-success approve-btn" data-id="${registration.id}">✓ Duyệt</button>`);
+    }
+    if(actions.canRequestRevision){
+      buttons.push(`<button class="btn btn-warning revise-btn" data-id="${registration.id}">↩ Yêu cầu sửa</button>`);
+    }else if(actions.sessionStarted&&["submitted","needs_revision","approved"].includes(registration?.status)){
+      buttons.push(`<span class="tiny muted manager-action-note">Đã bắt đầu tiết · chỉ nhận xét/báo cáo</span>`);
+    }
+    if(actions.canComment){
+      buttons.push(`<button class="btn btn-ghost comment-btn" data-id="${registration.id}">💬 Nhận xét</button>`);
+    }
+    if(actions.canDelete){
+      buttons.push(`<button class="btn btn-danger delete-reg-btn" data-id="${registration.id}">🗑 Xóa</button>`);
+    }
+    return buttons.join("");
   }
 
 
@@ -1845,7 +1893,8 @@ import { friendlyAppError } from "./utils/error-map.js";
             users:state.users||[],
             registrations,
             role:currentUser.role,
-            filter
+            filter,
+            getManagerActions:registrationManagerActions
           }));
 
           modalBody.querySelectorAll("[data-session-filter]").forEach(filterButton=>{
@@ -2056,15 +2105,35 @@ import { friendlyAppError } from "./utils/error-map.js";
     return `<div class="approval-item manual-review-item"><div class="approval-content"><div class="person"><span class="avatar">${initials(s?.name||"?")}</span><div><b>${esc(s?.name||"")}</b><div class="tiny muted">${slotLabel(r.dow,r.period)}</div></div></div><p><b>${esc(r.content)}</b></p><p>${esc(r.note||"")}</p>${r.isEmergency?`<div class="callout emergency-callout"><b>🚨 Đăng ký bổ sung</b><br>Lý do: ${esc(r.emergencyReason||"—")}</div>`:""}
       ${(r.aiReason||r.autoReviewReason)?`<div class="review-reason">🧠 <b>Lý do cần GV xem:</b> ${esc(r.aiReason||r.autoReviewReason)}${r.aiConfidence==null?"":` <b>(${Math.round(r.aiConfidence*100)}%)</b>`}</div>`:""}
       ${r.teacherComment?`<p style="color:#7c3aed">💬 ${esc(r.teacherComment)}</p>`:""}</div>
-      <div class="approval-actions">${statusBadge(r.status)}<button class="btn btn-success approve-btn" data-id="${r.id}">✓ Duyệt</button><button class="btn btn-warning revise-btn" data-id="${r.id}">↩ Yêu cầu sửa</button><button class="btn btn-ghost comment-btn" data-id="${r.id}">💬 Nhận xét</button><button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button></div></div>`;
+      <div class="approval-actions">${statusBadge(r.status)}${registrationManagerActionButtons(r,{showAiWrong:true})}</div></div>`;
   }
   function bindTeacherActions(root=content){
-    root.querySelectorAll(".approve-btn").forEach(b=>b.onclick=()=>{const r=state.registrations.find(x=>x.id===b.dataset.id);if(r){r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);audit("Phê duyệt đăng ký",r.id);saveState();toast("Đã phê duyệt.","success");render();}});
+    root.querySelectorAll(".approve-btn").forEach(button=>button.onclick=async()=>{
+      const r=state.registrations.find(x=>x.id===button.dataset.id);
+      if(!r||!registrationManagerActions(r).canApprove)return;
+      button.disabled=true;
+      const previous={status:r.status,approvalSource:r.approvalSource,approvedAt:r.approvedAt};
+      r.status="approved";
+      r.approvalSource="manual";
+      r.approvedAt=Date.now();
+      markLocalNotificationReadByReg(r.id);
+      audit("Phê duyệt đăng ký",r.id);
+      try{
+        await saveState();
+        await refreshFromServer(false);
+        toast("Đã phê duyệt.","success");
+      }catch(error){
+        Object.assign(r,previous);
+        console.error(error);
+        toast(safeErrorMessage(error,"Không phê duyệt được đăng ký."),"warn");
+        try{await refreshFromServer(false);}catch{}
+      }
+    });
     root.querySelectorAll(".revise-btn").forEach(b=>b.onclick=()=>teacherComment(b.dataset.id,true));
     root.querySelectorAll(".comment-btn").forEach(b=>b.onclick=()=>teacherComment(b.dataset.id,false));
     root.querySelectorAll(".ai-wrong-btn").forEach(b=>b.onclick=()=>{
       const r=state.registrations.find(x=>x.id===b.dataset.id);
-      if(!r)return;
+      if(!r||!registrationManagerActions(r).canRequestRevision)return;
       const s=state.users.find(u=>u.id===r.studentId);
       openModal("AI duyệt chưa đúng",`
         <div class="callout warning">
@@ -2079,31 +2148,27 @@ import { friendlyAppError } from "./utils/error-map.js";
         </form>`);
       $("#aiWrongForm").onsubmit=async e=>{
         e.preventDefault();
-        r.teacherComment=$("#aiWrongComment").value.trim();
-        r.status="needs_revision";
-        r.approvalSource="manual";
-        r.approvedAt=null;
-        r.aiReviewStatus="not_needed";
-        r.aiDecision="";
-        r.aiCategory="";
-        r.aiConfidence=null;
-        r.aiReason="";
-        r.aiModel="";
-        r.aiReviewedAt=null;
-        markLocalNotificationReadByReg(r.id);
-        audit("GV sửa quyết định AI",r.id,r.teacherComment);
+        const comment=$("#aiWrongComment").value.trim();
+        if(!comment){toast("Vui lòng nhập nội dung yêu cầu chỉnh sửa.","warn");return;}
+        const submit=e.submitter;if(submit)submit.disabled=true;
         try{
-          await saveState();
+          await prod.requestRegistrationRevision(r.id,comment);
+          markLocalNotificationReadByReg(r.id);
+          await refreshFromServer(false);
           closeModal();
           toast("Đã hủy duyệt AI và yêu cầu học sinh chỉnh sửa.","success");
-          await refreshFromServer(false);
-        }catch{}
+        }catch(error){
+          console.error(error);
+          toast(safeErrorMessage(error,"Không gửi được yêu cầu chỉnh sửa."),"warn");
+          try{await refreshFromServer(false);}catch{}
+          if(submit)submit.disabled=false;
+        }
       };
     });
 
     root.querySelectorAll(".delete-reg-btn").forEach(b=>b.onclick=async()=>{
       const r=state.registrations.find(x=>x.id===b.dataset.id);
-      if(!r)return;
+      if(!r||!registrationManagerActions(r).canDelete)return;
       const s=state.users.find(u=>u.id===r.studentId);
       if(!confirm(`Xóa đăng ký của ${s?.name||"học sinh"} - ${slotLabel(r.dow,r.period)}?`))return;
 
@@ -2114,61 +2179,82 @@ import { friendlyAppError } from "./utils/error-map.js";
         audit("Xóa mềm đăng ký",r.id,`${s?.name||""} - ${slotLabel(r.dow,r.period)}`);
         await refreshFromServer(false);
         toast(r.isEmergency?"Đã xóa đăng ký bổ sung.":"Đã xóa đăng ký.","success");
-        render();
       }catch(error){
         console.error(error);
         toast(safeErrorMessage(error,"Không xóa được đăng ký. Vui lòng thử lại."),"warn");
         try{await refreshFromServer(false);}catch{}
-        render();
       }
     });
   }
   function teacherComment(id,needsRevision){
     const r=state.registrations.find(x=>x.id===id); if(!r)return;
+    const actions=registrationManagerActions(r);
+    if(needsRevision&&!actions.canRequestRevision){
+      toast(actions.sessionStarted?"Buổi tự học đã bắt đầu; không thể mở lại đăng ký để sửa.":"Đăng ký hiện không thể yêu cầu chỉnh sửa.","warn");
+      return;
+    }
     openModal(needsRevision?"Yêu cầu chỉnh sửa":"Nhận xét đăng ký",`<form id="commentForm"><label>Nhận xét<textarea id="teacherComment" required>${esc(r.teacherComment||"")}</textarea></label><button class="btn ${needsRevision?"btn-warning":"btn-primary"} btn-block">${needsRevision?"Gửi yêu cầu sửa":"Lưu nhận xét"}</button></form>`);
     $("#commentForm").onsubmit=async e=>{
       e.preventDefault();
-      r.teacherComment=$("#teacherComment").value.trim();
+      const comment=$("#teacherComment").value.trim();
+      if(!comment){toast("Vui lòng nhập nội dung nhận xét.","warn");return;}
+      const submit=e.submitter;if(submit)submit.disabled=true;
       if(needsRevision){
-        r.status="needs_revision";
-        r.approvalSource="manual";
-        r.approvedAt=null;
-        r.aiReviewStatus="not_needed";
-        r.aiDecision="";
-        r.aiCategory="";
-        r.aiConfidence=null;
-        r.aiReason="";
-        r.aiModel="";
-        r.aiReviewedAt=null;
-        markLocalNotificationReadByReg(r.id);
+        try{
+          await prod.requestRegistrationRevision(r.id,comment);
+          markLocalNotificationReadByReg(r.id);
+          await refreshFromServer(false);
+          closeModal();
+          toast("Đã yêu cầu học sinh chỉnh sửa đăng ký.","success");
+        }catch(error){
+          console.error(error);
+          toast(safeErrorMessage(error,"Không gửi được yêu cầu chỉnh sửa."),"warn");
+          try{await refreshFromServer(false);}catch{}
+          if(submit)submit.disabled=false;
+        }
+        return;
       }
-      audit(needsRevision?"Yêu cầu chỉnh sửa":"Nhận xét",r.id,r.teacherComment);
+
+      r.teacherComment=comment;
+      audit("Nhận xét",r.id,r.teacherComment);
       try{
         await saveState();
         await refreshFromServer(false);
         closeModal();
-        toast(needsRevision
-          ?"Đã yêu cầu sửa. Kết quả AI cũ đã chuyển vào lịch sử phản hồi."
-          :"Đã lưu phản hồi.","success");
-        render();
+        toast("Đã lưu phản hồi.","success");
       }catch(error){
         console.error(error);
         toast(safeErrorMessage(error,"Không lưu được phản hồi."),"warn");
+        try{await refreshFromServer(false);}catch{}
+        if(submit)submit.disabled=false;
       }
     };
   }
   function approvalsPage(){
-    const pending=state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r));
-    const allWeek=state.registrations.filter(r=>r.weekId===state.currentWeekId);
-    const aiWaiting=allWeek
-      .filter(r=>!r.isEmergency
-        &&r.status==="submitted"
-        &&r.approvalSource==="manual"
-        &&["pending","processing"].includes(r.aiReviewStatus))
+    const allWeek=(state.registrations||[])
+      .filter(r=>r.weekId===state.currentWeekId)
       .sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
-    const emergencyWeek=allWeek
-      .filter(r=>r.isEmergency)
-      .sort((a,b)=>String(b.emergencyRequestedAt||"").localeCompare(String(a.emergencyRequestedAt||"")));
+    const pending=allWeek.filter(needsTeacherReview);
+    const aiWaiting=allWeek.filter(r=>
+      !r.isEmergency
+      &&r.status==="submitted"
+      &&r.approvalSource==="manual"
+      &&["pending","processing"].includes(r.aiReviewStatus)
+    );
+    const emergencyWeek=allWeek.filter(r=>r.isEmergency);
+    const filterDefs=[
+      ["attention","Cần xử lý"],
+      ["approved","Đã duyệt"],
+      ["revision","Cần sửa"],
+      ["all","Tất cả"]
+    ];
+    const matchesFilter=r=>{
+      if(approvalFilter==="approved")return r.status==="approved";
+      if(approvalFilter==="revision")return r.status==="needs_revision"&&!isRevisionOverdue(r);
+      if(approvalFilter==="all")return true;
+      return needsTeacherReview(r);
+    };
+    const filteredWeek=allWeek.filter(matchesFilter);
 
     const sourceBadge=r=>{
       if(r.status==="approved"&&r.approvalSource==="ai"){
@@ -2177,96 +2263,46 @@ import { friendlyAppError } from "./utils/error-map.js";
       }
       return '<span class="manual-review-badge">👤 GV</span>';
     };
+    const filterCount=key=>{
+      if(key==="approved")return allWeek.filter(r=>r.status==="approved").length;
+      if(key==="revision")return allWeek.filter(r=>r.status==="needs_revision"&&!isRevisionOverdue(r)).length;
+      if(key==="all")return allWeek.length;
+      return pending.length;
+    };
+    const filters=`<div class="card approval-filter-card"><div class="approval-filter-bar" role="tablist" aria-label="Lọc đăng ký">${filterDefs.map(([key,label])=>`<button type="button" class="approval-filter-chip ${approvalFilter===key?"active":""}" data-approval-filter="${key}" role="tab" aria-selected="${approvalFilter===key}">${label} <span>${filterCount(key)}</span></button>`).join("")}</div></div>`;
 
-    const allTable=allWeek.length?`<div class="card" style="margin-top:16px"><h3>Tất cả đăng ký tuần ${week().number}</h3>
-      <div class="table-wrap"><table class="data-table">
-      <thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>Trạng thái</th><th>Cách duyệt</th><th>Thao tác</th></tr></thead><tbody>
-      ${allWeek.map(r=>{
-        const s=state.users.find(u=>u.id===r.studentId);
-        return `<tr>
-          <td>${esc(s?.name||"")}</td>
-          <td>${slotLabel(r.dow,r.period)}</td>
-          <td>
-            <b>${esc(r.content)}</b>
-            <div class="tiny muted">${esc(r.note||"")}</div>
-            ${r.approvalSource==="ai"&&r.aiReason?`<div class="ai-review-details">🤖 ${esc(r.aiReason)}</div>`:""}
-          </td>
-          <td>${statusBadge(effectiveRegistrationStatus(r))}</td>
-          <td>${sourceBadge(r)}</td>
-          <td>
-            <div class="toolbar" style="gap:5px">
-              ${r.status==="approved"&&r.approvalSource==="ai"?`<button class="btn btn-warning ai-wrong-btn" data-id="${r.id}">⚠️ AI chưa đúng</button>`:""}
-              <button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button>
-            </div>
-          </td>
-        </tr>`;
-      }).join("")}
-      </tbody></table></div></div>`:"";
+    const reviewTable=`<div class="card" style="margin-top:16px">
+      <div class="toolbar"><h3>${filterDefs.find(x=>x[0]===approvalFilter)?.[1]||"Đăng ký"} · ${filteredWeek.length}</h3><span class="tiny muted right">Tuần ${week().number}</span></div>
+      ${filteredWeek.length?`<div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>Trạng thái</th><th>Cách duyệt</th><th>Thao tác</th></tr></thead><tbody>
+        ${filteredWeek.map(r=>{
+          const student=state.users.find(u=>u.id===r.studentId);
+          return `<tr>
+            <td><b>${esc(student?.name||"")}</b><div class="tiny muted">${esc(student?.code||"")}</div></td>
+            <td>${slotLabel(r.dow,r.period)}</td>
+            <td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div>${r.teacherComment?`<div class="tiny manager-comment-preview">💬 ${esc(r.teacherComment)}</div>`:""}${r.approvalSource==="ai"&&r.aiReason?`<div class="ai-review-details">🤖 ${esc(r.aiReason)}</div>`:""}</td>
+            <td>${statusBadge(effectiveRegistrationStatus(r))}</td>
+            <td>${sourceBadge(r)}</td>
+            <td><div class="toolbar manager-action-toolbar">${registrationManagerActionButtons(r,{showAiWrong:true})}</div></td>
+          </tr>`;
+        }).join("")}
+        </tbody></table></div>`:empty("🔎","Không có đăng ký trong bộ lọc này.")}
+      </div>`;
 
     const aiWaitingTable=aiWaiting.length?`<div class="card" style="margin-bottom:16px">
       <h3>🤖 AI đang kiểm tra · ${aiWaiting.length}</h3>
-      <div class="callout" style="margin-bottom:12px">
-        Đây là đăng ký mới đã vào hàng đợi AI. Nếu AI không phản hồi trong <b>2 phút</b>, hệ thống tự đánh dấu lỗi AI và chuyển xuống <b>Cần giáo viên xử lý</b>.
-      </div>
-      <div class="table-wrap"><table class="data-table">
-        <thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>AI</th><th>Cập nhật</th></tr></thead>
-        <tbody>
-        ${aiWaiting.map(r=>{
-          const s=state.users.find(u=>u.id===r.studentId);
-          return `<tr>
-            <td><b>${esc(s?.name||"")}</b><div class="tiny muted">${esc(s?.code||"")}</div></td>
-            <td>${slotLabel(r.dow,r.period)}</td>
-            <td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div></td>
-            <td><span class="ai-review-badge">🤖 ${r.aiReviewStatus==="processing"?"Đang đọc":"Đang chờ"}</span></td>
-            <td>${r.updatedAt?new Date(r.updatedAt).toLocaleString("vi-VN"):"—"}</td>
-          </tr>`;
-        }).join("")}
-        </tbody>
-      </table></div>
+      <div class="callout">Nếu AI không phản hồi trong <b>2 phút</b>, backend tự chuyển đăng ký sang hàng đợi giáo viên.</div>
     </div>`:"";
 
     const emergencyTable=emergencyWeek.length?`<div class="card" style="margin-bottom:16px">
-      <h3>🚨 Danh sách đăng ký bổ sung · ${emergencyWeek.length}</h3>
-      <div class="callout" style="margin-bottom:12px">
-        Danh sách này để giáo viên biết mọi đăng ký bổ sung. Chỉ các dòng AI đánh dấu cần xem mới xuất hiện thêm ở phần <b>Cần giáo viên xử lý</b>.
-      </div>
-      <div class="table-wrap"><table class="data-table">
-        <thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>Lý do bổ sung</th><th>Kết quả</th><th>Thời điểm</th><th>Thao tác</th></tr></thead>
-        <tbody>
-        ${emergencyWeek.map(r=>{
-          const s=state.users.find(u=>u.id===r.studentId);
-          const reviewLabel=["pending","processing"].includes(r.aiReviewStatus)
-            ?'<span class="ai-review-badge">🤖 AI đang kiểm tra</span>'
-            :r.status==="approved"&&r.approvalSource==="ai"
-              ?sourceBadge(r)
-              :needsTeacherReview(r)
-                ?'<span class="manual-review-badge">⚠️ Cần GV xem</span>'
-                :sourceBadge(r);
-          return `<tr>
-            <td>${esc(s?.name||"")}</td>
-            <td>${slotLabel(r.dow,r.period)}</td>
-            <td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div></td>
-            <td>${esc(r.emergencyReason||"—")}</td>
-            <td>${statusBadge(effectiveRegistrationStatus(r))}<div style="margin-top:5px">${reviewLabel}</div></td>
-            <td>${r.emergencyRequestedAt?new Date(r.emergencyRequestedAt).toLocaleString("vi-VN"):"—"}</td>
-            <td><div class="toolbar" style="gap:5px">
-              ${r.status==="approved"&&r.approvalSource==="ai"
-                ?`<button class="btn btn-warning ai-wrong-btn" data-id="${r.id}">⚠️ AI chưa đúng</button>`
-                :""}
-              <button class="btn btn-danger delete-reg-btn" data-id="${r.id}">🗑 Xóa</button>
-            </div></td>
-          </tr>`;
-        }).join("")}
-        </tbody>
-      </table></div>
-    </div>`:`<div class="card" style="margin-bottom:16px">${empty("🚨","Tuần này chưa có đăng ký bổ sung.")}</div>`;
+      <details><summary><b>🚨 Đăng ký bổ sung · ${emergencyWeek.length}</b></summary>
+      <div class="table-wrap" style="margin-top:10px"><table class="data-table"><thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>Lý do</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
+      ${emergencyWeek.map(r=>{const student=state.users.find(u=>u.id===r.studentId);return `<tr><td>${esc(student?.name||"")}</td><td>${slotLabel(r.dow,r.period)}</td><td>${esc(r.content)}</td><td>${esc(r.emergencyReason||"—")}</td><td>${statusBadge(effectiveRegistrationStatus(r))}</td><td><div class="toolbar manager-action-toolbar">${registrationManagerActionButtons(r,{showAiWrong:true})}</div></td></tr>`}).join("")}
+      </tbody></table></div></details>
+    </div>`:"";
 
     return head("Duyệt đăng ký",`${pending.length} đăng ký đang cần giáo viên xử lý`,
-      pending.length?`<button class="btn btn-success" id="approveAll">✓ Duyệt tất cả đang chờ</button>`:"")+
-      aiWaitingTable+
-      emergencyTable+
-      `<div class="card"><h3>Cần giáo viên xử lý · ${pending.length}</h3>${pending.length?pending.map(approvalItem).join(""):empty("🎉","Không có đăng ký cần giáo viên xử lý.")}</div>`+
-      allTable;
+      pending.length?`<button class="btn btn-success" id="approveAll">✓ Duyệt tất cả đang chờ</button>`:"")+filters+aiWaitingTable+emergencyTable+reviewTable;
   }
 
   function schedulePage(){
@@ -2873,16 +2909,32 @@ import { friendlyAppError } from "./utils/error-map.js";
         const box=$("#adminClassDirectory");if(!box)return;
         const classCards=classes.map(c=>{
           const active=c.active!==false;
-          return `<div class="card admin-directory-class ${active?"":"is-inactive"}" style="box-shadow:none;margin-bottom:10px">
-            <div class="toolbar" style="align-items:flex-start">
-              <div><b>${esc(c.code)} · ${esc(c.name||c.code)}</b><div class="tiny ${active?"muted":"danger-text"}">${active?"Đang hoạt động":"Đã khóa"}</div></div>
-              <div class="toolbar right" style="gap:6px">
+          const blockers=Array.isArray(c.deleteBlockers)?c.deleteBlockers:[];
+          const blockerText=blockers.map(item=>item.message||item.code).filter(Boolean).join(" ");
+          const assignedTeachers=teachers.filter(t=>assignments.some(a=>a.class_id===c.id&&a.teacher_id===t.id&&a.active!==false));
+          return `<div class="card admin-directory-class ${active?"":"is-inactive"}" data-admin-class-card="${c.id}" style="box-shadow:none;margin-bottom:10px">
+            <div class="toolbar admin-class-card-head" style="align-items:flex-start">
+              <div>
+                <b>${esc(c.code)} · ${esc(c.name||c.code)}</b>
+                <div class="tiny ${active?"muted":"danger-text"}">${active?"Đang hoạt động":"Đã khóa"}</div>
+                <div class="admin-class-metrics">
+                  <span>👥 <b>${Number(c.learnerCount||0)}</b> HS/cán sự active</span>
+                  <span>🗂️ <b>${Number(c.profileCount||0)}</b> hồ sơ</span>
+                  <span>📚 <b>${Number(c.registrationCount||0)}</b> đăng ký</span>
+                  <span>👩‍🏫 <b>${assignedTeachers.length}</b> GV phụ trách</span>
+                </div>
+              </div>
+              <div class="toolbar right admin-class-actions" style="gap:6px">
                 ${active?`<button class="btn btn-ghost admin-directory-open" data-id="${c.id}">Mở lớp</button>`:""}
-                <button class="btn btn-ghost admin-edit-class" data-id="${c.id}" data-code="${esc(c.code)}" data-name="${esc(c.name||c.code)}">Sửa</button>
+                <button class="btn btn-ghost admin-class-learners" data-id="${c.id}" data-code="${esc(c.code)}">Học sinh</button>
+                <button class="btn btn-ghost admin-edit-class" data-id="${c.id}" data-code="${esc(c.code)}" data-name="${esc(c.name||c.code)}">Sửa lớp</button>
                 <button class="btn btn-ghost ${active?"danger":""} admin-toggle-class" data-id="${c.id}" data-active="${active}">${active?"Khóa lớp":"Kích hoạt"}</button>
+                <button class="btn btn-danger admin-delete-class" data-id="${c.id}" data-code="${esc(c.code)}" data-can-delete="${c.canDelete===true}" ${c.canDelete===true?"":"disabled"} title="${esc(c.canDelete===true?"Xóa vĩnh viễn lớp rỗng":blockerText||"Lớp còn dữ liệu nên không thể xóa")}">Xóa lớp</button>
               </div>
             </div>
+            ${!c.canDelete&&blockers.length?`<div class="admin-delete-blockers"><b>Không thể xóa:</b> ${blockers.map(item=>`<span>${esc(item.message||item.code)}</span>`).join("")}</div>`:""}
             ${active?`<div class="form-grid admin-assignment-grid" style="margin-top:8px">${teachers.map(t=>{const on=assignments.some(a=>a.class_id===c.id&&a.teacher_id===t.id&&a.active!==false);return `<label class="toggle-row"><input class="admin-teacher-assignment" type="checkbox" data-class="${c.id}" data-teacher="${t.id}" ${on?"checked":""} ${t.active===false?"disabled":""}><span><b>${esc(t.full_name||t.student_code||"GV")}</b><small>${esc(t.student_code||"")}${t.active===false?" · Đã khóa":""}</small></span></label>`}).join("")||`<span class="muted">Chưa có giáo viên.</span>`}</div>`:`<div class="callout" style="margin-top:8px">Lớp đã khóa: không thể phân quyền mới hoặc nhận học sinh mới.</div>`}
+            <div class="admin-learner-panel hidden" id="adminClassLearners-${c.id}" data-class-id="${c.id}"></div>
           </div>`;
         }).join("")||`<p class="muted">Chưa có lớp nào.</p>`;
 
@@ -2891,6 +2943,53 @@ import { friendlyAppError } from "./utils/error-map.js";
         setSafeHtml(box,`<div class="admin-directory-section"><h4>Toàn bộ lớp</h4>${classCards}</div><div class="card" style="box-shadow:none;margin-top:14px"><h4>Giáo viên</h4>${teacherCards}</div>`);
 
         box.querySelectorAll(".admin-directory-open").forEach(btn=>btn.addEventListener("click",()=>openActiveClass(btn.dataset.id)));
+        box.querySelectorAll(".admin-class-learners").forEach(btn=>btn.addEventListener("click",async()=>{
+          const panel=box.querySelector(`#adminClassLearners-${CSS.escape(btn.dataset.id)}`);
+          if(!panel)return;
+          if(panel.dataset.loaded==="true"){
+            panel.classList.toggle("hidden");
+            btn.textContent=panel.classList.contains("hidden")?"Học sinh":"Ẩn học sinh";
+            return;
+          }
+          panel.classList.remove("hidden");
+          setSafeHtml(panel,`<div class="loading-inline"><span class="diamond-mini" aria-hidden="true"></span> Đang tải học sinh lớp ${esc(btn.dataset.code||"")}...</div>`);
+          btn.disabled=true;
+          try{
+            const directory=await prod.teacherListUsers(btn.dataset.id);
+            const learners=(directory.users||[]).filter(user=>["student","monitor"].includes(user.role));
+            const targetClasses=classes.filter(item=>item.active!==false&&item.id!==btn.dataset.id);
+            const rows=learners.map(user=>`<div class="admin-learner-row ${user.active===false?"is-inactive":""}">
+              <div class="admin-learner-identity"><b>${esc(user.fullName||user.code||"Học sinh")}</b><span>${esc(user.code||"")} · ${user.role==="monitor"?"Cán sự":"Học sinh"}${user.active===false?" · Đã khóa":""}</span></div>
+              ${user.active!==false&&targetClasses.length?`<div class="admin-learner-transfer"><select class="admin-transfer-target" data-user="${user.id}" aria-label="Chọn lớp đích cho ${esc(user.fullName||user.code||"")}"><option value="">Chuyển sang...</option>${targetClasses.map(target=>`<option value="${target.id}">${esc(target.code)} · ${esc(target.name||target.code)}</option>`).join("")}</select><button type="button" class="btn btn-ghost admin-transfer-student" data-user="${user.id}" data-source="${btn.dataset.id}">Chuyển</button></div>`:""}
+            </div>`).join("");
+            setSafeHtml(panel,`<div class="admin-learner-panel-head"><b>Học sinh/cán sự · ${learners.length}</b><span class="tiny muted">Tải trực tiếp theo class_id</span></div>${rows||`<div class="tiny muted">Lớp chưa có học sinh/cán sự.</div>`}`);
+            panel.dataset.loaded="true";
+            btn.textContent="Ẩn học sinh";
+
+            panel.querySelectorAll(".admin-transfer-student").forEach(transferBtn=>transferBtn.addEventListener("click",async()=>{
+              const select=panel.querySelector(`.admin-transfer-target[data-user="${CSS.escape(transferBtn.dataset.user)}"]`);
+              const targetClassId=select?.value||"";
+              if(!targetClassId){toast("Hãy chọn lớp đích.","warn");return;}
+              const target=classes.find(item=>item.id===targetClassId);
+              const learner=learners.find(item=>item.id===transferBtn.dataset.user);
+              if(!confirm(`Chuyển ${learner?.fullName||learner?.code||"học sinh"} sang lớp ${target?.code||"đã chọn"}?`))return;
+              transferBtn.disabled=true;
+              try{
+                await prod.adminManageClasses("transfer_student",{classId:targetClassId,userId:transferBtn.dataset.user});
+                toast(`Đã chuyển học sinh sang ${target?.code||"lớp mới"}.`,"success");
+                await refreshFromServer(false);
+              }catch(error){
+                console.error(error);
+                toast(safeErrorMessage(error,"Không chuyển được học sinh."),"warn");
+                transferBtn.disabled=false;
+              }
+            }));
+          }catch(error){
+            console.error(error);
+            setSafeHtml(panel,`<div class="callout warning">Không tải được danh sách học sinh của lớp.</div>`);
+            toast(safeErrorMessage(error,"Không tải được danh sách học sinh."),"warn");
+          }finally{btn.disabled=false;}
+        }));
         box.querySelectorAll(".admin-teacher-assignment").forEach(el=>el.addEventListener("change",async()=>{
           try{
             await prod.adminManageClasses(el.checked?"assign_teacher":"unassign_teacher",{classId:el.dataset.class,teacherId:el.dataset.teacher});
@@ -2929,6 +3028,21 @@ import { friendlyAppError } from "./utils/error-map.js";
             await refreshFromServer(false);
           }catch(error){toast(safeErrorMessage(error,isActive?"Không khóa được lớp.":"Không kích hoạt được lớp."),"warn");}
           finally{setGlobalLoading(false);}
+        }));
+        box.querySelectorAll(".admin-delete-class").forEach(btn=>btn.addEventListener("click",async()=>{
+          if(btn.dataset.canDelete!=="true")return;
+          if(!confirm(`Xóa vĩnh viễn lớp ${btn.dataset.code}? Chỉ lớp hoàn toàn rỗng mới được phép xóa.`))return;
+          btn.disabled=true;
+          setGlobalLoading(true,"Đang xóa lớp rỗng...");
+          try{
+            await prod.adminManageClasses("delete_class",{classId:btn.dataset.id});
+            toast(`Đã xóa lớp ${btn.dataset.code}.`,"success");
+            await refreshFromServer(false);
+          }catch(error){
+            console.error(error);
+            toast(safeErrorMessage(error,"Không xóa được lớp. Lớp có thể vừa phát sinh dữ liệu mới."),"warn");
+            btn.disabled=false;
+          }finally{setGlobalLoading(false);}
         }));
       }catch(error){
         console.error(error);toast(safeErrorMessage(error,"Không tải được dữ liệu quản trị."),"warn");
@@ -3110,7 +3224,33 @@ import { friendlyAppError } from "./utils/error-map.js";
     content.querySelectorAll("[data-route-approvals]").forEach(button=>{
       button.addEventListener("click",()=>{route="approvals";renderShell();render();});
     });
-    $("#approveAll")?.addEventListener("click",()=>{state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r)).forEach(r=>{r.status="approved";r.approvalSource="manual";r.approvedAt=Date.now();markLocalNotificationReadByReg(r.id);});audit("Duyệt hàng loạt","registrations");saveState();toast("Đã duyệt tất cả đăng ký đang chờ.","success");render();});
+    content.querySelectorAll("[data-approval-filter]").forEach(button=>{
+      button.addEventListener("click",()=>{
+        approvalFilter=button.dataset.approvalFilter||"attention";
+        render();
+      });
+    });
+    $("#approveAll")?.addEventListener("click",async event=>{
+      const rows=state.registrations.filter(r=>r.weekId===state.currentWeekId&&registrationManagerActions(r).canApprove);
+      if(!rows.length)return;
+      const button=event.currentTarget;if(button)button.disabled=true;
+      rows.forEach(r=>{
+        r.status="approved";
+        r.approvalSource="manual";
+        r.approvedAt=Date.now();
+        markLocalNotificationReadByReg(r.id);
+      });
+      audit("Duyệt hàng loạt","registrations",`${rows.length} đăng ký`);
+      try{
+        await saveState();
+        await refreshFromServer(false);
+        toast("Đã duyệt tất cả đăng ký đang chờ.","success");
+      }catch(error){
+        console.error(error);
+        toast(safeErrorMessage(error,"Không duyệt được toàn bộ đăng ký."),"warn");
+        try{await refreshFromServer(false);}catch{}
+      }
+    });
     renderShell();
   }
 
