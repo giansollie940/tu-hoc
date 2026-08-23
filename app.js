@@ -16,9 +16,9 @@ import {
   renderMissingRegistrationsPage,
   renderRevisionIssuesPage as renderRevisionIssuesPageV850
 } from "./renderers/class-pages.js";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3e";
-import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3e";
-import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3e";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3f";
+import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3f";
+import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3f";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -1472,15 +1472,39 @@ import { friendlyAppError } from "./utils/error-map.js";
 
     refreshWiseOwl();
   }
+  function renderWeekTransitionFrame(weekId){
+    const targetWeek=state?.weeks?.find(item=>item.id===weekId);
+    renderShell();
+    setSafeHtml(content,`
+      <section class="page-stack" aria-live="polite" aria-busy="true">
+        <div class="card">
+          <div class="loading-inline"><span class="diamond-mini" aria-hidden="true"></span><b>Đang mở Tuần ${esc(targetWeek?.number??"")}...</b></div>
+          <p class="muted tiny">Giao diện đã chuyển tuần. Dữ liệu đăng ký đang được đồng bộ.</p>
+        </div>
+      </section>`);
+  }
+
+  function waitForNextPaint(){
+    return new Promise(resolve=>{
+      const raf=window.requestAnimationFrame?.bind(window);
+      if(!raf){
+        setTimeout(resolve,0);
+        return;
+      }
+      // Hai frame: frame đầu được browser paint trước khi tiếp tục công việc nặng.
+      raf(()=>raf(resolve));
+    });
+  }
+
   async function selectWeek(weekId,{announce=false,immediate=false}={}){
     if(!weekId)return;
     const changed=state.currentWeekId!==weekId;
 
-    // Automatic lifecycle transitions must update the visible week before any network wait.
+    // Lifecycle tự động phải đổi selector + vẽ khung Tuần mới trước mọi cache/network/full-render.
     if(immediate&&changed){
       state.currentWeekId=weekId;
-      renderShell();
-      render();
+      renderWeekTransitionFrame(weekId);
+      await waitForNextPaint();
     }
 
     try{
@@ -1493,15 +1517,14 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(!immediate)state.currentWeekId=weekId;
       prod.resetSnapshot(state);
       if(state.currentWeekId===weekId){
-        renderShell();
         render();
         if(announce)toast(`Đã chuyển đến Tuần ${week().number}.`,"success");
       }
       void preloadNextWeekData();
     }catch(error){
       console.error(error);
-      renderShell();
       if(state.currentWeekId===weekId)render();
+      else renderShell();
       toast("Không tải được dữ liệu của tuần đã chọn.","warn");
     }
   }
