@@ -16,9 +16,9 @@ import {
   renderMissingRegistrationsPage,
   renderRevisionIssuesPage as renderRevisionIssuesPageV850
 } from "./renderers/class-pages.js";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3d";
-import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3d";
-import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3d";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3e";
+import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3e";
+import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3e";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -41,6 +41,11 @@ import { friendlyAppError } from "./utils/error-map.js";
   let approvalSelectedId="";
   let weekSelectionTouched=false;
   let weekLifecycleTimer=null;
+  let weekPreloadTimer=null;
+  const weekDataCache=new Map();
+  const weekDataPreloadInFlight=new Map();
+  const WEEK_PRELOAD_LEAD_MS=45*1000;
+  const WEEK_PRELOAD_FRESH_MS=90*1000;
   let fallbackRefreshTimer=null;
   const ADMIN_DIRECTORY_CACHE_MS=3*60*1000;
 
@@ -973,26 +978,118 @@ import { friendlyAppError } from "./utils/error-map.js";
     return true;
   }
 
+  function weekDataCacheKey(weekId){
+    return `${state?.activeClassId||currentUser?.classId||""}:${weekId||""}`;
+  }
+
+  function clearWeekPreloadCache(){
+    clearTimeout(weekPreloadTimer);
+    weekPreloadTimer=null;
+    weekDataCache.clear();
+    weekDataPreloadInFlight.clear();
+  }
+
+  function mergeWeekData(weekId,weekData){
+    state.registrations=(state.registrations||[])
+      .filter(row=>row.weekId!==weekId)
+      .concat(weekData?.registrations||[]);
+    state.overrides=(state.overrides||[])
+      .filter(row=>row.weekId!==weekId)
+      .concat(weekData?.overrides||[]);
+  }
+
+  function cachedWeekData(weekId){
+    const cached=weekDataCache.get(weekDataCacheKey(weekId));
+    if(!cached||Date.now()-cached.at>WEEK_PRELOAD_FRESH_MS)return null;
+    return cached.data;
+  }
+
+  function syncRealtimeIntoWeekCache(change){
+    if(change?.structural){
+      weekDataCache.clear();
+      return;
+    }
+    if(change?.table!=="registrations")return;
+    if(change.deleted){
+      weekDataCache.clear();
+      return;
+    }
+    const incoming=change.record;
+    if(!incoming?.weekId)return;
+    const key=weekDataCacheKey(incoming.weekId);
+    const cached=weekDataCache.get(key);
+    if(!cached?.data)return;
+    const registrations=[...(cached.data.registrations||[])];
+    const index=registrations.findIndex(row=>row.id===incoming.id);
+    if(index>=0)registrations[index]=incoming;
+    else registrations.push(incoming);
+    weekDataCache.set(key,{
+      at:Date.now(),
+      data:{...cached.data,registrations}
+    });
+  }
+
+  async function preloadWeekData(weekId){
+    if(!weekId||!currentUser||!state)return null;
+    const key=weekDataCacheKey(weekId);
+    const cached=cachedWeekData(weekId);
+    if(cached)return cached;
+    if(weekDataPreloadInFlight.has(key))return weekDataPreloadInFlight.get(key);
+    const request=prod.loadWeekData(weekId,state.activeClassId||currentUser?.classId||null)
+      .then(weekData=>{
+        weekDataCache.set(key,{at:Date.now(),data:weekData});
+        return weekData;
+      })
+      .catch(error=>{
+        console.warn("Không preload được dữ liệu tuần kế tiếp.",error);
+        return null;
+      })
+      .finally(()=>weekDataPreloadInFlight.delete(key));
+    weekDataPreloadInFlight.set(key,request);
+    return request;
+  }
+
+  async function preloadNextWeekData(){
+    if(!currentUser||!state?.weeks?.length)return null;
+    const current=actualWeek();
+    if(!current)return null;
+    const ordered=[...state.weeks].sort((a,b)=>Number(a.number)-Number(b.number));
+    const index=ordered.findIndex(w=>w.id===current.id);
+    const next=index>=0?ordered[index+1]:null;
+    if(!next)return null;
+    return preloadWeekData(next.id);
+  }
+
   async function runWeekLifecycleTick(){
     weekLifecycleTimer=null;
     if(!currentUser||!state?.weeks?.length)return;
     const current=actualWeek();
     if(!weekSelectionTouched&&current?.id&&current.id!==state.currentWeekId){
-      await selectWeek(current.id);
+      void selectWeek(current.id,{announce:true,immediate:true});
       return;
     }
     renderShell();
     render();
+    void preloadNextWeekData();
   }
 
   function scheduleWeekLifecycleTick(){
     clearTimeout(weekLifecycleTimer);
+    clearTimeout(weekPreloadTimer);
     weekLifecycleTimer=null;
+    weekPreloadTimer=null;
     if(!currentUser||!state?.weeks?.length)return;
     const boundary=weekLifecycleSnapshot().nextBoundaryMs;
     const now=Date.now();
     if(!Number.isFinite(boundary)||boundary<=now)return;
-    const delay=Math.max(250,Math.min(boundary-now+250,2147483000));
+    const remaining=boundary-now;
+    const preloadDelay=Math.max(0,remaining-WEEK_PRELOAD_LEAD_MS);
+    if(preloadDelay===0){
+      void preloadNextWeekData();
+    }else{
+      weekPreloadTimer=setTimeout(()=>{void preloadNextWeekData();},preloadDelay);
+    }
+    const delay=Math.max(25,Math.min(remaining+25,2147483000));
     weekLifecycleTimer=setTimeout(()=>{void runWeekLifecycleTick();},delay);
   }
   function regFor(studentId,dow,p,weekId=state.currentWeekId){
@@ -1238,6 +1335,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
 
   function queueRealtimeChange(change){
+    syncRealtimeIntoWeekCache(change);
     lastRealtimeActivity=Date.now();
     realtimeQueue.push(change);
 
@@ -1313,6 +1411,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     stopRealtime();
     clearTimeout(weekLifecycleTimer);
     weekLifecycleTimer=null;
+    clearWeekPreloadCache();
     try{ await prod.signOut(); }catch(err){ console.error(err); }
     currentUser=null;
     owlDailyQuote=null;
@@ -1373,24 +1472,36 @@ import { friendlyAppError } from "./utils/error-map.js";
 
     refreshWiseOwl();
   }
-  async function selectWeek(weekId,{announce=false}={}){
+  async function selectWeek(weekId,{announce=false,immediate=false}={}){
     if(!weekId)return;
-    try{
-      const weekData=await prod.loadWeekData(weekId,state.activeClassId||currentUser?.classId||null);
-      state.registrations=(state.registrations||[])
-        .filter(row=>row.weekId!==weekId)
-        .concat(weekData.registrations||[]);
-      state.overrides=(state.overrides||[])
-        .filter(row=>row.weekId!==weekId)
-        .concat(weekData.overrides||[]);
+    const changed=state.currentWeekId!==weekId;
+
+    // Automatic lifecycle transitions must update the visible week before any network wait.
+    if(immediate&&changed){
       state.currentWeekId=weekId;
-      prod.resetSnapshot(state);
       renderShell();
       render();
-      if(announce)toast(`Đã chuyển đến Tuần ${week().number}.`,"success");
+    }
+
+    try{
+      let weekData=cachedWeekData(weekId);
+      if(!weekData){
+        weekData=await prod.loadWeekData(weekId,state.activeClassId||currentUser?.classId||null);
+        weekDataCache.set(weekDataCacheKey(weekId),{at:Date.now(),data:weekData});
+      }
+      mergeWeekData(weekId,weekData);
+      if(!immediate)state.currentWeekId=weekId;
+      prod.resetSnapshot(state);
+      if(state.currentWeekId===weekId){
+        renderShell();
+        render();
+        if(announce)toast(`Đã chuyển đến Tuần ${week().number}.`,"success");
+      }
+      void preloadNextWeekData();
     }catch(error){
       console.error(error);
       renderShell();
+      if(state.currentWeekId===weekId)render();
       toast("Không tải được dữ liệu của tuần đã chọn.","warn");
     }
   }
@@ -1404,6 +1515,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     setGlobalLoading(true,"Đang chuyển lớp...");
     try{
       prod.setActiveClassId?.(currentUser.id,e.target.value);
+      clearWeekPreloadCache();
       const loaded=await prod.loadState(e.target.value);
       currentUser=loaded.currentUser;state=loaded.state;route=route==="admin"&&currentUser.role!=="admin"?"dashboard":route;
       weekSelectionTouched=false;
@@ -3391,6 +3503,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     try{
       const loaded=await prod.loadState(state?.activeClassId||null);
       if(!loaded.currentUser){ await logout(); return; }
+      clearWeekPreloadCache();
       currentUser=loaded.currentUser; state=loaded.state; route=route||"dashboard";
       const aligned=alignWeekToLifecycle();
       if(aligned)await selectWeek(state.currentWeekId);
