@@ -16,9 +16,9 @@ import {
   renderMissingRegistrationsPage,
   renderRevisionIssuesPage as renderRevisionIssuesPageV850
 } from "./renderers/class-pages.js";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3";
-import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3";
-import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3a";
+import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3a";
+import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3a";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -70,6 +70,36 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
 
   bindThemeControls();
+
+  const LOGIN_SLOGANS=[
+    "Học chủ động. Tiến bộ mỗi ngày.",
+    "Mỗi giờ tự học đều có mục tiêu.",
+    "Kế hoạch rõ ràng, tiến bộ bền vững.",
+    "Tự học hôm nay, tự tin ngày mai.",
+    "Một chút mỗi ngày tạo nên khác biệt."
+  ];
+
+  function initLoginSloganRotator(){
+    const quote=$("#loginThemeQuote");
+    if(!quote)return;
+    const dots=[...document.querySelectorAll("[data-login-slogan-dot]")];
+    let index=0;
+    const render=()=>{
+      quote.textContent=LOGIN_SLOGANS[index];
+      dots.forEach((dot,dotIndex)=>dot.classList.toggle("active",dotIndex===index));
+    };
+    render();
+    if(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches)return;
+    window.setInterval(()=>{
+      index=(index+1)%LOGIN_SLOGANS.length;
+      quote.classList.remove("is-changing");
+      void quote.offsetWidth;
+      render();
+      quote.classList.add("is-changing");
+    },7000);
+  }
+
+  initLoginSloganRotator();
 
   function sanitizeTemplateHtml(html){
     const template=document.createElement("template");
