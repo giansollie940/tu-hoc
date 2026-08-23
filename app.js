@@ -16,9 +16,9 @@ import {
   renderMissingRegistrationsPage,
   renderRevisionIssuesPage as renderRevisionIssuesPageV850
 } from "./renderers/class-pages.js";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3a";
-import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3a";
-import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3a";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3b";
+import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3b";
+import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3b";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
