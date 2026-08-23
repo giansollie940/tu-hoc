@@ -1,3 +1,9 @@
+import { renderNavigation } from "./renderers/shell.js";
+import { renderStudentDashboardPage, renderStudentHistoryPage, renderStudentCommentsPage } from "./renderers/student-pages.js";
+import { renderTeacherDashboardPage, renderApprovalsWorkbench } from "./renderers/teacher-pages.js";
+import { renderSchedulePage, renderWeeksPage } from "./renderers/planning-pages.js";
+import { renderStudentsManagementPage, renderStatisticsPage } from "./renderers/management-pages.js";
+import { renderAdminPageShell, renderSettingsPage } from "./renderers/admin-pages.js";
 import { renderDeviceChoice } from "./features/registration/registration-form.js";
 import {
   renderPasswordDialog,
@@ -5,10 +11,13 @@ import {
 } from "./features/account/password-dialog.js";
 import { validateStudentPassword } from "./features/account/password-policy.js";
 import {
-  renderClassOverview as renderClassOverviewV830,
-  renderSessionDetails
-} from "./features/class-overview/class-overview.js?v=8.4.5";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.4.5";
+  renderClassTrackingPage,
+  renderClassSessionDetails,
+  renderMissingRegistrationsPage,
+  renderRevisionIssuesPage as renderRevisionIssuesPageV850
+} from "./renderers/class-pages.js";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.5.0";
+import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.0";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -28,6 +37,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   const SIDEBAR_COLLAPSED_KEY="so-tu-hoc:sidebar-collapsed:v1";
   let owlRouteTimer=null;
   let approvalFilter="attention";
+  let approvalSelectedId="";
   let weekSelectionTouched=false;
 
   const $ = s => document.querySelector(s);
@@ -266,6 +276,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     {text:"Học hỏi trong tuổi trẻ sẽ đánh đuổi cái không tốt của tuổi già.",author:"Leonardo da Vinci"},
     {text:"Thật sai lầm khi nghĩ rằng một khi rời khỏi trường học, bạn không bao giờ cần học thêm điều mới nữa.",author:"Sophia Loren"}
   ];
+  const owlQuoteRotator=createQuoteRotator(OWL_QUOTES,{recentLimit:4});
   const OWL_DAILY_QUOTE_CACHE_KEY="so-tu-hoc:owl-daily-quote:v1";
   const OWL_QUOTE_RETRY_MS=15*60*1000;
   let owlReady=false, owlHideTimer=null, owlMessageCursor=0, owlLastUrgentCount=-1, owlLastContextKey="", owlJustGreetedUntil=0;
@@ -378,6 +389,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     if(owlDailyQuoteDate!==dateKey){
       owlDailyQuote=readOwlDailyQuoteCache(dateKey);
       owlDailyQuoteDate=dateKey;
+      owlQuoteRotator.reset();
       void loadWiseOwlDailyQuote();
     }
     if(!owlDailyQuote){
@@ -387,7 +399,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     }else if(owlDailyQuote.stale){
       void loadWiseOwlDailyQuote();
     }
-    return owlDailyQuote;
+    return owlQuoteRotator.next(owlDailyQuote?[owlDailyQuote]:[]);
   }
 
   function setupWiseOwl(){
@@ -1232,6 +1244,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     owlDailyQuote=null;
     owlDailyQuoteDate="";
     owlDailyQuoteLastAttempt=0;
+    owlQuoteRotator.reset();
     $("#wiseOwlPet")?.classList.add("hidden");
     $("#owlSpeech")?.classList.add("hidden");
     appView.classList.add("hidden"); loginView.classList.remove("hidden");
@@ -1261,7 +1274,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     }
     loginView.classList.add("hidden"); appView.classList.remove("hidden");
     $("#profileName").textContent=currentUser.name; $("#profileRole").textContent=roleLabel[currentUser.role]; $("#profileAvatar").textContent=initials(currentUser.name);
-    setSafeHtml($("#sideNav"),(navs[currentUser.role]||navs.student).map(n=>`<button class="nav-btn ${route===n[0]?"active":""}" data-route="${n[0]}" title="${esc(n[2])}" aria-label="${esc(n[2])}">${navIconFor(n[0])}<span class="nav-label">${n[2]}</span></button>`).join(""));
+    setSafeHtml($("#sideNav"),renderNavigation({items:navs[currentUser.role]||navs.student,route,iconFor:navIconFor,escapeHtml:esc}));
     $("#sideNav").querySelectorAll("[data-route]").forEach(b=>b.onclick=()=>{route=b.dataset.route; setSidebarOpen(false); renderShell(); render();});
     setSafeHtml($("#globalWeekSelect"),state.weeks.map(w=>`<option value="${w.id}" ${w.id===state.currentWeekId?"selected":""}>Tuần ${w.number} · ${fmtDateShort(w.startDate)}–${fmtDateShort(w.endDate)}</option>`).join(""));
     const classWrap=$("#classPickerWrap"),classSelect=$("#globalClassSelect");
@@ -1489,30 +1502,12 @@ import { friendlyAppError } from "./utils/error-map.js";
     const total=slots.length, pct=total?Math.round(done/total*100):0;
     const actual=actualWeek();
     const viewingNext=actual&&week().number>actual.number;
-    let html=head("Trang chủ",`Xin chào ${esc(currentUser.name)} 👋`)+weekBanner();
-    if(viewingNext){
-      html+=`<div class="callout next-action-week dashboard-section"><b>➡ Đã chuyển sang Tuần ${week().number}.</b> Các buổi còn lại của tuần trước đã bắt đầu/đã qua nên app ưu tiên tuần có buổi đăng ký tiếp theo.</div>`;
-    }
-    html+=`<section class="card dashboard-section student-progress-section">
-      <div class="section-heading-row">
-        <div><span class="section-kicker">TIẾN ĐỘ CÁ NHÂN</span><h3>Hoàn thành kế hoạch tuần</h3></div>
-        <div class="student-progress-score"><strong>${pct}%</strong><span>${done}/${total} tiết hợp lệ</span></div>
-      </div>
-      <div class="progress progress-modern"><span style="width:${pct}%"></span></div>
-      <div class="student-progress-meta">
-        <span>${uiIcon("check")} <b>${done}</b> đã hợp lệ</span>
-        <span>${uiIcon("warning")} <b>${issueCount}</b> cần chú ý</span>
-        <span>${uiIcon("schedule")} <b>${Math.max(total-done-issueCount,0)}</b> còn lại</span>
-      </div>
-      ${issueCount?`<p class="tiny revision-overdue-note">${uiIcon("warning")} ${issueCount} tiết đang ở Báo cáo lỗi và không tính vào tiến độ hợp lệ.</p>`:""}
-    </section>`;
-    html+=`<section class="dashboard-section study-plan-section">
-      <div class="section-heading-row section-heading-row-spaced">
-        <div><span class="section-kicker">LỊCH TỰ HỌC</span><h3>Các buổi trong tuần</h3><p>Chọn từng buổi để đăng ký, chỉnh sửa hoặc xem trạng thái.</p></div>
-      </div>
-      ${!slots.length?empty("📅","Tuần này chưa có tiết tự học."):`<div class="grid study-plan-grid">${slots.map((sl,i)=>studyCard(sl,regs[i])).join("")}</div>`}
-    </section>`;
-    return html;
+    return renderStudentDashboardPage({
+      headerHtml:head("Trang chủ",`Xin chào ${esc(currentUser.name)}`),
+      bannerHtml:weekBanner(),viewingNext,weekNumber:week().number,done,issueCount,total,pct,
+      iconCheck:uiIcon("check"),iconWarning:uiIcon("warning"),iconSchedule:uiIcon("schedule"),
+      sessionCards:slots.map((sl,i)=>studyCard(sl,regs[i])).join(""),hasSessions:slots.length>0
+    });
   }
 
   function studyCard(sl,r){
@@ -1988,15 +1983,19 @@ import { friendlyAppError } from "./utils/error-map.js";
 
   function historyPage(){
     const regs=state.registrations.filter(r=>r.studentId===currentUser.id).sort((a,b)=>b.updatedAt-a.updatedAt);
-    return head("Lịch sử của tôi","Xem lại đăng ký ở các tuần trước.")+
-      (regs.length?`<div class="card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Tuần</th><th>Tiết</th><th>Nội dung</th><th>Trạng thái</th><th>Nhận xét GV</th></tr></thead><tbody>
-      ${regs.map(r=>{const w=state.weeks.find(x=>x.id===r.weekId);return `<tr><td>Tuần ${w?.number||"?"}</td><td>${slotLabel(r.dow,r.period)}</td><td><b>${esc(r.content)}</b>${r.isEmergency?`<div class="tiny emergency-badge">🚨 Bổ sung khẩn cấp</div>`:""}<div class="tiny muted">${esc(r.note||"")}</div></td><td>${statusBadge(effectiveRegistrationStatus(r))}</td><td>${esc(r.teacherComment||"—")}</td></tr>`}).join("")}
-      </tbody></table></div></div>`:empty("🕘","Chưa có lịch sử đăng ký."));
+    const rows=regs.map(r=>{
+      const w=state.weeks.find(x=>x.id===r.weekId);
+      return {
+        weekLabel:`Tuần ${w?.number||"?"}`,slotLabel:slotLabel(r.dow,r.period),content:esc(r.content),note:esc(r.note||""),
+        statusHtml:statusBadge(effectiveRegistrationStatus(r)),comment:esc(r.teacherComment||""),emergency:Boolean(r.isEmergency)
+      };
+    });
+    return renderStudentHistoryPage({headerHtml:head("Lịch sử của tôi","Xem lại đăng ký và phản hồi ở các tuần trước."),rows});
   }
   function commentsPage(){
     const regs=state.registrations.filter(r=>r.studentId===currentUser.id&&r.teacherComment);
-    return head("Nhận xét của giáo viên","Các phản hồi dành cho đăng ký của bạn.")+
-      (regs.length?`<div class="grid">${regs.map(r=>`<div class="card"><b>${slotLabel(r.dow,r.period)}</b><p>${esc(r.content)}</p><div class="callout">💬 ${esc(r.teacherComment)}</div></div>`).join("")}</div>`:empty("💬","Chưa có nhận xét nào."));
+    const items=regs.map(r=>({slotLabel:slotLabel(r.dow,r.period),content:esc(r.content),comment:esc(r.teacherComment),statusHtml:statusBadge(effectiveRegistrationStatus(r))}));
+    return renderStudentCommentsPage({headerHtml:head("Nhận xét của giáo viên","Các phản hồi dành cho đăng ký của bạn."),items});
   }
 
   function classOverview(){
@@ -2012,7 +2011,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         ?{...registration,revisionOverdueAt:revisionReportTime(registration)}
         :registration
       );
-    return renderClassOverviewV830({
+    return renderClassTrackingPage({
       week:week(),
       sessions,
       users:state.users||[],
@@ -2084,7 +2083,7 @@ import { friendlyAppError } from "./utils/error-map.js";
               </div>`
             :"";
 
-          setSafeHtml(modalBody,aiToolbar+renderSessionDetails({
+          setSafeHtml(modalBody,aiToolbar+renderClassSessionDetails({
             session,
             users:state.users||[],
             registrations,
@@ -2211,115 +2210,27 @@ import { friendlyAppError } from "./utils/error-map.js";
   function missingPage(){
     const slots=effectiveSchedule(), rows=[];
     studentUsers().forEach(s=>slots.forEach(sl=>{const r=regFor(s.id,sl.dow,sl.period);if(!r||r.status==="draft")rows.push({s,sl});}));
-    return head("Danh sách chưa đăng ký",`Tuần ${week().number} · ${rows.length} lượt còn thiếu`)+
-      (rows.length?`<div class="card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Học sinh</th><th>Tiết tự học</th><th>Trạng thái</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.s.name)}</td><td>${slotLabel(x.sl.dow,x.sl.period)}</td><td>${statusBadge("missing")}</td></tr>`).join("")}</tbody></table></div></div>`:empty("🎉","Cả lớp đã đăng ký đầy đủ."));
+    const groups=slots.map(sl=>({label:slotLabel(sl.dow,sl.period),students:rows.filter(x=>x.sl.dow===sl.dow&&Number(x.sl.period)===Number(sl.period)).map(x=>({name:esc(x.s.name),code:esc(x.s.code||"")}))})).filter(g=>g.students.length);
+    return renderMissingRegistrationsPage({headerHtml:head("Danh sách chưa đăng ký",`Tuần ${week().number} · ${rows.length} lượt còn thiếu`),groups});
   }
 
   function revisionIssuesPage(){
-    const reports=(state.registrations||[])
-      .filter(r=>r.weekId===state.currentWeekId&&isRevisionOverdue(r))
-      .sort((a,b)=>String(revisionReportTime(b)||"").localeCompare(String(revisionReportTime(a)||"")));
-
-    return head(
-      "Báo cáo lỗi",
-      `Tuần ${week().number} · ${reports.length} đăng ký không được chỉnh sửa trước giờ bắt đầu tiết`
-    )+
-      (reports.length?`<div class="card">
-        <div class="callout warning" style="margin-bottom:14px">
-          Các mục ở đây <b>không còn là yêu cầu chỉnh sửa</b>. Hệ thống chỉ ghi nhận để GV và cán sự theo dõi.
-        </div>
-        <div class="table-wrap"><table class="data-table">
-          <thead><tr>
-            <th>Học sinh</th><th>Tiết tự học</th><th>Nội dung</th>
-            <th>Yêu cầu chỉnh sửa của GV</th><th>Ghi nhận lỗi</th>
-          </tr></thead>
-          <tbody>
-            ${reports.map(r=>{
-              const s=state.users.find(u=>u.id===r.studentId);
-              const reportedAt=revisionReportTime(r);
-              return `<tr>
-                <td><b>${esc(s?.name||"")}</b><div class="tiny muted">${esc(s?.code||"")}</div></td>
-                <td>${slotLabel(r.dow,r.period)}</td>
-                <td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div></td>
-                <td>${esc(r.teacherComment||"—")}</td>
-                <td>${statusBadge("revision_overdue")}<div class="tiny muted" style="margin-top:5px">${reportedAt?new Date(reportedAt).toLocaleString("vi-VN"):"—"}</div></td>
-              </tr>`;
-            }).join("")}
-          </tbody>
-        </table></div>
-      </div>`:empty("✅","Tuần này chưa có báo cáo lỗi chỉnh sửa quá hạn."));
+    const reports=(state.registrations||[]).filter(r=>r.weekId===state.currentWeekId&&isRevisionOverdue(r)).sort((a,b)=>String(revisionReportTime(b)||"").localeCompare(String(revisionReportTime(a)||"")));
+    const items=reports.map(r=>{const student=state.users.find(u=>u.id===r.studentId);const reportedAt=revisionReportTime(r);return {studentName:esc(student?.name||""),studentCode:esc(student?.code||""),slotLabel:slotLabel(r.dow,r.period),content:esc(r.content),note:esc(r.note||""),teacherComment:esc(r.teacherComment||"—"),statusHtml:statusBadge("revision_overdue"),reportedAt:reportedAt?new Date(reportedAt).toLocaleString("vi-VN"):"—"};});
+    return renderRevisionIssuesPageV850({headerHtml:head("Báo cáo lỗi",`Tuần ${week().number} · ${reports.length} đăng ký không được chỉnh sửa trước giờ bắt đầu tiết`),items});
   }
 
   function teacherDashboard(){
     const pendingAll=state.registrations.filter(r=>r.weekId===state.currentWeekId&&needsTeacherReview(r));
-    const aiWaiting=state.registrations.filter(r=>
-      r.weekId===state.currentWeekId
-      &&r.status==="submitted"
-      &&r.approvalSource==="manual"
-      &&["pending","processing"].includes(r.aiReviewStatus)
-    );
+    const aiWaiting=state.registrations.filter(r=>r.weekId===state.currentWeekId&&r.status==="submitted"&&r.approvalSource==="manual"&&["pending","processing"].includes(r.aiReviewStatus));
     const pending=pendingAll.slice(0,6), st=statsForWeek();
     const unread=(state.notifications||[]).filter(n=>!n.isRead).length;
-    let html=head("Dashboard",`Tổng quan hoạt động lớp trong tuần ${week().number}`)+weekBanner();
-
-    html+=`<section class="dashboard-section dashboard-kpi-section">
-      <div class="section-heading-row section-heading-row-spaced">
-        <div><span class="section-kicker">TÌNH HÌNH TUẦN</span><h3>Chỉ số cần quan tâm</h3><p>Tổng hợp nhanh để giáo viên biết nên ưu tiên xử lý phần nào.</p></div>
-      </div>
-      <div class="grid three-state-kpi-grid modern-kpi-grid">
-        ${kpi("✅",st.valid,"Đăng ký hợp lệ")}
-        ${kpi("⚠️",st.issues,"Báo cáo lỗi")}
-        ${kpi("🚨",st.missing,"Chưa đăng ký")}
-        ${kpi("🔔",unread||pendingAll.length,"Cần GV xem")}
-        ${kpi("📈",st.rate+"%","Hoàn thành hợp lệ")}
-      </div>
-    </section>`;
-
-    if(aiWaiting.length){
-      html+=`<section class="callout ai-waiting-callout dashboard-section dashboard-alert-strip">
-        <div class="toolbar">
-          <span>${uiIcon("warning")} <b>${aiWaiting.length} đăng ký đang chờ AI.</b> GV đã được thông báo ngay; nếu AI không phản hồi trong 2 phút, backend tự chuyển sang danh sách cần GV xử lý.</span>
-          <button class="btn btn-ghost right" type="button" data-route-approvals="1">Xem hàng đợi AI</button>
-        </div>
-      </section>`;
-    }
-
     const aiAutomationEnabled=isAiAutomationEnabled();
-    html+=`<section class="smart-approval-banner dashboard-section ${aiAutomationEnabled?"on":"off"}">
-      <div><b>${aiAutomationEnabled?"🤖 Duyệt tự động bằng AI đang bật":"⏸ Duyệt tự động bằng AI đang tắt"}</b>
-      <span>${aiAutomationEnabled
-        ?`Groq AI kiểm tra mọi đăng ký gửi mới; chỉ tự duyệt từ ${Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100)}% tin cậy.`
-        :"Mọi đăng ký gửi mới sẽ chuyển giáo viên duyệt."}</span></div>
-      <button class="btn btn-ghost" data-route-settings="1">Cài đặt</button>
-    </section>`;
-
-    html+=`<section class="dashboard-section dashboard-workspace">
-      <div class="card dashboard-work-card dashboard-review-card">
-        <div class="section-heading-row">
-          <div><span class="section-kicker">ƯU TIÊN XỬ LÝ</span><h3>${uiIcon("approvals")} Cần giáo viên xử lý</h3><p>Các đăng ký cần quyết định hoặc phản hồi trực tiếp.</p></div>
-          ${pendingAll.length?`<span class="section-count-badge">${pendingAll.length}</span>`:""}
-        </div>
-        <div class="dashboard-review-list">${pending.length?pending.map(approvalItem).join(""):empty("✅","Không còn đăng ký chờ xử lý.")}</div>
-      </div>
-      <div class="card dashboard-work-card dashboard-week-card">
-        <div class="section-heading-row"><div><span class="section-kicker">TUẦN HIỆN TẠI</span><h3>Tiến độ của lớp</h3></div></div>
-        <div class="week-overview-number"><strong>${st.rate}%</strong><span>hoàn thành hợp lệ</span></div>
-        <div class="progress progress-modern"><span style="width:${st.rate}%"></span></div>
-        <div class="week-overview-meta">
-          <span><small>Tuần</small><b>${week().number}</b></span>
-          <span><small>Thời gian</small><b>${fmtDate(week().startDate)} – ${fmtDate(week().endDate)}</b></span>
-          <span><small>Deadline</small><b>${deadlineModeLabel(week().deadlineMode)}</b></span>
-          <span><small>Trạng thái</small><b>${weekStatus(effectiveWeekStatus(week()))}</b></span>
-        </div>
-        <div class="three-state-inline modern-state-inline">
-          <span class="state-valid">✅ ${st.valid} hợp lệ</span>
-          <span class="state-issue">⚠️ ${st.issues} báo cáo lỗi</span>
-          <span class="state-missing">🚨 ${st.missing} chưa đăng ký</span>
-        </div>
-        <p class="muted tiny">${st.valid}/${st.total} lượt hoàn thành hợp lệ · ${st.valid+st.issues+st.missing}/${st.total} lượt đã phân loại</p>
-      </div>
-    </section>`;
-    return html;
+    return renderTeacherDashboardPage({
+      headerHtml:head("Dashboard",`Tổng quan hoạt động lớp trong tuần ${week().number}`),bannerHtml:weekBanner(),stats:st,unread,pendingCount:pendingAll.length,
+      pendingItems:pending.map(approvalItem).join(""),aiWaiting:aiWaiting.length,aiAutomationEnabled,aiThreshold:Math.round(Number(state.settings.aiAutoApproveThreshold||0.90)*100),
+      weekInfo:{number:week().number,dateRange:`${fmtDate(week().startDate)} – ${fmtDate(week().endDate)}`,deadline:deadlineModeLabel(week().deadlineMode),status:weekStatus(effectiveWeekStatus(week()))}
+    });
   }
 
   function kpi(icon,val,label){return `<div class="card kpi"><div class="kpi-icon">${kpiClayIcon(icon)}</div><div><div class="kpi-value">${val}</div><div class="kpi-label">${label}</div></div></div>`;}
@@ -2454,89 +2365,34 @@ import { friendlyAppError } from "./utils/error-map.js";
     };
   }
   function approvalsPage(){
-    const allWeek=(state.registrations||[])
-      .filter(r=>r.weekId===state.currentWeekId)
-      .sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
+    const allWeek=(state.registrations||[]).filter(r=>r.weekId===state.currentWeekId).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
     const pending=allWeek.filter(needsTeacherReview);
-    const aiWaiting=allWeek.filter(r=>
-      !r.isEmergency
-      &&r.status==="submitted"
-      &&r.approvalSource==="manual"
-      &&["pending","processing"].includes(r.aiReviewStatus)
-    );
-    const emergencyWeek=allWeek.filter(r=>r.isEmergency);
-    const filterDefs=[
-      ["attention","Cần xử lý"],
-      ["approved","Đã duyệt"],
-      ["revision","Cần sửa"],
-      ["all","Tất cả"]
-    ];
-    const matchesFilter=r=>{
-      if(approvalFilter==="approved")return r.status==="approved";
-      if(approvalFilter==="revision")return r.status==="needs_revision"&&!isRevisionOverdue(r);
-      if(approvalFilter==="all")return true;
-      return needsTeacherReview(r);
-    };
+    const aiWaiting=allWeek.filter(r=>!r.isEmergency&&r.status==="submitted"&&r.approvalSource==="manual"&&["pending","processing"].includes(r.aiReviewStatus));
+    const filterDefs=[["attention","Cần xử lý"],["approved","Đã duyệt"],["revision","Cần sửa"],["all","Tất cả"]];
+    const matchesFilter=r=>approvalFilter==="approved"?r.status==="approved":approvalFilter==="revision"?r.status==="needs_revision"&&!isRevisionOverdue(r):approvalFilter==="all"?true:needsTeacherReview(r);
     const filteredWeek=allWeek.filter(matchesFilter);
-
-    const sourceBadge=r=>{
-      if(r.status==="approved"&&r.approvalSource==="ai"){
-        const pct=r.aiConfidence==null?"":` ${Math.round(r.aiConfidence*100)}%`;
-        return `<span class="ai-review-badge">🤖 AI${pct}</span>`;
-      }
-      return '<span class="manual-review-badge">👤 GV</span>';
-    };
-    const filterCount=key=>{
-      if(key==="approved")return allWeek.filter(r=>r.status==="approved").length;
-      if(key==="revision")return allWeek.filter(r=>r.status==="needs_revision"&&!isRevisionOverdue(r)).length;
-      if(key==="all")return allWeek.length;
-      return pending.length;
-    };
-    const filters=`<div class="card approval-filter-card"><div class="approval-filter-bar" role="tablist" aria-label="Lọc đăng ký">${filterDefs.map(([key,label])=>`<button type="button" class="approval-filter-chip ${approvalFilter===key?"active":""}" data-approval-filter="${key}" role="tab" aria-selected="${approvalFilter===key}">${label} <span>${filterCount(key)}</span></button>`).join("")}</div></div>`;
-
-    const reviewTable=`<div class="card" style="margin-top:16px">
-      <div class="toolbar"><h3>${filterDefs.find(x=>x[0]===approvalFilter)?.[1]||"Đăng ký"} · ${filteredWeek.length}</h3><span class="tiny muted right">Tuần ${week().number}</span></div>
-      ${filteredWeek.length?`<div class="table-wrap"><table class="data-table">
-        <thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>Trạng thái</th><th>Cách duyệt</th><th>Thao tác</th></tr></thead><tbody>
-        ${filteredWeek.map(r=>{
-          const student=state.users.find(u=>u.id===r.studentId);
-          return `<tr>
-            <td><b>${esc(student?.name||"")}</b><div class="tiny muted">${esc(student?.code||"")}</div></td>
-            <td>${slotLabel(r.dow,r.period)}</td>
-            <td><b>${esc(r.content)}</b><div class="tiny muted">${esc(r.note||"")}</div>${r.teacherComment?`<div class="tiny manager-comment-preview">💬 ${esc(r.teacherComment)}</div>`:""}${r.approvalSource==="ai"&&r.aiReason?`<div class="ai-review-details">🤖 ${esc(r.aiReason)}</div>`:""}</td>
-            <td>${statusBadge(effectiveRegistrationStatus(r))}</td>
-            <td>${sourceBadge(r)}</td>
-            <td><div class="toolbar manager-action-toolbar">${registrationManagerActionButtons(r,{showAiWrong:true})}</div></td>
-          </tr>`;
-        }).join("")}
-        </tbody></table></div>`:empty("🔎","Không có đăng ký trong bộ lọc này.")}
-      </div>`;
-
-    const aiWaitingTable=aiWaiting.length?`<div class="card" style="margin-bottom:16px">
-      <h3>🤖 AI đang kiểm tra · ${aiWaiting.length}</h3>
-      <div class="callout">Nếu AI không phản hồi trong <b>2 phút</b>, backend tự chuyển đăng ký sang hàng đợi giáo viên.</div>
-    </div>`:"";
-
-    const emergencyTable=emergencyWeek.length?`<div class="card" style="margin-bottom:16px">
-      <details><summary><b>🚨 Đăng ký bổ sung · ${emergencyWeek.length}</b></summary>
-      <div class="table-wrap" style="margin-top:10px"><table class="data-table"><thead><tr><th>Học sinh</th><th>Tiết</th><th>Nội dung</th><th>Lý do</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
-      ${emergencyWeek.map(r=>{const student=state.users.find(u=>u.id===r.studentId);return `<tr><td>${esc(student?.name||"")}</td><td>${slotLabel(r.dow,r.period)}</td><td>${esc(r.content)}</td><td>${esc(r.emergencyReason||"—")}</td><td>${statusBadge(effectiveRegistrationStatus(r))}</td><td><div class="toolbar manager-action-toolbar">${registrationManagerActionButtons(r,{showAiWrong:true})}</div></td></tr>`}).join("")}
-      </tbody></table></div></details>
-    </div>`:"";
-
-    return head("Duyệt đăng ký",`${pending.length} đăng ký đang cần giáo viên xử lý`,
-      pending.length?`<button class="btn btn-success" id="approveAll">✓ Duyệt tất cả đang chờ</button>`:"")+filters+aiWaitingTable+emergencyTable+reviewTable;
+    const filterCount=key=>key==="approved"?allWeek.filter(r=>r.status==="approved").length:key==="revision"?allWeek.filter(r=>r.status==="needs_revision"&&!isRevisionOverdue(r)).length:key==="all"?allWeek.length:pending.length;
+    const filters=filterDefs.map(([id,label])=>({id,label,count:filterCount(id)}));
+    const items=filteredWeek.map(r=>{
+      const student=state.users.find(u=>u.id===r.studentId);
+      const sourceBadge=r.status==="approved"&&r.approvalSource==="ai"?`<span class="ai-review-badge">AI${r.aiConfidence==null?"":` ${Math.round(r.aiConfidence*100)}%`}</span>`:`<span class="manual-review-badge">GV</span>`;
+      return {id:r.id,studentName:esc(student?.name||""),studentCode:esc(student?.code||""),initials:initials(student?.name||"?"),slotLabel:slotLabel(r.dow,r.period),content:esc(r.content),note:esc(r.note||""),
+        statusHtml:statusBadge(effectiveRegistrationStatus(r)),teacherComment:esc(r.teacherComment||""),aiReason:esc(r.aiReason||r.autoReviewReason||""),aiBadge:sourceBadge,emergencyReason:r.isEmergency?esc(r.emergencyReason||"—"):"",
+        actionsHtml:registrationManagerActionButtons(r,{showAiWrong:true})};
+    });
+    if(!items.some(item=>item.id===approvalSelectedId))approvalSelectedId=items[0]?.id||"";
+    return renderApprovalsWorkbench({
+      headerHtml:head("Duyệt đăng ký",`${pending.length} đăng ký đang cần giáo viên xử lý`,pending.length?`<button class="btn btn-success" id="approveAll">Duyệt tất cả đang chờ</button>`:""),
+      filters,activeFilter:approvalFilter,items,selectedId:approvalSelectedId,weekNumber:week().number,aiWaiting:aiWaiting.length,emergencyCount:allWeek.filter(r=>r.isEmergency).length
+    });
   }
 
   function schedulePage(){
-    const current=effectiveSchedule(), set=new Set(current.map(s=>`${s.dow}-${s.period}`));
-    let html=head("TKB tự học","Bật/tắt tiết tự học. Mặc định áp dụng cho toàn bộ tuần.",
-      `<div class="toolbar"><label style="margin:0"><input id="weekSpecific" type="checkbox" style="width:auto"> Áp dụng riêng tuần ${week().number}</label><button id="saveSchedule" class="btn btn-primary">Lưu TKB</button></div>`);
-    html+=`<div class="card"><div class="callout" style="margin-bottom:14px">Mỗi tiết 40 phút · Học Thứ 2–Thứ 6 · Nghỉ trưa 11:30–13:15.</div><div class="schedule-wrap"><div class="schedule-grid">
-      <div></div>${DOW.map(x=>`<div class="head">${x}</div>`).join("")}
-      ${state.periods.map(p=>`<div class="period-label"><b>Tiết ${p.n}</b><span>${p.start}–${p.end}</span></div>${[0,1,2,3,4].map(d=>`<button class="slot-btn ${set.has(`${d}-${p.n}`)?"active":""}" data-slot="${d}-${p.n}" aria-label="${DOW[d]} tiết ${p.n}">${set.has(`${d}-${p.n}`)?"●":"○"}</button>`).join("")}`).join("")}
-      </div></div></div>`;
-    return html;
+    const current=effectiveSchedule(), activeKeys=new Set(current.map(s=>`${s.dow}-${s.period}`));
+    return renderSchedulePage({
+      headerHtml:head("TKB tự học","Bật/tắt tiết tự học. Mặc định áp dụng cho toàn bộ tuần.",`<div class="toolbar"><label style="margin:0"><input id="weekSpecific" type="checkbox" style="width:auto"> Áp dụng riêng tuần ${week().number}</label><button id="saveSchedule" class="btn btn-primary">Lưu TKB</button></div>`),
+      days:DOW,periods:state.periods,activeKeys,weekNumber:week().number
+    });
   }
   function bindSchedule(){
     content.querySelectorAll(".slot-btn").forEach(b=>b.onclick=()=>{b.classList.toggle("active");b.textContent=b.classList.contains("active")?"●":"○";});
@@ -2557,69 +2413,18 @@ import { friendlyAppError } from "./utils/error-map.js";
 
   function weeksPage(){
     const first=state.weeks[0];
-    const rows=state.weeks.map(w=>{
-      const mode=w.deadlineMode||"per_session_20";
-      const effective=effectiveWeekStatus(w);
-      const auto=automaticWeekStatus(w);
-      return `<div class="week-row v5-week-row ${w.id===state.currentWeekId?"active-week":""}" data-week-id="${w.id}">
-        <div>
-          <b>Tuần ${w.number}</b>
-          <small>${w.id===state.currentWeekId?" · đang xem":""}</small>
-        </div>
-        <div>
-          <b>${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</b>
-          <small>${w.number===1?" · mốc tuần đầu":""}</small>
-        </div>
-        <div class="auto-week-status">
-          <span class="status ${effective==="open"?"approved":effective==="locked"?"missing":"draft"}">${weekStatus(effective)}</span>
-          <label class="week-holiday-toggle">
-            <input class="week-holiday" type="checkbox" data-id="${w.id}" ${w.status==="holiday"?"checked":""}>
-            <span>Tuần nghỉ</span>
-          </label>
-          <small>${w.status==="holiday"?"Đã đặt là tuần nghỉ.":`Tự động: ${weekStatus(auto)}.`}</small>
-        </div>
-        <div class="deadline-choice">
-          <select class="week-deadline-mode" data-id="${w.id}" aria-label="Chế độ deadline tuần ${w.number}">
-            <option value="per_session_20" ${mode==="per_session_20"?"selected":""}>🕗 Mặc định · ${registrationDeadlineTime()} tối hôm trước từng buổi</option>
-            <option value="specific" ${mode==="specific"?"selected":""}>🎯 Hạn cụ thể của tuần</option>
-          </select>
-          <input class="week-deadline" data-id="${w.id}" type="datetime-local"
-            value="${w.deadline||""}" ${mode==="specific"?"":"disabled"}>
-          <small class="deadline-preview">${deadlineSummary(w)}</small>
-        </div>
-        <button class="btn btn-ghost view-week" data-id="${w.id}">Xem tuần</button>
-      </div>`;
-    }).join("");
-
-    return head(
-      "Quản lý tuần",
-      "Trạng thái tuần được tính tự động: tuần hiện tại và tuần kế tiếp luôn mở; các tuần cũ tự khóa. Giáo viên chỉ cần đánh dấu tuần nghỉ.",
-      `<div class="toolbar"><button class="btn btn-ghost" id="goCurrentWeek">📍 Tuần theo ngày hôm nay</button><button class="btn btn-primary" id="saveWeeks">💾 Lưu cấu hình</button></div>`
-    )+
-      `<div class="card week-setup-card">
-        <div>
-          <div class="eyebrow-pill">🧭 Mốc năm học</div>
-          <h3>Tuần 1 bắt đầu ngày nào?</h3>
-          <p class="muted">Trạng thái mở/khóa được tự tính theo ngày. Hạn tự động hiện tại là <b>${registrationDeadlineTime()} tối hôm trước từng buổi học</b>.</p>
-        </div>
-        <div class="week-setup-grid v5-week-setup-grid">
-          <label>Ngày bắt đầu Tuần 1
-            <input id="week1Start" type="date" value="${first?.startDate||""}">
-            <small>Phải là ngày Thứ Hai.</small>
-          </label>
-          <div class="deadline-mode-guide">
-            <b>Hạn đăng ký</b>
-            <span>🕗 Mặc định: ${registrationDeadlineTime()} tối hôm trước từng buổi.</span>
-            <span>🎯 Khi thật sự cần, GV có thể đặt hạn cụ thể cho cả tuần.</span>
-          </div>
-          ${currentUser.role==="admin"?`<button class="btn btn-primary glossy-action" id="applyWeekCalendar">✨ Áp dụng mốc tuần</button>`:`<div class="callout">Mốc Tuần 1 do quản trị viên thiết lập.</div>`}
-        </div>
-        ${first?`<div class="calendar-preview">Tuần 1 hiện tại: <b>${fmtDate(first.startDate)} – ${fmtDate(first.endDate)}</b></div>`:""}
-      </div>
-      <div class="week-list">${rows}</div>`;
+    const weeks=state.weeks.map(w=>{const mode=w.deadlineMode||"per_session_20";const effective=effectiveWeekStatus(w);const auto=automaticWeekStatus(w);return {id:w.id,number:w.number,dateRange:`${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}`,statusHtml:`<span class="status ${effective==="open"?"approved":effective==="locked"?"missing":"draft"}">${weekStatus(effective)}</span>`,holiday:w.status==="holiday",autoStatus:w.status==="holiday"?"Đã đặt là tuần nghỉ.":`Tự động: ${weekStatus(auto)}.`,mode,deadline:w.deadline||"",deadlineSummary:deadlineSummary(w),isCurrent:w.id===state.currentWeekId,open:w.id===state.currentWeekId};});
+    return renderWeeksPage({
+      headerHtml:head("Quản lý tuần","Mỗi tuần là một khối riêng. Tuần đang xem được mở sẵn; có thể mở hoặc thu gọn toàn bộ.",`<div class="toolbar"><button class="btn btn-ghost" id="goCurrentWeek">Tuần theo ngày hôm nay</button><button class="btn btn-primary" id="saveWeeks">Lưu cấu hình</button></div>`),
+      firstWeek:first?{startDate:first.startDate,dateRange:`${fmtDate(first.startDate)} – ${fmtDate(first.endDate)}`} : null,weeks,registrationDeadline:registrationDeadlineTime(),isAdmin:currentUser.role==="admin"
+    });
   }
 
   function bindWeeks(){
+    const setWeekOpen=(card,open)=>{if(!card)return;card.classList.toggle("is-open",open);card.querySelector("[data-week-toggle]")?.setAttribute("aria-expanded",String(open));};
+    content.querySelectorAll("[data-week-toggle]").forEach(button=>button.addEventListener("click",()=>{const card=button.closest(".week-accordion-card");setWeekOpen(card,!card.classList.contains("is-open"));}));
+    $("#expandAllWeeks")?.addEventListener("click",()=>content.querySelectorAll(".week-accordion-card").forEach(card=>setWeekOpen(card,true)));
+    $("#collapseAllWeeks")?.addEventListener("click",()=>content.querySelectorAll(".week-accordion-card").forEach(card=>setWeekOpen(card,false)));
     $("#applyWeekCalendar")?.addEventListener("click",async()=>{
       const start=$("#week1Start").value;
       if(!start){toast("Hãy chọn ngày bắt đầu Tuần 1.","warn");return;}
@@ -2710,7 +2515,6 @@ import { friendlyAppError } from "./utils/error-map.js";
     const allUsers=state.users
       .filter(u=>u.role!=="teacher" && !String(u.code||"").startsWith("__deleted__"))
       .sort(compareByCode);
-
     const q=(ui.query||"").trim().toLowerCase();
     const filtered=allUsers.filter(u=>{
       const hitText=!q || String(u.code||"").toLowerCase().includes(q) || String(u.name||"").toLowerCase().includes(q);
@@ -2718,101 +2522,24 @@ import { friendlyAppError } from "./utils/error-map.js";
       const hitStatus=ui.status==="all" || (ui.status==="active"?!!u.active:(ui.status==="deleted"?!u.active:true));
       return hitText && hitRole && hitStatus;
     });
-
-    const countStudent=allUsers.filter(u=>u.role==="student").length;
-    const countMonitor=allUsers.filter(u=>u.role==="monitor").length;
-    const countDeleted=allUsers.filter(u=>!u.active).length;
-    const countActive=allUsers.filter(u=>u.active).length;
-
-    const rows=filtered.map(u=>`
-      <tr>
-        <td>
-          <div class="code-cell">
-            <b class="code-badge">${esc(u.code)}</b>
-            <button class="mini-icon-btn copy-code-btn" data-code="${esc(u.code)}" title="Sao chép mã đăng nhập">${uiIcon("copy")}</button>
-          </div>
-        </td>
-        <td><div class="person"><span class="avatar">${initials(u.name)}</span><div class="student-person-copy"><b>${esc(u.name)}</b><small>${u.role==="monitor"?"Cán sự lớp":"Học sinh"}</small></div></div></td>
-        <td>${roleLabel[u.role]||esc(u.role)}</td>
-        <td>${u.active?'<span class="status approved">Hoạt động</span>':'<span class="status missing">Đã xóa</span>'}</td>
-        <td>
-          <div class="toolbar student-row-actions">
-            ${u.active?`
-              <button class="btn btn-ghost edit-user-btn" data-id="${u.id}">${uiIcon('edit')}<span>Sửa</span></button>
-              <button class="btn btn-ghost reset-password-btn" data-id="${u.id}">${uiIcon('lock')}<span>Mật khẩu</span></button>
-              <button class="btn btn-ghost danger delete-user-btn" data-id="${u.id}">${uiIcon('delete')}<span>Xóa</span></button>
-            `:`
-              <button class="btn btn-ghost restore-user-btn" data-id="${u.id}">${uiIcon('restore')}<span>Khôi phục</span></button>
-            `}
-          </div>
-        </td>
-      </tr>`).join("") || `<tr><td colspan="5">${empty("🔎","Không có học sinh phù hợp bộ lọc hiện tại.")}</td></tr>`;
-
-    return head(
-      "Quản lý học sinh",
-      "Quản lý tài khoản học sinh, cán sự và trạng thái sử dụng trong lớp.",
-      `<button class="btn btn-primary glossy-action" id="addStudentBtn">${uiIcon('add')}<span>Thêm học sinh</span></button>`
-    )+
-      `<section class="student-management-hero dashboard-section">
-        <div class="student-management-copy">
-          <span class="section-kicker">TÀI KHOẢN LỚP HỌC</span>
-          <h2>${countActive} tài khoản đang hoạt động</h2>
-          <p>Danh sách mặc định tập trung vào tài khoản đang dùng. Học sinh đã xóa được giữ lịch sử và có thể khôi phục khi cần.</p>
-          <div class="student-management-notice">${uiIcon("warning")}<span><b>Xóa học sinh là xóa mềm.</b> Tài khoản bị vô hiệu hóa nhưng lịch sử đăng ký vẫn được giữ nguyên.</span></div>
-        </div>
-        <img class="student-management-illustration" src="assets/images/student-cards.png" alt="Minh họa thẻ học sinh">
-      </section>
-
-      <section class="card dashboard-section student-summary-block">
-        <div class="section-heading-row section-heading-row-spaced">
-          <div><span class="section-kicker">TỔNG QUAN</span><h3>Thành viên trong lớp</h3></div>
-          <span class="muted tiny">Đang hiển thị ${filtered.length}/${allUsers.length}</span>
-        </div>
-        <div class="student-summary-grid">
-          <div class="student-summary-item"><span class="student-summary-icon">${uiIcon("user")}</span><div><small>Học sinh</small><strong>${countStudent}</strong></div></div>
-          <div class="student-summary-item"><span class="student-summary-icon">${uiIcon("students")}</span><div><small>Cán sự</small><strong>${countMonitor}</strong></div></div>
-          <div class="student-summary-item"><span class="student-summary-icon">${uiIcon("check")}</span><div><small>Hoạt động</small><strong>${countActive}</strong></div></div>
-          <div class="student-summary-item"><span class="student-summary-icon">${uiIcon("delete")}</span><div><small>Đã xóa</small><strong>${countDeleted}</strong></div></div>
-        </div>
-      </section>
-
-      <section class="card dashboard-section student-filter-block">
-        <div class="section-heading-row"><div><span class="section-kicker">BỘ LỌC</span><h3>Tìm nhanh tài khoản</h3><p>Lọc theo mã, họ tên, vai trò hoặc trạng thái.</p></div></div>
-        <div class="students-toolbar students-toolbar-v844">
-          <label class="search-box student-search-box">
-            <span>${uiIcon("search")}</span>
-            <input id="studentSearch" value="${esc(ui.query||"")}" placeholder="Tìm theo mã hoặc họ tên">
-          </label>
-          <label class="filter-field"><span>Vai trò</span>
-            <select id="studentRoleFilter">
-              <option value="all" ${ui.role==="all"?"selected":""}>Tất cả</option>
-              <option value="student" ${ui.role==="student"?"selected":""}>Học sinh</option>
-              <option value="monitor" ${ui.role==="monitor"?"selected":""}>Cán sự lớp</option>
-            </select>
-          </label>
-          <label class="filter-field"><span>Trạng thái</span>
-            <select id="studentStatusFilter">
-              <option value="active" ${ui.status==="active"?"selected":""}>Đang hoạt động</option>
-              <option value="deleted" ${ui.status==="deleted"?"selected":""}>Đã xóa</option>
-              <option value="all" ${ui.status==="all"?"selected":""}>Tất cả</option>
-            </select>
-          </label>
-          <button class="btn btn-ghost" id="clearStudentFilters">Xóa lọc</button>
-        </div>
-      </section>
-
-      <section class="card dashboard-section student-table-block">
-        <div class="section-heading-row section-heading-row-spaced">
-          <div><span class="section-kicker">DANH SÁCH</span><h3>Học sinh và cán sự</h3><p>Mã đăng nhập được đồng bộ từ hồ sơ; app không hiển thị email nội bộ.</p></div>
-          <span class="section-count-badge">${filtered.length}</span>
-        </div>
-        <div class="table-wrap student-table-wrap">
-          <table class="data-table modern-data-table">
-            <thead><tr><th>Mã đăng nhập</th><th>Họ tên</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      </section>`;
+    return renderStudentsManagementPage({
+      headerHtml:head("Quản lý học sinh","Quản lý tài khoản học sinh, cán sự và trạng thái sử dụng trong lớp."),
+      users:allUsers,
+      filteredUsers:filtered,
+      query:ui.query,
+      role:ui.role,
+      status:ui.status,
+      counts:{
+        student:allUsers.filter(u=>u.role==="student").length,
+        monitor:allUsers.filter(u=>u.role==="monitor").length,
+        active:allUsers.filter(u=>u.active).length,
+        deleted:allUsers.filter(u=>!u.active).length
+      },
+      escapeHtml:esc,
+      iconFor:uiIcon,
+      initialsFor:initials,
+      roleLabels:roleLabel
+    });
   }
 
   function bindStudents(){
@@ -3101,23 +2828,14 @@ import { friendlyAppError } from "./utils/error-map.js";
       const old=state.currentWeekId; state.currentWeekId=w.id; const st=statsForWeek(); state.currentWeekId=old;
       return {w,rate:st.rate,valid:st.valid,issues:st.issues,missing:st.missing,total:st.total};
     });
-    return head("Thống kê","Tỷ lệ hoàn thành hợp lệ theo tuần.")+
-      `<div class="grid grid-4" style="margin-bottom:16px">
-        ${kpi("✅",current.valid,"Đăng ký hợp lệ")}
-        ${kpi("⚠️",current.issues,"Báo cáo lỗi")}
-        ${kpi("🚨",current.missing,"Chưa đăng ký")}
-        ${kpi("📈",current.rate+"%","Hoàn thành hợp lệ")}
-      </div>
-      <div class="card"><h3>12 tuần đầu năm học</h3>
-        ${rows.map(x=>`<div class="bar-row three-state-bar-row">
-          <span>Tuần ${x.w.number}</span>
-          <div class="bar-track"><div class="bar-fill" style="width:${x.rate}%"></div></div>
-          <b>${x.rate}%</b>
-          <small>✅ ${x.valid} · ⚠️ ${x.issues} · 🚨 ${x.missing}</small>
-        </div>`).join("")}
-        <button id="exportCsv" class="btn btn-ghost" style="margin-top:12px">⬇ Xuất CSV tuần đang xem</button>
-      </div>`;
+    return renderStatisticsPage({
+      headerHtml:head("Thống kê","Tỷ lệ hoàn thành hợp lệ và xu hướng đăng ký theo tuần."),
+      current,
+      rows,
+      iconFor:uiIcon
+    });
   }
+
   function csvCell(value){
     let text=String(value??"");
     if(/^[=+\-@]/.test(text))text="'"+text;
@@ -3149,60 +2867,27 @@ import { friendlyAppError } from "./utils/error-map.js";
 
   function adminPage(){
     if(currentUser?.role!=="admin")return head("Quản trị lớp","Chỉ quản trị viên gốc được sử dụng mục này.")+empty("🔒","Không có quyền truy cập.");
-    const activeClasses=state.availableClasses||[];
-    return head(
-      "Quản trị lớp",
-      "Tách riêng quản lý lớp, giáo viên và phân quyền để thao tác nhanh và an toàn hơn.",
-      `<button class="btn btn-primary" id="adminReloadClasses">${uiIcon("refresh")}<span>Làm mới dữ liệu</span></button>`
-    )+`
-      <section class="admin-command-hero dashboard-section">
-        <div class="admin-command-copy">
-          <span class="section-kicker">ROOT ADMIN · TRUNG TÂM ĐIỀU PHỐI</span>
-          <h2>Quản lý lớp và quyền giáo viên rõ ràng theo từng khối</h2>
-          <p>Tạo lớp, quản lý tài khoản giáo viên và gán quyền phụ trách mà không trộn lẫn vào cùng một danh sách.</p>
-          <div id="adminSummaryCards" class="admin-summary-cards" aria-live="polite">
-            <span><small>Lớp hoạt động</small><b>${activeClasses.length}</b></span>
-            <span><small>Giáo viên</small><b>…</b></span>
-            <span><small>Phân quyền</small><b>…</b></span>
-          </div>
-        </div>
-        <div class="admin-command-art" aria-hidden="true">
-          <img src="assets/images/teacher-dashboard-illustration.png" alt="">
-        </div>
-      </section>
-
-      <section class="admin-quick-grid dashboard-section">
-        <article class="card admin-quick-card">
-          <div class="section-heading-row section-heading-row-spaced">
-            <div><span class="section-kicker">LỚP LÀM VIỆC</span><h3>Lớp đang hoạt động</h3><p>Mở nhanh lớp để xem học sinh, lịch và đăng ký.</p></div>
-            <button class="btn btn-primary" id="adminCreateClass">${uiIcon("add")}<span>Tạo lớp</span></button>
-          </div>
-          <div class="admin-active-class-list">
-            ${activeClasses.length?activeClasses.map(c=>`<button class="admin-active-class-chip admin-open-class" data-id="${c.id}"><span>${esc(c.code)}</span><small>${esc(c.name||c.code)}</small>${uiIcon("right")}</button>`).join(""):empty("🏫","Chưa có lớp đang hoạt động.")}
-          </div>
-        </article>
-        <article class="card admin-quick-card admin-safety-card">
-          <span class="section-kicker">NGUYÊN TẮC AN TOÀN</span>
-          <h3>Quyền tài khoản được tách khỏi dữ liệu học tập</h3>
-          <ul class="admin-safety-list">
-            <li>${uiIcon("check")} Xóa giáo viên là <b>xóa mềm</b>, lịch sử vẫn được giữ.</li>
-            <li>${uiIcon("check")} Khi giáo viên bị khóa/xóa, phân công lớp đang hoạt động được vô hiệu hóa.</li>
-            <li>${uiIcon("lock")} Root admin không xuất hiện trong danh sách giáo viên có thể xóa.</li>
-          </ul>
-        </article>
-      </section>
-
-      <section class="card admin-directory-shell dashboard-section">
-        <div class="section-heading-row section-heading-row-spaced admin-directory-heading">
-          <div><span class="section-kicker">DANH MỤC & PHÂN QUYỀN</span><h3>Lớp học · Giáo viên · Quyền phụ trách</h3><p>Các khối bên dưới độc lập để dễ kiểm tra trước khi thay đổi quyền.</p></div>
-          <button class="btn btn-primary" id="adminCreateTeacher">${uiIcon("add")}<span>Tạo giáo viên</span></button>
-        </div>
-        <div id="adminClassDirectory"><div class="loading-inline"><span class="diamond-mini" aria-hidden="true"></span> Đang tải dữ liệu quản trị...</div></div>
-      </section>`;
+    return renderAdminPageShell({
+      headerHtml:head("Quản trị lớp","Quản lý lớp, giáo viên và phân quyền theo từng khu vực riêng."),
+      activeClasses:state.availableClasses||[],
+      escapeHtml:esc,
+      iconFor:uiIcon
+    });
   }
 
   function bindAdmin(){
     if(currentUser?.role!=="admin")return;
+    const adminRoot=$("#adminPageV850");
+    const selectAdminTab=tab=>{
+      adminRoot.dataset.adminCurrentTab=tab||"overview";
+      adminRoot.querySelectorAll("[data-admin-tab]").forEach(item=>{
+        const active=item.dataset.adminTab===adminRoot.dataset.adminCurrentTab;
+        item.classList.toggle("active",active);
+        item.setAttribute("aria-selected",String(active));
+      });
+    };
+    adminRoot?.querySelectorAll("[data-admin-tab]").forEach(button=>button.addEventListener("click",()=>selectAdminTab(button.dataset.adminTab)));
+    adminRoot?.querySelectorAll("[data-admin-goto-tab]").forEach(button=>button.addEventListener("click",()=>selectAdminTab(button.dataset.adminGotoTab)));
 
     const openActiveClass=classId=>{
       const select=$("#globalClassSelect");
@@ -3481,71 +3166,34 @@ import { friendlyAppError } from "./utils/error-map.js";
     const revisionThreshold=Math.round(Number(state.settings.aiRevisionActionThreshold||0.85)*100);
     const memory=state.aiFeedbackMemoryStats||{};
     const memoryLast=memory.lastFeedbackAt?new Date(memory.lastFeedbackAt).toLocaleString("vi-VN"):"Chưa có";
-    return head("Cài đặt","Cấu hình lớp học và duyệt tự động bằng AI.")+`<div class="grid grid-2">
-      <div class="card"><h3>Thông tin lớp</h3><form id="settingsForm" class="form-grid">
-        <label>Tên lớp<input id="setClass" value="${esc(state.settings.className)}" readonly></label>
-        <label>Năm học<input id="setYear" value="${esc(state.settings.schoolYear)}" readonly></label>
-        <label>Mốc deadline tự động
-          <input id="registrationDeadlineTime" type="time" step="60" value="${esc(registrationDeadlineTime())}">
-          <small>Áp dụng cho chế độ “tối hôm trước từng buổi”.</small>
-        </label>
-        <label style="grid-column:1/-1">Thông báo tuần<textarea id="setAnnouncement">${esc(state.settings.announcement)}</textarea></label>
-
-        <div class="smart-approval-setting" style="grid-column:1/-1">
-          <label class="toggle-row">
-            <input id="smartApprovalEnabled" type="checkbox" ${isAiAutomationEnabled()?"checked":""}>
-            <span>
-              <b>🤖 Duyệt tự động bằng AI</b>
-              <small>Bật: Groq kiểm tra đăng ký mới/gửi lại và học từ phản hồi GV. Tắt: mọi đăng ký chuyển GV duyệt.</small>
-            </span>
-          </label>
-
-          <div class="ai-settings-card">
-            <div class="ai-threshold-row">
-              <span><b>Ngưỡng AI được tự duyệt</b><br><small>AI dưới ngưỡng này luôn chuyển GV.</small></span>
-              <span id="aiThresholdValue" class="ai-threshold-value">${threshold}%</span>
-              <input id="aiAutoApproveThreshold" type="range" min="80" max="99" step="1" value="${threshold}">
-            </div>
-
-            <div class="callout" style="margin-top:10px">
-              <b>Luồng AI-only:</b> Groq là bộ máy tự duyệt duy nhất; không còn tự duyệt theo từ khóa. Đăng ký mới dùng ngưỡng <b>${threshold}%</b>. Khi HS sửa theo phản hồi GV,
-              AI tách riêng <b>đã đáp ứng / chưa đáp ứng / không chắc</b> và chỉ tự hành động khi độ chắc chắn đạt <b>${revisionThreshold}%</b>.
-              Nếu chưa đủ chắc chắn → <b>GV duyệt</b>.
-            </div>
-
-            <div class="callout" style="margin-top:10px">
-              <b>🧠 Bộ nhớ phản hồi GV</b><br>
-              Đã ghi nhận: <b>${Number(memory.totalFeedback||0)}</b> phản hồi ·
-              AI duyệt → GV yêu cầu sửa: <b>${Number(memory.revisionAfterAiApprove||0)}</b> ·
-              AI chuyển GV → GV duyệt: <b>${Number(memory.approveAfterAiManual||0)}</b> ·
-              AI yêu cầu sửa → GV duyệt: <b>${Number(memory.approveAfterAiRevision||0)}</b>.<br>
-              <small>Cập nhật gần nhất: ${esc(memoryLast)}. Mỗi lần duyệt, hệ thống đọc tối đa <b>${Number(memory.candidateLimit||80)}</b> phản hồi ứng viên rồi chọn tối đa <b>${Number(memory.selectedLimit||25)}</b> ví dụ theo độ gần đây + tương đồng + bất đồng AI↔GV.</small>
-            </div>
-
-            <div class="tiny muted" style="margin-top:8px">
-              Model mặc định phía server: <b>openai/gpt-oss-120b trên Groq</b>. API key không nằm trong trình duyệt.
-            </div>
-          </div>
-        </div>
-
-        <button class="btn btn-primary" style="grid-column:1/-1">Lưu cài đặt</button>
-      </form></div>
-
-      <div class="card">
-        <h3>Khung giờ chuẩn</h3>
-        <div class="table-wrap"><table class="data-table" style="min-width:0">
-          <thead><tr><th>Tiết</th><th>Giờ học</th></tr></thead>
-          <tbody>${state.periods.map(p=>`<tr><td><b>Tiết ${p.n}</b></td><td>${p.start} – ${p.end}</td></tr>`).join("")}</tbody>
-        </table></div>
-        <div class="callout" style="margin-top:12px">Nghỉ 15 phút giữa tiết 2–3 và 7–8. Nghỉ trưa 11:30–13:15.</div>
-        <div class="callout" style="margin-top:12px">
-          🦉 <b>Cú Thông Thái</b> hoạt động cho HS, cán sự và GV: nhìn theo chuột, nhắc deadline/thông báo và đưa danh ngôn học tập.
-        </div>
-      </div>
-    </div>`;
+    return renderSettingsPage({
+      headerHtml:head("Cài đặt","Cấu hình lớp học, đăng ký, AI và trải nghiệm Cú Thông Thái."),
+      className:state.settings.className,
+      schoolYear:state.settings.schoolYear,
+      deadlineTime:registrationDeadlineTime(),
+      announcement:state.settings.announcement,
+      threshold,
+      revisionThreshold,
+      memory,
+      memoryLast,
+      periods:state.periods,
+      aiEnabled:isAiAutomationEnabled(),
+      escapeHtml:esc,
+      iconFor:uiIcon
+    });
   }
 
   function bindSettings(){
+    const settingsRoot=$("#settingsPageV850");
+    settingsRoot?.querySelectorAll("[data-settings-tab]").forEach(button=>button.addEventListener("click",()=>{
+      const tab=button.dataset.settingsTab||"general";
+      settingsRoot.dataset.settingsCurrentTab=tab;
+      settingsRoot.querySelectorAll("[data-settings-tab]").forEach(item=>{
+        const active=item.dataset.settingsTab===tab;
+        item.classList.toggle("active",active);
+        item.setAttribute("aria-selected",String(active));
+      });
+    }));
     $("#aiAutoApproveThreshold")?.addEventListener("input",e=>{
       $("#aiThresholdValue").textContent=`${e.target.value}%`;
     });
@@ -3621,6 +3269,12 @@ import { friendlyAppError } from "./utils/error-map.js";
     content.querySelectorAll("[data-approval-filter]").forEach(button=>{
       button.addEventListener("click",()=>{
         approvalFilter=button.dataset.approvalFilter||"attention";
+        render();
+      });
+    });
+    content.querySelectorAll("[data-approval-select]").forEach(button=>{
+      button.addEventListener("click",()=>{
+        approvalSelectedId=button.dataset.approvalSelect||"";
         render();
       });
     });
