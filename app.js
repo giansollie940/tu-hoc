@@ -16,8 +16,9 @@ import {
   renderMissingRegistrationsPage,
   renderRevisionIssuesPage as renderRevisionIssuesPageV850
 } from "./renderers/class-pages.js";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.5.0";
-import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.0";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.5.1";
+import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.1";
+import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.1";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -39,6 +40,8 @@ import { friendlyAppError } from "./utils/error-map.js";
   let approvalFilter="attention";
   let approvalSelectedId="";
   let weekSelectionTouched=false;
+  let weekLifecycleTimer=null;
+  const ADMIN_DIRECTORY_CACHE_MS=3*60*1000;
 
   const $ = s => document.querySelector(s);
   const content=$("#content"), loginView=$("#loginView"), appView=$("#appView");
@@ -478,7 +481,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     }else if(route==="schedule"&&isManager()){
       messages.push({text:`🗓️ Thời khóa biểu tự học hiện có ${effectiveSchedule().length} tiết đang áp dụng cho lớp ${state.settings.className}.`});
     }else if(route==="weeks"&&isManager()){
-      messages.push({text:`📆 Bạn đang xem Tuần ${currentWeek.number} · ${weekStatus(currentWeek.status)}. Hạn đăng ký: ${deadlineSummary(currentWeek)}.`});
+      messages.push({text:`📆 Bạn đang xem Tuần ${currentWeek.number} · ${weekStatus(effectiveWeekStatus(currentWeek))}. Hạn đăng ký: ${deadlineSummary(currentWeek)}.`});
     }else if(route==="settings"&&isManager()){
       messages.push({text:isAiAutomationEnabled()?`🤖 Duyệt AI đang bật ở ngưỡng ${Math.round(Number(state.settings.aiAutoApproveThreshold||.9)*100)}%.`:`👤 Duyệt AI đang tắt; đăng ký sẽ chuyển giáo viên xử lý.`});
     }else if(["dashboard","register"].includes(route)&&!isManager()){
@@ -803,28 +806,27 @@ import { friendlyAppError } from "./utils/error-map.js";
     return `${y}-${m}-${d}`;
   }
 
-  function actualWeek(){
-    if(!state.weeks?.length)return null;
-    const today=todayDateISO();
+  function weekLifecycleSnapshot(nowMs=Date.now()){
+    if(!state?.weeks?.length)return {currentWeekId:null,statuses:{},nextBoundaryMs:null};
+    return getWeekLifecycle({
+      weeks:state.weeks,
+      periods:state.periods||[],
+      getSlots:weekId=>scheduleForWeek(weekId),
+      nowMs
+    });
+  }
 
-    // Tuần học được tính từ Thứ Hai đến Chủ nhật để cuối tuần vẫn thuộc tuần hiện tại.
-    return state.weeks.find(w=>w.startDate<=today&&addDaysDateISO(w.startDate,6)>=today)
-      || state.weeks.find(w=>w.startDate>today)
-      || state.weeks[state.weeks.length-1];
+  function actualWeek(){
+    const lifecycle=weekLifecycleSnapshot();
+    return state.weeks.find(w=>w.id===lifecycle.currentWeekId)
+      || state.weeks.find(w=>lifecycle.statuses[w.id]==="upcoming")
+      || state.weeks[state.weeks.length-1]
+      || null;
   }
 
   function automaticWeekStatus(w){
     if(!w)return "upcoming";
-    const today=todayDateISO();
-    const anchor=state.weeks.find(x=>x.startDate<=today&&addDaysDateISO(x.startDate,6)>=today);
-
-    if(!anchor){
-      if(w.endDate<today)return "locked";
-      return "upcoming";
-    }
-    if(w.number<anchor.number)return "locked";
-    if(w.number===anchor.number||w.number===anchor.number+1)return "open";
-    return "upcoming";
+    return weekLifecycleSnapshot().statuses[w.id]||"upcoming";
   }
 
   function effectiveWeekStatus(w){
@@ -896,34 +898,36 @@ import { friendlyAppError } from "./utils/error-map.js";
     return Number.isFinite(start)&&Date.now()<start;
   }
 
-  function recommendedStudentWeek(){
-    if(!state?.weeks?.length)return null;
-    const openWeeks=state.weeks
-      .filter(w=>effectiveWeekStatus(w)==="open")
-      .sort((a,b)=>a.number-b.number);
-
-    for(const w of openWeeks){
-      const slots=scheduleForWeek(w.id);
-      if(slots.some(sl=>{
-        const start=sessionStartTime(w,sl.dow,sl.period);
-        return Number.isFinite(start)&&Date.now()<start;
-      })){
-        return w;
-      }
-    }
-
-    return actualWeek()||state.weeks[0];
+  function alignWeekToLifecycle(force=false){
+    if(!state?.weeks?.length)return false;
+    if(weekSelectionTouched&&!force)return false;
+    const current=actualWeek();
+    if(!current||current.id===state.currentWeekId)return false;
+    state.currentWeekId=current.id;
+    return true;
   }
 
-  function alignStudentWeekToNextAction(force=false){
-    if(!currentUser||!["student","monitor"].includes(currentUser.role))return false;
-    if(weekSelectionTouched&&!force)return false;
+  async function runWeekLifecycleTick(){
+    weekLifecycleTimer=null;
+    if(!currentUser||!state?.weeks?.length)return;
+    const current=actualWeek();
+    if(!weekSelectionTouched&&current?.id&&current.id!==state.currentWeekId){
+      await selectWeek(current.id);
+      return;
+    }
+    renderShell();
+    render();
+  }
 
-    const recommended=recommendedStudentWeek();
-    if(!recommended||recommended.id===state.currentWeekId)return false;
-
-    state.currentWeekId=recommended.id;
-    return true;
+  function scheduleWeekLifecycleTick(){
+    clearTimeout(weekLifecycleTimer);
+    weekLifecycleTimer=null;
+    if(!currentUser||!state?.weeks?.length)return;
+    const boundary=weekLifecycleSnapshot().nextBoundaryMs;
+    const now=Date.now();
+    if(!Number.isFinite(boundary)||boundary<=now)return;
+    const delay=Math.max(250,Math.min(boundary-now+250,2147483000));
+    weekLifecycleTimer=setTimeout(()=>{void runWeekLifecycleTick();},delay);
   }
   function regFor(studentId,dow,p,weekId=state.currentWeekId){
     return state.registrations.find(r=>r.studentId===studentId&&r.weekId===weekId&&r.dow===dow&&r.period===p);
@@ -1239,6 +1243,8 @@ import { friendlyAppError } from "./utils/error-map.js";
   }
   async function logout(){
     stopRealtime();
+    clearTimeout(weekLifecycleTimer);
+    weekLifecycleTimer=null;
     try{ await prod.signOut(); }catch(err){ console.error(err); }
     currentUser=null;
     owlDailyQuote=null;
@@ -1321,7 +1327,8 @@ import { friendlyAppError } from "./utils/error-map.js";
     }
   }
   $("#globalWeekSelect").addEventListener("change",async e=>{
-    weekSelectionTouched=true;
+    const current=actualWeek();
+    weekSelectionTouched=e.target.value!==current?.id;
     await selectWeek(e.target.value);
   });
   $("#globalClassSelect")?.addEventListener("change",async e=>{
@@ -1331,7 +1338,10 @@ import { friendlyAppError } from "./utils/error-map.js";
       prod.setActiveClassId?.(currentUser.id,e.target.value);
       const loaded=await prod.loadState(e.target.value);
       currentUser=loaded.currentUser;state=loaded.state;route=route==="admin"&&currentUser.role!=="admin"?"dashboard":route;
-      renderShell();render();
+      weekSelectionTouched=false;
+      const aligned=alignWeekToLifecycle(true);
+      if(aligned)await selectWeek(state.currentWeekId);
+      else{renderShell();render();}
     }catch(error){console.error(error);toast(safeErrorMessage(error,"Không chuyển được lớp."),"warn");}
     finally{setGlobalLoading(false);}
   });
@@ -1482,7 +1492,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         <p class="learning-hero-lead">${helper}</p>
         <div class="learning-hero-meta">
           <span><small>Thời gian</small><b>${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}</b></span>
-          <span><small>Trạng thái</small><b>${weekStatus(w.status)}</b></span>
+          <span><small>Trạng thái</small><b>${weekStatus(effectiveWeekStatus(w))}</b></span>
           <span><small>Hạn đăng ký</small><b>${deadlineChip(w)}</b></span>
         </div>
         ${state.settings.announcement?`<div class="learning-hero-announcement">${uiIcon("comment")}<span>${esc(state.settings.announcement)}</span></div>`:""}
@@ -2415,7 +2425,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     const first=state.weeks[0];
     const weeks=state.weeks.map(w=>{const mode=w.deadlineMode||"per_session_20";const effective=effectiveWeekStatus(w);const auto=automaticWeekStatus(w);return {id:w.id,number:w.number,dateRange:`${fmtDate(w.startDate)} – ${fmtDate(w.endDate)}`,statusHtml:`<span class="status ${effective==="open"?"approved":effective==="locked"?"missing":"draft"}">${weekStatus(effective)}</span>`,holiday:w.status==="holiday",autoStatus:w.status==="holiday"?"Đã đặt là tuần nghỉ.":`Tự động: ${weekStatus(auto)}.`,mode,deadline:w.deadline||"",deadlineSummary:deadlineSummary(w),isCurrent:w.id===state.currentWeekId,open:w.id===state.currentWeekId};});
     return renderWeeksPage({
-      headerHtml:head("Quản lý tuần","Mỗi tuần là một khối riêng. Tuần đang xem được mở sẵn; có thể mở hoặc thu gọn toàn bộ.",`<div class="toolbar"><button class="btn btn-ghost" id="goCurrentWeek">Tuần theo ngày hôm nay</button><button class="btn btn-primary" id="saveWeeks">Lưu cấu hình</button></div>`),
+      headerHtml:head("Quản lý tuần","Mỗi tuần là một khối riêng. Tuần đang xem được mở sẵn; có thể mở hoặc thu gọn toàn bộ.",`<div class="toolbar"><button class="btn btn-ghost" id="goCurrentWeek">Tuần hiện hành</button><button class="btn btn-primary" id="saveWeeks">Lưu cấu hình</button></div>`),
       firstWeek:first?{startDate:first.startDate,dateRange:`${fmtDate(first.startDate)} – ${fmtDate(first.endDate)}`} : null,weeks,registrationDeadline:registrationDeadlineTime(),isAdmin:currentUser.role==="admin"
     });
   }
@@ -2436,7 +2446,7 @@ import { friendlyAppError } from "./utils/error-map.js";
 
       try{
         await prod.teacherRebaseWeeks(start,registrationDeadlineTime());
-        toast("Đã xếp lại lịch. Tuần hiện tại và tuần kế tiếp sẽ tự mở.","success");
+        toast("Đã xếp lại lịch. Cửa sổ hai tuần mở sẽ tự cập nhật theo buổi học cuối cùng.","success");
         await refreshFromServer(false);
       }catch(err){
         console.error(err);
@@ -2489,20 +2499,21 @@ import { friendlyAppError } from "./utils/error-map.js";
       audit("Cập nhật tuần học","weeks");
       try{
         await saveState();
-        toast("Đã lưu. Trạng thái tuần sẽ tiếp tục tự động theo ngày.","success");
+        toast("Đã lưu. Trạng thái tuần sẽ tự động theo buổi học cuối cùng.","success");
         await refreshFromServer(false);
       }catch{}
     });
 
     content.querySelectorAll(".view-week").forEach(b=>b.onclick=async()=>{
-      weekSelectionTouched=true;
+      const current=actualWeek();
+      weekSelectionTouched=b.dataset.id!==current?.id;
       await selectWeek(b.dataset.id,{announce:true});
     });
 
     $("#goCurrentWeek")?.addEventListener("click",async()=>{
       const w=actualWeek();
       if(!w){toast("Chưa có tuần học nào.","warn");return;}
-      weekSelectionTouched=true;
+      weekSelectionTouched=false;
       await selectWeek(w.id,{announce:true});
     });
   }
@@ -2878,6 +2889,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   function bindAdmin(){
     if(currentUser?.role!=="admin")return;
     const adminRoot=$("#adminPageV850");
+    if(!adminRoot)return;
     const selectAdminTab=tab=>{
       adminRoot.dataset.adminCurrentTab=tab||"overview";
       adminRoot.querySelectorAll("[data-admin-tab]").forEach(item=>{
@@ -2899,13 +2911,15 @@ import { friendlyAppError } from "./utils/error-map.js";
       select.dispatchEvent(new Event("change"));
     };
 
-    const loadDirectory=async()=>{
-      setGlobalLoading(true,"Đang tải phân quyền lớp...");
+    const loadDirectory=async({force=false}={})=>{
+      const cached=state.adminDirectory;
+      const cacheFresh=!force&&cached?.loadedAt&&Date.now()-cached.loadedAt<ADMIN_DIRECTORY_CACHE_MS;
+      if(!cacheFresh)setGlobalLoading(true,"Đang tải phân quyền lớp...");
       try{
-        const data=await prod.adminManageClasses("list");
+        const data=cacheFresh?cached:await prod.adminManageClasses("list");
         const classes=data.classes||[],teachers=data.teachers||[],assignments=data.assignments||[];
         const box=$("#adminClassDirectory");if(!box)return;
-        state.adminDirectory={classes,teachers,assignments,loadedAt:Date.now()};
+        if(!cacheFresh)state.adminDirectory={classes,teachers,assignments,loadedAt:Date.now()};
         const activeClasses=classes.filter(c=>c.active!==false);
         const activeTeachers=teachers.filter(t=>t.active!==false);
         const activeAssignments=assignments.filter(a=>a.active!==false);
@@ -3049,7 +3063,7 @@ import { friendlyAppError } from "./utils/error-map.js";
           try{
             await prod.teacherUpdateUser(btn.dataset.id,{changeCode:false,code:btn.dataset.code,fullName:btn.dataset.name,role:"teacher",active:btn.dataset.active!=="true"});
             toast("Đã cập nhật trạng thái giáo viên.","success");
-            await loadDirectory();
+            await loadDirectory({force:true});
           }catch(error){toast(safeErrorMessage(error,"Không cập nhật được giáo viên."),"warn");}
         }));
         box.querySelectorAll(".admin-delete-teacher").forEach(btn=>btn.addEventListener("click",()=>{
@@ -3077,7 +3091,7 @@ import { friendlyAppError } from "./utils/error-map.js";
               await prod.teacherDeleteUser(teacher.id, confirmCode);
               closeModal();
               toast(`Đã xóa mềm giáo viên ${teacher.full_name||teacher.student_code||""}.`,"success");
-              await loadDirectory();
+              await loadDirectory({force:true});
             }catch(error){
               console.error(error);
               toast(safeErrorMessage(error,"Không xóa được giáo viên."),"warn");
@@ -3125,10 +3139,10 @@ import { friendlyAppError } from "./utils/error-map.js";
       }catch(error){
         console.error(error);toast(safeErrorMessage(error,"Không tải được dữ liệu quản trị."),"warn");
         const box=$("#adminClassDirectory");if(box)setSafeHtml(box,`<div class="callout warning">Không tải được danh mục lớp/giáo viên. Bấm “Làm mới” để thử lại.</div>`);
-      }finally{setGlobalLoading(false);}
+      }finally{if(!cacheFresh)setGlobalLoading(false);}
     };
 
-    $("#adminReloadClasses")?.addEventListener("click",loadDirectory);
+    $("#adminReloadClasses")?.addEventListener("click",()=>loadDirectory({force:true}));
     content.querySelectorAll(".admin-open-class").forEach(btn=>btn.addEventListener("click",()=>openActiveClass(btn.dataset.id)));
 
     $("#adminCreateTeacher")?.addEventListener("click",()=>{
@@ -3138,7 +3152,7 @@ import { friendlyAppError } from "./utils/error-map.js";
         try{
           const result=await prod.teacherCreateUser({code:$("#adminTeacherCode").value.trim(),fullName:$("#adminTeacherName").value.trim(),role:"teacher",password:$("#adminTeacherPassword").value.trim()});
           openModal("Đã tạo giáo viên",`<div class="success-account-card"><div class="success-icon">👩‍🏫</div><h3>${esc(result.user?.fullName||"")}</h3><p>Mã đăng nhập</p><div class="credential-box">${esc(result.user?.code||"")}</div><p>Mật khẩu tạm</p><div class="credential-box">${esc(result.password||"")}</div><div class="callout warning">Lưu mật khẩu này trước khi đóng.</div><button class="btn btn-primary btn-block" id="finishCreateTeacher">Đã lưu</button></div>`);
-          $("#finishCreateTeacher").onclick=()=>{closeModal();loadDirectory();};
+          $("#finishCreateTeacher").onclick=()=>{closeModal();loadDirectory({force:true});};
         }catch(error){toast(safeErrorMessage(error,"Không tạo được giáo viên."),"warn");}
         finally{setGlobalLoading(false);}
       });
@@ -3301,6 +3315,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     });
     renderShell();
     scheduleOwlRouteContext();
+    scheduleWeekLifecycleTick();
   }
 
   async function refreshFromServer(showToast=true){
@@ -3308,10 +3323,8 @@ import { friendlyAppError } from "./utils/error-map.js";
       const loaded=await prod.loadState(state?.activeClassId||null);
       if(!loaded.currentUser){ await logout(); return; }
       currentUser=loaded.currentUser; state=loaded.state; route=route||"dashboard";
-      if(!weekSelectionTouched&&["dashboard","register"].includes(route)){
-        const aligned=alignStudentWeekToNextAction();
-        if(aligned)await selectWeek(state.currentWeekId);
-      }
+      const aligned=alignWeekToLifecycle();
+      if(aligned)await selectWeek(state.currentWeekId);
       renderShell(); render();
       schedulePendingAiRecovery(isManager()?1800:800);
       if(showToast) toast("Đã đồng bộ dữ liệu mới nhất.","success");
@@ -3327,7 +3340,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     if(loaded.currentUser){
       currentUser=loaded.currentUser;
       state=loaded.state;
-      const aligned=alignStudentWeekToNextAction(true);
+      const aligned=alignWeekToLifecycle(true);
       if(aligned)await selectWeek(state.currentWeekId);
       renderShell();
       render();
