@@ -16,9 +16,9 @@ import {
   renderMissingRegistrationsPage,
   renderRevisionIssuesPage as renderRevisionIssuesPageV850
 } from "./renderers/class-pages.js";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3c";
-import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3c";
-import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3c";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3d";
+import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3d";
+import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3d";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -41,6 +41,7 @@ import { friendlyAppError } from "./utils/error-map.js";
   let approvalSelectedId="";
   let weekSelectionTouched=false;
   let weekLifecycleTimer=null;
+  let fallbackRefreshTimer=null;
   const ADMIN_DIRECTORY_CACHE_MS=3*60*1000;
 
   const $ = s => document.querySelector(s);
@@ -1305,8 +1306,10 @@ import { friendlyAppError } from "./utils/error-map.js";
     renderShell();
     render();
     startRealtime();
+    startBackgroundSync();
   }
   async function logout(){
+    stopBackgroundSync();
     stopRealtime();
     clearTimeout(weekLifecycleTimer);
     weekLifecycleTimer=null;
@@ -3396,6 +3399,42 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(showToast) toast("Đã đồng bộ dữ liệu mới nhất.","success");
     }catch(err){ console.error(err); if(showToast) toast(safeErrorMessage(err,"Không tải được dữ liệu mới. Vui lòng thử lại."),"warn"); }
   }
+
+  function handleVisibilityChange(){
+    if(document.hidden||!currentUser)return;
+    void runWeekLifecycleTick();
+
+    if(realtimeQueue.length){
+      clearTimeout(realtimeFlushTimer);
+      realtimeFlushTimer=setTimeout(flushRealtimeQueue,120);
+      return;
+    }
+
+    // Sau khi tab ngủ lâu, đồng bộ một lần để bù cho WebSocket có thể bị ngắt.
+    if(Date.now()-lastRealtimeActivity>90000){
+      void refreshFromServer(false);
+    }
+  }
+
+  function stopBackgroundSync(){
+    if(fallbackRefreshTimer!==null){
+      clearInterval(fallbackRefreshTimer);
+      fallbackRefreshTimer=null;
+    }
+    document.removeEventListener("visibilitychange",handleVisibilityChange);
+  }
+
+  function startBackgroundSync(){
+    stopBackgroundSync();
+    if(!currentUser)return;
+    const fallbackSeconds=Math.max(120,Number(window.APP_CONFIG?.fallbackRefreshSeconds||180));
+    fallbackRefreshTimer=setInterval(()=>{
+      if(!currentUser||document.hidden||realtimeInputBusy())return;
+      void refreshFromServer(false);
+    },fallbackSeconds*1000);
+    document.addEventListener("visibilitychange",handleVisibilityChange);
+  }
+
   $("#syncBtn")?.addEventListener("click",()=>refreshFromServer(true));
 
   try{
@@ -3411,28 +3450,8 @@ import { friendlyAppError } from "./utils/error-map.js";
       renderShell();
       render();
       startRealtime();
-
       // Polling chỉ là lớp dự phòng. Realtime xử lý luồng chính.
-      const fallbackSeconds=Math.max(120,Number(window.APP_CONFIG?.fallbackRefreshSeconds||180));
-      setInterval(()=>{
-        if(!currentUser||document.hidden||realtimeInputBusy())return;
-        refreshFromServer(false);
-      },fallbackSeconds*1000);
-
-      document.addEventListener("visibilitychange",()=>{
-        if(document.hidden||!currentUser)return;
-
-        if(realtimeQueue.length){
-          clearTimeout(realtimeFlushTimer);
-          realtimeFlushTimer=setTimeout(flushRealtimeQueue,120);
-          return;
-        }
-
-        // Sau khi tab ngủ lâu, đồng bộ một lần để bù cho WebSocket có thể bị ngắt.
-        if(Date.now()-lastRealtimeActivity>90000){
-          refreshFromServer(false);
-        }
-      });
+      startBackgroundSync();
     }else renderShell();
   }catch(err){
     console.error(err); renderShell();
