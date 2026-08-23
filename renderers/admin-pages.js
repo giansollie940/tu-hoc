@@ -77,7 +77,7 @@ export function renderSettingsPage({
 
       <section class="v850-panel settings-panel" data-settings-panel="ai">
         ${sectionHeader({kicker:'TỰ ĐỘNG HÓA',title:'Duyệt đăng ký bằng AI',subtitle:'Giữ nguyên luồng AI hiện có; trang này chỉ tổ chức lại cách hiển thị và cấu hình.'})}
-        <label class="toggle-row settings-ai-toggle"><input id="smartApprovalEnabled" type="checkbox" ${aiEnabled?'checked':''}><span><b>Duyệt tự động bằng AI</b><small>Bật: Groq kiểm tra đăng ký mới/gửi lại và học từ phản hồi GV. Tắt: mọi đăng ký chuyển GV duyệt.</small></span></label>
+        <label class="toggle-row settings-ai-toggle"><input id="smartApprovalEnabled" type="checkbox" ${aiEnabled?'checked':''}><span><b>Duyệt tự động bằng AI</b><span class="settings-ai-help"><small class="settings-ai-help-line"><strong>Bật:</strong> Groq kiểm tra đăng ký mới/gửi lại và học từ phản hồi GV.</small><small class="settings-ai-help-line"><strong>Tắt:</strong> Mọi đăng ký chuyển GV duyệt.</small></span></span></label>
         <div class="ai-settings-card settings-ai-card">
           <div class="ai-threshold-row"><span><b>Ngưỡng AI được tự duyệt</b><br><small>AI dưới ngưỡng này luôn chuyển GV.</small></span><span id="aiThresholdValue" class="ai-threshold-value">${threshold}%</span><input id="aiAutoApproveThreshold" type="range" min="80" max="99" step="1" value="${threshold}"></div>
           <div class="settings-ai-explainer"><b>Luồng AI-only</b><p>Đăng ký mới dùng ngưỡng <b>${threshold}%</b>. Khi học sinh sửa theo phản hồi GV, AI chỉ tự hành động khi độ chắc chắn đạt <b>${revisionThreshold}%</b>; trường hợp không chắc chuyển giáo viên.</p></div>

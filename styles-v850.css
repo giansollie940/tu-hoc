@@ -414,3 +414,11 @@ body{background-color:var(--v850-bg)}
   .login-auth-card-v853,.login-theme-quote-copy blockquote{animation:none!important}
   .login-auth-card-v853 .login-input-shell:hover,.login-auth-card-v853 .login-input-shell:focus-within{transform:none!important}
 }
+/* V8.5.3c — AI toggle help copy */
+.settings-ai-toggle>span{display:block;flex:1;min-width:0}
+.settings-ai-toggle>span>b{display:block}
+.settings-ai-help{display:block;margin-top:6px;padding-left:18px;color:var(--v850-muted)}
+.settings-ai-help-line{display:block;line-height:1.55}
+.settings-ai-help-line+.settings-ai-help-line{margin-top:3px}
+.settings-ai-help-line strong{color:var(--v850-text);font-weight:800}
+
