@@ -16,9 +16,9 @@ import {
   renderMissingRegistrationsPage,
   renderRevisionIssuesPage as renderRevisionIssuesPageV850
 } from "./renderers/class-pages.js";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.5.2";
-import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.2";
-import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.2";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.5.3";
+import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.3";
+import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.3";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -47,6 +47,29 @@ import { friendlyAppError } from "./utils/error-map.js";
   const content=$("#content"), loginView=$("#loginView"), appView=$("#appView");
   const modal=$("#modal"), modalBody=$("#modalBody"), modalTitle=$("#modalTitle");
   const owlMotionController=initOwlPet(document);
+  const ThemePreference=window.ThemePreference;
+
+  function syncThemeControls(){
+    const dark=document.documentElement.dataset.theme==="dark";
+    const label=dark?"Chuyển sang giao diện sáng":"Chuyển sang giao diện tối";
+    [$("#loginThemeToggle"),$("#themeToggle")].forEach(button=>{
+      if(!button)return;
+      button.setAttribute("aria-label",label);
+      button.setAttribute("title",label);
+      button.setAttribute("aria-pressed",String(dark));
+    });
+  }
+
+  function bindThemeControls(){
+    [$("#loginThemeToggle"),$("#themeToggle")].forEach(button=>{
+      if(!button)return;
+      button.addEventListener("click",()=>ThemePreference?.toggle?.());
+    });
+    window.addEventListener("themechange",syncThemeControls);
+    syncThemeControls();
+  }
+
+  bindThemeControls();
 
   function sanitizeTemplateHtml(html){
     const template=document.createElement("template");
