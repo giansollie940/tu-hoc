@@ -32,7 +32,7 @@ export function renderClassOverview({week,sessions=[],users=[],registrations=[]}
       <span class="class-session-cta">Xem chi tiết buổi</span>
     </button>`;
   }).join('');
-  return `<header class="v850-page-header"><div class="v850-page-heading"><span class="v850-kicker">THEO DÕI LỚP</span><h1>Theo dõi cả lớp</h1><p>Tuần ${esc(week?.number||'')} · Chọn một buổi để xem học sinh theo ba trạng thái.</p></div></header>
+  return `<header class="v850-page-header"><div class="v850-page-heading"><span class="v850-kicker">THEO DÕI LỚP</span><h1>Theo dõi cả lớp</h1><p>Tuần ${esc(week?.number||'')} · Chọn một buổi rồi dùng bộ lọc để xem đúng nhóm học sinh cần theo dõi.</p></div></header>
     <section class="class-session-grid-v850">${cards||'<div class="v850-panel">Tuần này chưa có tiết tự học.</div>'}</section>`;
 }
 
@@ -49,6 +49,24 @@ function statusText(row){
   return 'Chờ duyệt';
 }
 
+function deviceRegistrationText(row){
+  const r=row.registration;
+  if(!r)return 'Chưa có đăng ký';
+  return r.usesElectronicDevice===true?'Có đăng ký':'Không đăng ký';
+}
+
+function deviceRegistrationClass(row){
+  const r=row.registration;
+  if(!r)return 'is-na';
+  return r.usesElectronicDevice===true?'is-yes':'is-no';
+}
+
+function aiStatusText(reg){
+  if(!reg)return '—';
+  const value=String(reg.aiReviewStatus||'').toLowerCase();
+  return ({approved:'Đạt',manual:'GV xem',needs_revision:'Cần sửa',error:'Lỗi',pending:'Đang chờ',processing:'Đang xử lý'})[value]||'—';
+}
+
 function learnerCard(row,role,getManagerActions){
   const r=row.registration;
   let actions='';
@@ -62,9 +80,14 @@ function learnerCard(row,role,getManagerActions){
     actions=`<div class="class-learner-actions">${buttons.join('')}</div>`;
   }
   return `<article class="class-learner-card bucket-${row.bucket}">
-    <div class="class-learner-head"><span class="class-learner-avatar">${esc((row.user.name||row.user.fullName||'?').split(' ').slice(-2).map(x=>x[0]).join('').toUpperCase())}</span><div><b>${esc(row.user.name||row.user.fullName||'')}</b><small>${esc(row.user.code||'')}</small></div></div>
-    <span class="class-learner-status">${esc(statusText(row))}</span>
-    <div class="class-learner-content"><small>Nội dung</small><p>${esc(r?.content||'Chưa có nội dung đăng ký')}</p></div>
+    <div class="class-learner-head"><span class="class-learner-avatar">${esc((row.user.name||row.user.fullName||'?').split(' ').slice(-2).map(x=>x[0]).join('').toUpperCase())}</span><div><b>${esc(row.user.name||row.user.fullName||'')}</b><small>${esc(row.user.code||'')}</small></div><span class="class-learner-status">${esc(statusText(row))}</span></div>
+    <div class="class-learner-facts">
+      <span><small>Thiết bị điện tử</small><b class="device-registration ${deviceRegistrationClass(row)}">${esc(deviceRegistrationText(row))}</b></span>
+      <span><small>AI</small><b>${esc(aiStatusText(r))}</b></span>
+      <span><small>Phản hồi GV</small><b>${r?.teacherComment?'Có':'—'}</b></span>
+    </div>
+    <div class="class-learner-content"><small>Nội dung đăng ký</small><p>${esc(r?.content||'Chưa có nội dung đăng ký')}</p></div>
+    ${r?.note?`<div class="class-learner-note"><small>Ghi chú</small><p>${esc(r.note)}</p></div>`:''}
     ${r?.teacherComment?`<div class="class-learner-comment"><b>GV:</b> ${esc(r.teacherComment)}</div>`:''}
     ${actions}
   </article>`;
@@ -72,16 +95,30 @@ function learnerCard(row,role,getManagerActions){
 
 export function renderSessionDetails({session,users=[],registrations=[],role,filter='all',getManagerActions}={}){
   const summary=summarizeSession({users,registrations,session});
-  const groups={registered:summary.rows.filter(r=>r.bucket==='registered'),missing:summary.rows.filter(r=>r.bucket==='missing'),attention:summary.rows.filter(r=>r.bucket==='attention')};
-  const counts={all:summary.total,registered:groups.registered.length,missing:groups.missing.length,attention:groups.attention.length};
-  const tabs=[['all','Tất cả'],['registered','Đã đăng ký'],['missing','Chưa đăng ký'],['attention','Cần xử lý']].map(([key,label])=>`<button type="button" class="session-filter ${filter===key?'active':''}" data-session-filter="${key}">${label} (${counts[key]})</button>`).join('');
-  const lane=(key,title,helper)=>{
-    if(filter!=='all'&&filter!==key)return '';
-    const rows=groups[key];
-    const laneClass={registered:'lane-registered',missing:'lane-missing',attention:'lane-attention'}[key]||'';
-    return `<section class="class-session-lane ${laneClass}"><header><div><span>${title}</span><small>${helper}</small></div><b>${rows.length}</b></header><div class="class-session-lane-list">${rows.length?rows.map(row=>learnerCard(row,role,getManagerActions)).join(''):`<div class="class-lane-empty">Không có học sinh</div>`}</div></section>`;
+  const buckets={
+    all:summary.rows,
+    registered:summary.rows.filter(row=>row.bucket!=='missing'),
+    missing:summary.rows.filter(row=>row.bucket==='missing'),
+    attention:summary.rows.filter(row=>row.bucket==='attention'),
+    device:summary.rows.filter(row=>row.registration&&row.registration.usesElectronicDevice===true),
+    'no-device':summary.rows.filter(row=>row.registration&&row.registration.usesElectronicDevice!==true&&row.bucket!=='missing')
   };
-  return `<div class="session-detail-v850"><div class="session-detail-toolbar"><div><span class="v850-section-kicker">CHI TIẾT BUỔI</span><h3>${esc(session?.label||'Buổi tự học')}</h3></div><div class="session-filter-bar">${tabs}</div></div>
-    <div class="class-session-board ${filter==='all'?'show-all':'show-one'}">${lane('registered','Đã đăng ký','Đăng ký đã có nội dung và không cần xử lý ngay')}${lane('missing','Chưa đăng ký','Chưa có đăng ký hợp lệ cho buổi này')}${lane('attention','Cần xử lý','Chờ duyệt, lỗi AI hoặc báo cáo cần giáo viên xem')}</div>
+  const counts=Object.fromEntries(Object.entries(buckets).map(([key,rows])=>[key,rows.length]));
+  const filters=[
+    ['all','Tất cả'],['registered','Đã đăng ký'],['missing','Chưa đăng ký'],['attention','Cần xử lý'],['device','Có thiết bị'],['no-device','Không thiết bị']
+  ];
+  const tabs=filters.map(([key,label])=>`<button type="button" class="session-filter ${filter===key?'active':''}" data-session-filter="${key}">${label} (${counts[key]||0})</button>`).join('');
+  const visible=buckets[filter]||buckets.all;
+  const completed=summary.total?Math.round(summary.registered/summary.total*100):0;
+  return `<div class="session-detail-v850">
+    <div class="session-detail-toolbar"><div><span class="v850-section-kicker">CHI TIẾT BUỔI</span><h3>${esc(session?.label||'Buổi tự học')}</h3><p>${summary.total} học sinh · ${completed}% đã có đăng ký</p></div></div>
+    <div class="session-detail-summary">
+      <span class="is-total"><small>Sĩ số</small><b>${summary.total}</b></span>
+      <span class="is-registered"><small>Đã đăng ký</small><b>${summary.registered}</b></span>
+      <span class="is-missing"><small>Chưa đăng ký</small><b>${summary.missing}</b></span>
+      <span class="is-attention"><small>Cần xử lý</small><b>${summary.attention}</b></span>
+    </div>
+    <div class="session-filter-shell"><div><span class="v850-section-kicker">LỌC DANH SÁCH</span><small>Chỉ hiển thị nhóm cần xem; danh sách luôn dùng toàn bộ chiều ngang.</small></div><div class="session-filter-bar">${tabs}</div></div>
+    <div class="session-detail-list">${visible.length?visible.map(row=>learnerCard(row,role,getManagerActions)).join(''):`<div class="session-list-empty">Không có học sinh phù hợp với bộ lọc này.</div>`}</div>
   </div>`;
 }

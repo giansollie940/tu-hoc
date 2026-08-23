@@ -16,9 +16,9 @@ import {
   renderMissingRegistrationsPage,
   renderRevisionIssuesPage as renderRevisionIssuesPageV850
 } from "./renderers/class-pages.js";
-import { initOwlPet } from "./ui/owl-pet.js?v=8.5.1";
-import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.1";
-import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.1";
+import { initOwlPet } from "./ui/owl-pet.js?v=8.5.2";
+import { createQuoteRotator } from "./ui/quote-rotation.js?v=8.5.2";
+import { getWeekLifecycle } from "./features/weeks/week-lifecycle.js?v=8.5.2";
 import { friendlyAppError } from "./utils/error-map.js";
 
 (async () => {
@@ -199,6 +199,7 @@ import { friendlyAppError } from "./utils/error-map.js";
       ["comment",/nhận xét|bình luận|comment/],
       ["warning",/báo lỗi|bổ sung|chưa đúng|warning/],
       ["today",/hôm nay|tuần theo ngày/],
+      ["open",/xem|chi tiết|mở tuần|mở lớp/],
       ["copy",/sao chép|copy/],
       ["filter",/xóa lọc|lọc|filter/],
       ["send",/gửi|send/]
@@ -221,6 +222,17 @@ import { friendlyAppError } from "./utils/error-map.js";
       if(!iconName)return;
       if(!button.querySelector(":scope > .ui-icon")){
         button.insertAdjacentHTML("afterbegin",uiIcon(iconName,"action-icon"));
+      }
+      const toneByIcon={
+        copy:"info",open:"info",comment:"info",
+        edit:"warning",warning:"warning",
+        restore:"success",check:"success",
+        delete:"danger",
+        key:"violet",export:"teal",refresh:"teal"
+      };
+      const tone=toneByIcon[iconName];
+      if(tone&&(button.classList.contains("btn-ghost")||button.classList.contains("mini-icon-btn"))){
+        button.classList.add(`btn-tone-${tone}`);
       }
       button.classList.add("btn-iconized");
     });
@@ -2101,6 +2113,7 @@ import { friendlyAppError } from "./utils/error-map.js";
             filter,
             getManagerActions:registrationManagerActions
           }));
+          decorateActionButtons(modalBody);
 
           modalBody.querySelectorAll("[data-session-filter]").forEach(filterButton=>{
             filterButton.addEventListener("click",()=>renderDetails(filterButton.dataset.sessionFilter));
@@ -2455,7 +2468,7 @@ import { friendlyAppError } from "./utils/error-map.js";
     });
 
     content.querySelectorAll(".week-deadline-mode").forEach(sel=>sel.addEventListener("change",()=>{
-      const row=sel.closest(".week-row");
+      const row=sel.closest(".week-accordion-card");
       const input=row?.querySelector(".week-deadline");
       if(input)input.disabled=sel.value!=="specific";
       const w=state.weeks.find(x=>x.id===sel.dataset.id);

@@ -678,11 +678,12 @@
   }
 
   function mapClassWeek(base,row){
+    const explicitSpecific=row?.deadline_mode==="specific"&&Boolean(row?.registration_deadline);
     return mapWeek({
       ...base,
       status:row?.status??base.status,
-      deadline_mode:row?.deadline_mode??base.deadline_mode,
-      registration_deadline:row?.registration_deadline??base.registration_deadline,
+      deadline_mode:explicitSpecific?"specific":"per_session_20",
+      registration_deadline:explicitSpecific?(row?.registration_deadline||null):null,
       note:row?.note??base.note
     });
   }
