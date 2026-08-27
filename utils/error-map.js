@@ -1,2 +1,0 @@
-const MAP={SECURITY_REGISTRATION:'Thao tác bị từ chối do quyền, trạng thái tuần hoặc deadline.',DUPLICATE_REGISTRATION:'Tiết này đã có đăng ký.',CLASS_FORBIDDEN:'Bạn chưa được phân quyền lớp này.',RATE_LIMITED:'Bạn thao tác quá nhanh. Vui lòng thử lại sau.',INACTIVE_PROFILE:'Tài khoản đã bị khóa.'};
-export function friendlyAppError(error){const code=String(error?.code||'UNKNOWN');return {code,message:MAP[code]||String(error?.message||'Đã xảy ra lỗi.')};}
