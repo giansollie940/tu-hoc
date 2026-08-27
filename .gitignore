@@ -1,0 +1,4 @@
+tools/created-accounts.csv
+.env
+.env.*
+tools/accounts-real.csv
