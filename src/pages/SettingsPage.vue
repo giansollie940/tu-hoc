@@ -15,6 +15,7 @@ import { useLegacyMutationRuntime } from '../features/shared/useLegacyMutationRu
 import { saveSettingsMutation } from '../features/settings/settings-mutations'
 import { legacyApi } from '../services/legacy-supabase'
 import { validateAvatarFile } from '../features/profile/avatar-image.js'
+import { appDialog } from '../features/shared/app-dialog'
 
 const auth=useAuthStore(),context=useContextStore(),preferences=usePreferencesStore(),createRuntime=useLegacyMutationRuntime(),route=useRoute()
 const isLearner=computed(()=>auth.currentUser?.role==='student'||auth.currentUser?.role==='monitor')
@@ -40,7 +41,7 @@ function chooseAvatar(){avatarInput.value?.click()}
 async function onAvatarFile(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0]??null;if(!file)return;const result=validateAvatarFile(file);if(!result.ok){personalStatus.value='error';personalMessage.value=result.message;input.value='';return}personalStatus.value='idle';personalMessage.value='';if(file.type==='image/gif'){try{await auth.uploadAvatar(file);personalStatus.value='success';personalMessage.value='Đã cập nhật GIF đại diện động.'}catch(error){personalStatus.value='error';personalMessage.value=error instanceof Error?error.message:'Không lưu được GIF đại diện.'}finally{input.value=''};return}avatarEditorFile.value=file}
 function closeAvatarEditor(){avatarEditorFile.value=null;if(avatarInput.value)avatarInput.value.value=''}
 async function saveAvatar(blob:Blob){personalStatus.value='idle';personalMessage.value='';try{await auth.uploadAvatar(blob);personalStatus.value='success';personalMessage.value='Đã cập nhật ảnh đại diện.';closeAvatarEditor()}catch(error){personalStatus.value='error';personalMessage.value=error instanceof Error?error.message:'Không lưu được ảnh đại diện.'}}
-async function removeAvatar(){if(!auth.currentUser?.avatarPath)return;if(!window.confirm('Xóa ảnh đại diện và quay lại ảnh chữ viết tắt?'))return;personalStatus.value='idle';personalMessage.value='';try{await auth.deleteAvatar();personalStatus.value='success';personalMessage.value='Đã xóa ảnh đại diện.'}catch(error){personalStatus.value='error';personalMessage.value=error instanceof Error?error.message:'Không xóa được ảnh đại diện.'}}
+async function removeAvatar(){if(!auth.currentUser?.avatarPath)return;if(!await appDialog.confirm({title:'Xóa ảnh đại diện',body:'Xóa ảnh đại diện và quay lại ảnh chữ viết tắt?',confirmLabel:'Xóa ảnh',danger:true}))return;personalStatus.value='idle';personalMessage.value='';try{await auth.deleteAvatar();personalStatus.value='success';personalMessage.value='Đã xóa ảnh đại diện.'}catch(error){personalStatus.value='error';personalMessage.value=error instanceof Error?error.message:'Không xóa được ảnh đại diện.'}}
 
 </script>
 
@@ -68,7 +69,7 @@ async function removeAvatar(){if(!auth.currentUser?.avatarPath)return;if(!window
             <div><dt>Mã đăng nhập</dt><dd>{{ auth.currentUser?.code }}</dd></div>
           </dl>
         </div>
-        <form class="password-form" @submit.prevent="changePassword">
+        <form class="password-form" novalidate @submit.prevent="changePassword">
           <div class="choice-label"><KeyRound/><b>Đổi mật khẩu</b></div>
           <div class="password-grid"><label>Mật khẩu hiện tại<input v-model="currentPassword" type="password" autocomplete="current-password"></label><label>Mật khẩu mới<input v-model="newPassword" type="password" autocomplete="new-password" minlength="8"></label></div>
           <AppButton type="submit" variant="secondary" :loading="passwordBusy">Đổi mật khẩu</AppButton>

@@ -57,6 +57,29 @@ export function isRevisionOverdue(
   return Number.isFinite(start) && nowMs >= start
 }
 
+/**
+ * Đăng ký vẫn đang "chờ duyệt" khi buổi tự học đã bắt đầu: GV/AI không kịp
+ * duyệt và cũng không kịp yêu cầu HS sửa trước giờ học. Không ai bấm nút nào
+ * cả — chỉ cần qua giờ bắt đầu tiết là đăng ký tự rơi vào diện này, giống cách
+ * isRevisionOverdue() vốn hoạt động cho ca "HS không sửa kịp".
+ *
+ * Phía GV, đăng ký này hiện trong mục Báo cáo lỗi. Phía HS/cán sự, nhãn là
+ * "Không duyệt" (không phải "Báo cáo lỗi") vì đây không phải lỗi của HS: HS đã
+ * nộp đúng hạn, chỉ là không được duyệt kịp.
+ *
+ * 'draft' cố ý không tính: bản nháp chưa từng được gửi đi nên thuộc diện
+ * "chưa đăng ký", không phải chuyện duyệt hay không duyệt.
+ */
+export function isUnapprovedAtSessionStart(
+  registration: RegistrationRecord | null,
+  { week, periods, nowMs }: { week: WeekRecord; periods: PeriodRecord[]; nowMs: number },
+): boolean {
+  if (!registration || registration.isDeleted === true) return false
+  if (registration.status !== 'submitted') return false
+  const start = sessionStartMs({ week, dow: registration.dow, period: registration.period, periods })
+  return Number.isFinite(start) && nowMs >= start
+}
+
 export interface RegistrationEligibility {
   regularNewAllowed: boolean
   editable: boolean
@@ -124,7 +147,21 @@ export function effectiveRegistrationStatus(
   options: { week: WeekRecord; periods: PeriodRecord[]; nowMs: number },
 ): string {
   if (!registration) return 'missing'
-  return isRevisionOverdue(registration, options) ? 'revision_overdue' : registration.status
+  if (isRevisionOverdue(registration, options)) return 'revision_overdue'
+  if (isUnapprovedAtSessionStart(registration, options)) return 'not_approved'
+  return registration.status
+}
+
+/**
+ * Hai loại cùng nằm trong mục Báo cáo lỗi của GV, nhưng giữ nhãn riêng để HS
+ * biết trách nhiệm thuộc về ai: 'revision_overdue' là HS không sửa kịp,
+ * 'not_approved' là không được duyệt kịp.
+ */
+export function isRegistrationIssue(
+  registration: RegistrationRecord | null,
+  options: { week: WeekRecord; periods: PeriodRecord[]; nowMs: number },
+): boolean {
+  return isRevisionOverdue(registration, options) || isUnapprovedAtSessionStart(registration, options)
 }
 
 
@@ -235,7 +272,6 @@ export function aiReviewHistoryLabel(registration: RegistrationRecord | null | u
 export interface RegistrationManagerActions {
   canApprove: boolean
   canRequestRevision: boolean
-  canRejectOverdue: boolean
   canComment: boolean
   canDelete: boolean
   started: boolean
@@ -256,19 +292,34 @@ export function registrationManagerActions({
   const start = sessionStartMs({ week, dow: registration.dow, period: registration.period, periods })
   const started = Number.isFinite(start) && nowMs >= start
   const reported = isRevisionOverdue(registration, { week, periods, nowMs })
+  // Buổi học đã bắt đầu mà đăng ký vẫn "chờ duyệt" thì nó đã thành mục Báo cáo
+  // lỗi, không còn là việc đang chờ GV xử lý nữa -- duyệt một buổi đã diễn ra
+  // xong là vô nghĩa. Bộ lọc "Cần xử lý" và ô đếm của trang Duyệt đăng ký đều
+  // đi qua canApprove nên chỉ cần chặn ở đây là cả hai chỗ cùng đúng.
+  const unapprovedAtStart = isUnapprovedAtSessionStart(registration, { week, periods, nowMs })
   return {
-    canApprove: !reported && needsTeacherAction(registration),
+    canApprove: !reported && !unapprovedAtStart && needsTeacherAction(registration),
     canRequestRevision: !reported && !started && ['submitted', 'needs_revision', 'approved'].includes(registration.status),
-    // "Chờ duyệt" nhưng buổi học đã bắt đầu trước khi GV/AI kịp xử lý:
-    // request_registration_revision() tự chặn một khi đã started (không thể
-    // yêu cầu HS sửa cho buổi đã qua), nên GV cần một lối "Không duyệt" dứt
-    // điểm riêng thay vì chỉ còn Duyệt (không hợp lý) hoặc Xóa (mất dấu vết).
-    canRejectOverdue: started && needsTeacherAction(registration),
     canComment: true,
     canDelete: true,
     started,
     reported,
   }
+}
+
+/**
+ * Việc thật sự còn chờ giáo viên: chờ duyệt, AI không giữ, và buổi tự học
+ * **chưa bắt đầu**. Khác với needsTeacherAction() — hàm đó không biết tuần nên
+ * không biết buổi đã bắt đầu chưa, và dùng nó để đếm hàng đợi thì đăng ký đã
+ * chuyển sang Báo cáo lỗi vẫn nằm mãi trong hàng chờ GV, đồng thời Cú vẫn nhắc.
+ * Mọi ô đếm "cần GV xử lý" và mọi lời nhắc của Cú phải đi qua đây.
+ */
+export function isTeacherQueueItem(
+  registration: RegistrationRecord | null | undefined,
+  options: { week: WeekRecord; periods: PeriodRecord[]; nowMs: number },
+): boolean {
+  if (!registration) return false
+  return registrationManagerActions({ registration, ...options }).canApprove
 }
 
 export function matchesApprovalFilter(

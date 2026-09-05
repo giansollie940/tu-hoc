@@ -11,6 +11,7 @@ import AdminTeacherCard from '../components/admin/AdminTeacherCard.vue'
 import AdminStudentCard from '../components/admin/AdminStudentCard.vue'
 import AdminSchoolYearCard from '../components/admin/AdminSchoolYearCard.vue'
 import AdminAuditLog from '../components/admin/AdminAuditLog.vue'
+import AdminRecycleBin from '../components/admin/AdminRecycleBin.vue'
 import AdminUserDialog from '../components/admin/AdminUserDialog.vue'
 import AdminPasswordDialog from '../components/admin/AdminPasswordDialog.vue'
 import AdminClassDialog from '../components/admin/AdminClassDialog.vue'
@@ -25,13 +26,14 @@ import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import type { DirectoryUser, TeacherUserChanges } from '../types/legacy'
 import type { TimetableConfig } from '../features/timetable/timetable-types'
+import { appDialog } from '../features/shared/app-dialog'
 
 const auth=useAuthStore()
 const context=useContextStore()
 const queryClient=useQueryClient()
 const route=useRoute()
 const directory=useAdminDirectory()
-const validTabs=['overview','years','classes','students','teachers','permissions','audit']
+const validTabs=['overview','years','classes','students','teachers','permissions','recycle','audit']
 const tab=computed(()=>{const value=String(route.query.tab??'overview');return validTabs.includes(value)?value:'overview'})
 
 const busyKey=ref<string|null>(null)
@@ -108,14 +110,17 @@ function setTimetableFeedback(input:Omit<TimetableFeedback,'token'>){timetableFe
 function timetableBusyForYear(yearId:string){const key=busyKey.value;if(!key?.startsWith('timetable:'))return false;const target=key.slice('timetable:'.length);return target===yearId||yearTemplates(yearId).some(item=>item.id===target)}
 
 async function submitYear(){
-  const name=yearForm.name.trim();if(!name||!yearForm.startDate||!yearForm.endDate)return
+  // Form dùng novalidate nên phải tự nói ra chỗ còn thiếu; nếu chỉ return thì
+  // bấm "Tạo năm học" sẽ không phản hồi gì.
+  const name=yearForm.name.trim()
+  if(!name||!yearForm.startDate||!yearForm.endDate){status.value='error';statusMessage.value='Hãy nhập đủ tên năm học, ngày bắt đầu tuần 1 và ngày kết thúc.';return}
   if(yearForm.endDate<yearForm.startDate){status.value='error';statusMessage.value='Ngày kết thúc năm học phải sau ngày bắt đầu tuần 1.';return}
   let createdId=''
   try{await run('create-year',async()=>{const result=await createSchoolYear(runtime(),{name,startDate:yearForm.startDate,endDate:yearForm.endDate,setActive:yearForm.setActive});createdId=String((result as {schoolYearId?:unknown})?.schoolYearId??'')},'Đã tạo năm học và các tuần cơ sở.') }catch{return}
   if(createdId&&yearForm.setActive){context.selectSchoolYear(createdId);await auth.reload(null,createdId);context.hydrate(auth.legacyState)}
   yearForm.name='';yearForm.startDate='';yearForm.endDate='';yearForm.setActive=true;showYearForm.value=false
 }
-async function activateYear(id:string){if(!window.confirm('Đặt năm học này thành năm học đang hoạt động?'))return;try{await run(`year:${id}`,()=>setActiveSchoolYear(runtime(),id),'Đã chuyển năm học đang hoạt động.')}catch{return};context.selectSchoolYear(id);await auth.reload(null,id);context.hydrate(auth.legacyState)}
+async function activateYear(id:string){if(!await appDialog.confirm({title:'Đổi năm học đang hoạt động',body:'Đặt năm học này thành năm học đang hoạt động?',confirmLabel:'Đặt làm năm học hiện hành'}))return;try{await run(`year:${id}`,()=>setActiveSchoolYear(runtime(),id),'Đã chuyển năm học đang hoạt động.')}catch{return};context.selectSchoolYear(id);await auth.reload(null,id);context.hydrate(auth.legacyState)}
 function yearWeeks(yearId:string){return data.value.weeks.filter(item=>item.schoolYearId===yearId).sort((a,b)=>a.number-b.number)}
 function yearTemplates(yearId:string){return data.value.timetableTemplates.filter(item=>item.schoolYearId===yearId)}
 function yearVersions(yearId:string){const ids=new Set(yearTemplates(yearId).map(item=>item.id));return data.value.timetableVersions.filter(item=>ids.has(item.templateId))}
@@ -134,11 +139,11 @@ async function saveYearTimetableVersion(input:{templateId:string;config:Timetabl
   catch(error){setTimetableFeedback({schoolYearId,state:'error',message:error instanceof Error?error.message:'Không lưu được phiên bản TKB.',selectedTemplateId:input.templateId})}
 }
 async function assignYearTimetable(input:{classId:string;schoolYearId:string;templateVersionId:string;effectiveFrom:string;effectiveTo:string}){try{await run(`timetable-assignment:${input.classId}`,()=>assignTimetableTemplate(runtime(),input),'Đã gán mẫu TKB theo khoảng hiệu lực.')}catch{}}
-async function submitClass(){const code=classForm.code.trim().toUpperCase(),name=classForm.name.trim();if(!code||!name||!selectedYearId.value)return;try{await run('create-class',()=>createClass(runtime(),{code,name,schoolYearId:selectedYearId.value}),'Đã tạo lớp.')}catch{return};classForm.code='';classForm.name='';showClassForm.value=false}
+async function submitClass(){const code=classForm.code.trim().toUpperCase(),name=classForm.name.trim();if(!code||!name){status.value='error';statusMessage.value='Hãy nhập đủ mã lớp và tên lớp.';return}if(!selectedYearId.value){status.value='error';statusMessage.value='Hãy chọn năm học trước khi tạo lớp.';return}try{await run('create-class',()=>createClass(runtime(),{code,name,schoolYearId:selectedYearId.value}),'Đã tạo lớp.')}catch{return};classForm.code='';classForm.name='';showClassForm.value=false}
 function editClass(id:string){editingClass.value=data.value.classes.find(row=>row.id===id)??null;classDialogError.value=''}
 async function saveClassDialog(payload:{code:string;name:string}){const item=editingClass.value;if(!item)return;try{await run(`class:${item.id}`,()=>updateClass(runtime(),item.id,payload),'Đã cập nhật lớp.');editingClass.value=null}catch(error){classDialogError.value=error instanceof Error?error.message:'Không cập nhật được lớp.'}}
-async function toggleClass(id:string){const item=data.value.classes.find(row=>row.id===id);if(!item)return;if(item.active&&!window.confirm('Khóa lớp này? Backend chỉ cho phép khi trạng thái hợp lệ.'))return;try{await run(`class:${id}`,()=>updateClass(runtime(),id,{active:!item.active}),item.active?'Đã khóa lớp.':'Đã kích hoạt lớp.')}catch{}}
-async function removeClass(id:string){const item=data.value.classes.find(row=>row.id===id);if(!item?.canDelete||!window.confirm(`Xóa vĩnh viễn lớp rỗng ${item.code}?`))return;try{await run(`class:${id}`,()=>deleteClass(runtime(),id),'Đã xóa lớp rỗng.')}catch{}}
+async function toggleClass(id:string){const item=data.value.classes.find(row=>row.id===id);if(!item)return;if(item.active&&!await appDialog.confirm({title:'Khóa lớp',body:'Khóa lớp này? Backend chỉ cho phép khi trạng thái hợp lệ.',confirmLabel:'Khóa lớp',danger:true}))return;try{await run(`class:${id}`,()=>updateClass(runtime(),id,{active:!item.active}),item.active?'Đã khóa lớp.':'Đã kích hoạt lớp.')}catch{}}
+async function removeClass(id:string){const item=data.value.classes.find(row=>row.id===id);if(!item?.canDelete)return;if(!await appDialog.confirm({title:'Xóa lớp rỗng',body:`Xóa vĩnh viễn lớp rỗng ${item.code}? Thao tác không thể khôi phục.`,confirmLabel:'Xóa vĩnh viễn',danger:true}))return;try{await run(`class:${id}`,()=>deleteClass(runtime(),id),'Đã xóa lớp rỗng.')}catch{}}
 
 function openCreateLearner(){userDialogKind.value='learner';editingLearner.value=null;editingTeacher.value=null;userDialogError.value='';userDialogOpen.value=true}
 function openEditLearner(user:DirectoryUser){userDialogKind.value='learner';editingLearner.value=user;editingTeacher.value=null;userDialogError.value='';userDialogOpen.value=true}
@@ -166,15 +171,15 @@ async function toggleStudent(user:DirectoryUser){try{await run(`student:${user.i
 async function toggleTeacher(id:string){const teacher=data.value.teachers.find(row=>row.id===id);if(!teacher)return;try{await run(`teacher:${id}`,()=>updateTeacher(runtime(),id,{changeCode:false,code:teacher.code,fullName:teacher.fullName,role:'teacher',classId:null,active:!teacher.active}),teacher.active?'Đã khóa giáo viên.':'Đã mở khóa giáo viên.')}catch{}}
 function openPassword(target:{id:string;code:string;fullName?:string;name?:string}){passwordError.value='';passwordTarget.value={id:target.id,code:target.code,name:target.fullName??target.name??target.code}}
 async function savePassword(password:string){if(!passwordTarget.value)return;const target=passwordTarget.value;busyKey.value=`password:${target.id}`;status.value='saving';statusMessage.value='Đang đặt lại mật khẩu…';try{await resetManagedPassword(target.id,password);status.value='success';statusMessage.value=`Đã đặt lại mật khẩu cho ${target.code}.`;passwordTarget.value=null}catch(error){passwordError.value=error instanceof Error?error.message:'Không đặt lại được mật khẩu.';status.value='error';statusMessage.value=passwordError.value}finally{busyKey.value=null}}
-function hardDeleteConfirmation(code:string,label:string){const confirmCode=window.prompt(`Xóa vĩnh viễn ${label}. Nhập mã ${code}:`)?.trim().toUpperCase();if(confirmCode!==code.toUpperCase())return null;const phrase=window.prompt('Thao tác không thể khôi phục. Nhập chính xác: XÓA VĨNH VIỄN')?.trim().toUpperCase();if(phrase!=='XÓA VĨNH VIỄN')return null;return{confirmCode,phrase}}
-async function hardDeleteLearner(user:DirectoryUser){const confirmation=hardDeleteConfirmation(user.code,user.fullName||user.code);if(!confirmation)return;try{await run(`hard:${user.id}`,()=>hardDeleteUser(runtime(),user.id,confirmation.confirmCode,confirmation.phrase),'Đã xóa vĩnh viễn học sinh/cán sự.')}catch{}}
-async function hardDeleteTeacher(id:string){const teacher=data.value.teachers.find(row=>row.id===id);if(!teacher)return;if(assignedClasses(id).length){status.value='error';statusMessage.value='Hãy gỡ toàn bộ phân công lớp trước khi xóa vĩnh viễn giáo viên.';return}const confirmation=hardDeleteConfirmation(teacher.code,teacher.fullName||teacher.code);if(!confirmation)return;try{await run(`hard:${id}`,()=>hardDeleteUser(runtime(),id,confirmation.confirmCode,confirmation.phrase),'Đã xóa vĩnh viễn giáo viên.')}catch{}}
+async function hardDeleteConfirmation(code:string,label:string){const typedCode=await appDialog.prompt({title:`Xóa vĩnh viễn ${label}`,body:'Bước 1/2 · Thao tác này KHÔNG THỂ khôi phục.',label:`Nhập mã ${code} để xác nhận`,placeholder:code,confirmLabel:'Tiếp tục',danger:true,validate:value=>value.trim().toUpperCase()===code.toUpperCase()?null:'Mã xác nhận chưa đúng.'});if(!typedCode)return null;const typedPhrase=await appDialog.prompt({title:`Xóa vĩnh viễn ${label}`,body:'Bước 2/2 · Xác nhận lần cuối.',label:'Nhập chính xác: XÓA VĨNH VIỄN',placeholder:'XÓA VĨNH VIỄN',confirmLabel:'Xóa vĩnh viễn',danger:true,validate:value=>value.trim().toUpperCase()==='XÓA VĨNH VIỄN'?null:'Cụm từ xác nhận chưa đúng.'});if(!typedPhrase)return null;return{confirmCode:typedCode.trim().toUpperCase(),phrase:typedPhrase.trim().toUpperCase()}}
+async function hardDeleteLearner(user:DirectoryUser){const confirmation=await hardDeleteConfirmation(user.code,user.fullName||user.code);if(!confirmation)return;try{await run(`hard:${user.id}`,()=>hardDeleteUser(runtime(),user.id,confirmation.confirmCode,confirmation.phrase),'Đã xóa vĩnh viễn học sinh/cán sự.')}catch{}}
+async function hardDeleteTeacher(id:string){const teacher=data.value.teachers.find(row=>row.id===id);if(!teacher)return;if(assignedClasses(id).length){status.value='error';statusMessage.value='Hãy gỡ toàn bộ phân công lớp trước khi xóa vĩnh viễn giáo viên.';return}const confirmation=await hardDeleteConfirmation(teacher.code,teacher.fullName||teacher.code);if(!confirmation)return;try{await run(`hard:${id}`,()=>hardDeleteUser(runtime(),id,confirmation.confirmCode,confirmation.phrase),'Đã xóa vĩnh viễn giáo viên.')}catch{}}
 async function permission(payload:{classId:string;teacherId:string;enabled:boolean}){const key=`${payload.classId}:${payload.teacherId}`;try{await run(key,()=>assignTeacher(runtime(),payload.classId,payload.teacherId,payload.enabled),'Đã cập nhật phân quyền giáo viên.')}catch{}}
 </script>
 
 <template>
   <div class="page-stack admin-page">
-    <header class="admin-header"><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
+    <header class="admin-header"><div><span class="page-context"><ShieldCheck/>ROOT ADMIN · QUẢN TRỊ HỆ THỐNG</span><h1>{{ tab==='overview'?'Tổng quan hệ thống':tab==='years'?'Năm học':tab==='classes'?'Lớp học':tab==='students'?'Học sinh':tab==='teachers'?'Giáo viên':tab==='permissions'?'Phân quyền':tab==='recycle'?'Thùng rác':'Nhật ký hệ thống' }}</h1><p>Admin quản lý cấu trúc, tài khoản và quyền hệ thống; nghiệp vụ vận hành lớp thuộc Giáo viên.</p></div><AppButton v-if="tab!=='audit'" variant="secondary" :loading="directory.isFetching.value" @click="directory.refetch()"><RefreshCw/>Làm mới</AppButton></header>
     <InlineStatus :state="status" :message="statusMessage"/>
 
     <template v-if="tab==='overview'">
@@ -184,13 +189,13 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
 
     <template v-else-if="tab==='years'">
       <div class="section-actions"><div><h2>Năm học</h2><p>{{ schoolYearCount }} năm học. Mỗi năm có thể có nhiều mẫu thời khóa biểu.</p></div><AppButton @click="showYearForm=!showYearForm"><Plus/>Tạo năm học</AppButton></div>
-      <AppCard v-if="showYearForm" padding="md"><form class="quick-form year-form" @submit.prevent="submitYear"><label>Tên năm học<input v-model="yearForm.name" required maxlength="40" placeholder="2027–2028"></label><label>Ngày bắt đầu tuần 1<input v-model="yearForm.startDate" type="date" required></label><label>Ngày kết thúc năm học<input v-model="yearForm.endDate" type="date" required></label><label class="check-field"><input v-model="yearForm.setActive" type="checkbox">Đặt là năm học đang hoạt động</label><AppButton type="submit" :loading="busyKey==='create-year'">Tạo năm học</AppButton></form></AppCard>
+      <AppCard v-if="showYearForm" padding="md"><form class="quick-form year-form" novalidate @submit.prevent="submitYear"><label>Tên năm học<input v-model="yearForm.name" required maxlength="40" placeholder="2027–2028"></label><label>Ngày bắt đầu tuần 1<input v-model="yearForm.startDate" type="date" required></label><label>Ngày kết thúc năm học<input v-model="yearForm.endDate" type="date" required></label><label class="check-field"><input v-model="yearForm.setActive" type="checkbox">Đặt là năm học đang hoạt động</label><AppButton type="submit" :loading="busyKey==='create-year'">Tạo năm học</AppButton></form></AppCard>
       <section class="year-grid"><AdminSchoolYearCard v-for="item in mergedSchoolYears" :key="item.id" :item="item" :weeks="yearWeeks(item.id)" :classes="classesForYear(item.id)" :templates="yearTemplates(item.id)" :versions="yearVersions(item.id)" :assignments="yearTimetableAssignments(item.id)" :busy="busyKey===`year:${item.id}`" :busy-week-id="busyKey?.startsWith('week:')?busyKey.slice(5):null" :busy-timetable="timetableBusyForYear(item.id)" :timetable-feedback="timetableFeedback?.schoolYearId===item.id?timetableFeedback:undefined" :busy-assignment="Boolean(busyKey?.startsWith('timetable-assignment:'))" @activate="activateYear" @save-week="saveYearWeek" @create-template="createYearTimetable" @save-version="saveYearTimetableVersion" @assign-template="assignYearTimetable"/></section>
     </template>
 
     <template v-else-if="tab==='classes'">
       <div class="section-actions"><div><h2>Lớp học · {{ selectedYear?.name||'—' }}</h2><p>{{ yearClasses.length }} lớp trong năm học đang chọn.</p></div><AppButton :disabled="!selectedYearId" @click="showClassForm=!showClassForm"><Plus/>Tạo lớp</AppButton></div>
-      <AppCard v-if="showClassForm" padding="md"><form class="quick-form" @submit.prevent="submitClass"><label>Mã lớp<input v-model="classForm.code" required maxlength="40" placeholder="7A1"></label><label>Tên lớp<input v-model="classForm.name" required maxlength="120" placeholder="Lớp 7A1"></label><AppButton type="submit" :loading="busyKey==='create-class'">Tạo lớp</AppButton></form></AppCard>
+      <AppCard v-if="showClassForm" padding="md"><form class="quick-form" novalidate @submit.prevent="submitClass"><label>Mã lớp<input v-model="classForm.code" required maxlength="40" placeholder="7A1"></label><label>Tên lớp<input v-model="classForm.name" required maxlength="120" placeholder="Lớp 7A1"></label><AppButton type="submit" :loading="busyKey==='create-class'">Tạo lớp</AppButton></form></AppCard>
       <section class="class-grid"><AdminClassCard v-for="item in yearClasses" :key="item.id" :item="item" :teachers="assignedTeachers(item.id)" :busy="busyKey===`class:${item.id}`" @edit="editClass(item.id)" @toggle="toggleClass(item.id)" @delete="removeClass(item.id)"/></section>
     </template>
 
@@ -208,6 +213,8 @@ async function permission(payload:{classId:string;teacherId:string;enabled:boole
     <template v-else-if="tab==='permissions'">
       <div class="section-actions"><div><h2>Phân quyền · {{ selectedYear?.name||'—' }}</h2><p>Bật/tắt quyền phụ trách từng lớp trong năm học đang chọn.</p></div></div><AppCard padding="lg"><PermissionMatrix :classes="activeClasses" :teachers="data.teachers" :assignments="data.assignments" :busy-key="busyKey" @change="permission"/></AppCard>
     </template>
+
+    <AdminRecycleBin v-else-if="tab==='recycle'"/>
 
     <AdminAuditLog v-else-if="tab==='audit'"/>
 

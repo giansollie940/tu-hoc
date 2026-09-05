@@ -349,16 +349,57 @@
     return data===true;
   }
 
-  async function rejectOverdueRegistration(registrationId,teacherComment){
+  // Thùng rác của Admin: xem và khôi phục thứ GV đã xoá mềm. Quyền được kiểm ở
+  // trong RPC (is_root_admin), client chỉ gọi.
+  async function adminListDeletedRegistrations(limit=200){
     const sb=requireClient();
-    const comment=String(teacherComment||"").trim();
-    if(!isUuid(registrationId)) throw new Error("Đăng ký không hợp lệ.");
-    if(!comment) throw new Error("Vui lòng nhập lý do không duyệt.");
+    const {data,error}=await sb.rpc("admin_list_deleted_registrations",{p_limit:limit});
+    if(error) throw error;
+    return (data||[]).map(row=>({
+      id:row.id,
+      classId:row.class_id||null,
+      studentId:row.student_id||null,
+      studentCode:row.student_code||"",
+      studentName:row.student_name||"",
+      weekNumber:row.week_number??null,
+      dow:Number(row.weekday??0),
+      period:Number(row.period_number??0),
+      content:row.content||"",
+      status:row.status||"",
+      deletedAt:row.deleted_at||null,
+      deletedByName:row.deleted_by_name||"",
+      canRestore:row.can_restore===true,
+      blockedReason:row.blocked_reason||""
+    }));
+  }
 
-    const {data,error}=await sb.rpc("reject_overdue_registration",{
-      p_registration_id:registrationId,
-      p_teacher_comment:comment
-    });
+  async function adminRestoreRegistration(registrationId){
+    const sb=requireClient();
+    if(!isUuid(registrationId)) throw new Error("Đăng ký không hợp lệ.");
+    const {data,error}=await sb.rpc("admin_restore_registration",{p_registration_id:registrationId});
+    if(error) throw error;
+    return data===true;
+  }
+
+  async function adminListDeletedUsers(limit=200){
+    const sb=requireClient();
+    const {data,error}=await sb.rpc("admin_list_deleted_users",{p_limit:limit});
+    if(error) throw error;
+    return (data||[]).map(row=>({
+      id:row.id,
+      code:row.student_code||"",
+      fullName:row.full_name||"",
+      role:row.role||"",
+      classId:row.class_id||null,
+      classCode:row.class_code||"",
+      deletedAt:row.deleted_at||null
+    }));
+  }
+
+  async function adminRestoreUser(userId){
+    const sb=requireClient();
+    if(!isUuid(userId)) throw new Error("Tài khoản không hợp lệ.");
+    const {data,error}=await sb.rpc("admin_restore_user",{p_user_id:userId});
     if(error) throw error;
     return data===true;
   }
@@ -1197,7 +1238,10 @@
     teacherListUsers,
     adminManageClasses,
     requestRegistrationRevision,
-    rejectOverdueRegistration,
+    adminListDeletedRegistrations,
+    adminRestoreRegistration,
+    adminListDeletedUsers,
+    adminRestoreUser,
     setActiveClassId,
     teacherRebaseWeeks,
     emergencyRegister,

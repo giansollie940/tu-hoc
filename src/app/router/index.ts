@@ -4,10 +4,11 @@ import { useAuthStore } from '../../stores/auth'
 import type { UserRole } from '../../types/legacy'
 import { routes } from './routes'
 import { dirtyRegistry } from '../../features/shared/dirty-registry'
+import { appDialog } from '../../features/shared/app-dialog'
 export const router=createRouter({history:createWebHashHistory(),routes})
 router.beforeEach(async(to,from)=>{
   if(from.fullPath!==to.fullPath&&dirtyRegistry.hasDirty()){
-    if(!window.confirm('Thay đổi chưa được lưu sẽ bị bỏ. Tiếp tục chuyển trang?'))return false
+    if(!await appDialog.confirm({title:'Thay đổi chưa được lưu',body:'Thay đổi chưa được lưu sẽ bị bỏ. Tiếp tục chuyển trang?',confirmLabel:'Bỏ thay đổi và chuyển trang',danger:true}))return false
     dirtyRegistry.discardAll()
   }
   const auth=useAuthStore(pinia)
