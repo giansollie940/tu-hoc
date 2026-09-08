@@ -432,8 +432,11 @@
       const start=addDaysISO(firstWeekStart,i*7);
       const naturalEnd=addDaysISO(start,4);
       const end=naturalEnd>year.end_date ? year.end_date : naturalEnd;
-      const deadlineDate=addDaysISO(start,-1);
-      const mode=old?.deadline_mode || "per_session_20";
+      // Chế độ mặc định của mọi tuần là hạn theo từng buổi: cùng giờ cấu hình
+      // nhưng rơi vào ngày liền trước ngày có buổi tự học. Chỉ giữ "specific"
+      // khi tuần cũ thực sự đã được người dùng đặt hạn riêng. Các mode legacy
+      // (ví dụ week_before_20) được chuẩn hóa về per_session_20 khi rebase.
+      const mode=old?.deadline_mode === "specific" ? "specific" : "per_session_20";
       return {
         id:old?.id||null,
         school_year_id:year.id,
@@ -442,9 +445,11 @@
         end_date:end,
         status:old?.status||"upcoming",
         deadline_mode:mode,
+        // per_session_20 không cần lưu một timestamp cấp tuần. Deadline thật
+        // được tính theo weekday của từng buổi + per_session_deadline_time.
         registration_deadline:mode==="specific" && old?.registration_deadline
           ? old.registration_deadline
-          : `${deadlineDate}T${deadlineTime}:00+07:00`,
+          : null,
         note:old?.note||null
       };
     });
