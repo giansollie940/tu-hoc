@@ -5,11 +5,14 @@ import type { DirectoryUser, UserRole } from '../../types/legacy'
 const props=defineProps<{open:boolean;user?:DirectoryUser|null;classes?:Array<{id:string;code:string;name:string}>;allowClassChange?:boolean;saving:boolean;error:string}>()
 const emit=defineEmits<{close:[];save:[value:{changeCode:boolean;code:string;fullName:string;role:UserRole;classId:string|null;active:boolean;password:string}]}>()
 const form=reactive({changeCode:false,code:'',fullName:'',role:'student' as UserRole,classId:'',active:true,password:''})
+// Khai báo trước watch immediate bên dưới, xem chú thích cùng lý do ở
+// AdminUserDialog.vue: callback chạy ngay trong setup nên tham chiếu ngược lên
+// một const khai báo sau sẽ vỡ component.
+const touched=ref(false)
 watch(()=>[props.open,props.user?.id] as const,()=>{touched.value=false;form.changeCode=!props.user;form.code=props.user?.code??'';form.fullName=props.user?.fullName??'';form.role=(props.user?.role??'student') as UserRole;form.classId=props.user?.classId??props.classes?.[0]?.id??'';form.active=props.user?.active!==false;form.password=''}, {immediate:true})
 const title=computed(()=>props.user?'Sửa tài khoản học sinh':'Thêm học sinh')
 // novalidate + tự báo lỗi: bong bóng mặc định của trình duyệt không theo theme
 // và không nói được luật mã đăng nhập; bỏ nó mà không thay thì bấm Lưu sẽ im lặng.
-const touched=ref(false)
 const codeInvalid=computed(()=>touched.value&&!/^[A-Z0-9._-]{2,32}$/.test(form.code.trim().toUpperCase()))
 const nameInvalid=computed(()=>touched.value&&!form.fullName.trim())
 function submit(){touched.value=true;const code=form.code.trim().toUpperCase(),name=form.fullName.trim();if(!/^[A-Z0-9._-]{2,32}$/.test(code)||!name)return;emit('save',{...form,code,fullName:name,classId:form.classId||null})}

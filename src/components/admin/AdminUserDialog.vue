@@ -11,6 +11,12 @@ const emit=defineEmits<{close:[];save:[value:{changeCode:boolean;code:string;ful
 const form=reactive({changeCode:false,code:'',fullName:'',role:'student' as UserRole,classId:'',active:true,password:''})
 const editing=computed(()=>Boolean(props.user))
 const title=computed(()=>`${editing.value?'Chỉnh sửa':'Tạo'} ${props.kind==='teacher'?'giáo viên':'học sinh / cán sự'}`)
+// Phải khai báo TRƯỚC watch bên dưới: watch đó có immediate:true nên callback
+// chạy ngay trong setup, mà dòng đầu của nó là touched.value=false. Nếu để khai
+// báo ở dưới thì rơi vào temporal dead zone và cả dialog vỡ ngay khi mở
+// ("Cannot access 'touched' before initialization"). TypeScript không bắt được
+// lỗi này vì nó nằm trong callback, và bản build cũng không báo gì.
+const touched=ref(false)
 watch(()=>[props.open,props.kind,(props.user as {id?:string}|null)?.id] as const,()=>{touched.value=false;
   const user=props.user as (DirectoryUser&AdminTeacherRecord)|null
   form.changeCode=!user
@@ -24,7 +30,6 @@ watch(()=>[props.open,props.kind,(props.user as {id?:string}|null)?.id] as const
 // novalidate + tự báo lỗi ngay dưới ô nhập: bong bóng mặc định của trình duyệt
 // không theo theme và không nói được luật mã đăng nhập; nếu chỉ tắt nó thì bấm
 // Lưu sẽ im lặng không phản hồi gì.
-const touched=ref(false)
 const codeInvalid=computed(()=>touched.value&&!/^[A-Z0-9._-]{2,32}$/.test(form.code.trim().toUpperCase()))
 const nameInvalid=computed(()=>touched.value&&!form.fullName.trim())
 const classInvalid=computed(()=>touched.value&&props.kind==='learner'&&!form.classId)
