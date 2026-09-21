@@ -1,0 +1,106 @@
+name: VERIFY-002 RC9 rerun
+
+on:
+  push:
+    branches: [verify002-rerun-rc9]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Verify overlay SHA
+        shell: bash
+        run: |
+          echo "85f87abc973a4028150899011977915359f6f1795a2bed2176b2b23d56fb7777  .verify002/VERIFY-002-RC9-OVERLAY.tar.gz" | sha256sum -c -
+
+      - name: Apply RC9 + VERIFY-002 overlay
+        shell: bash
+        run: tar -xzf .verify002/VERIFY-002-RC9-OVERLAY.tar.gz -C .
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: VERIFY-002 static tests
+        id: static
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/verify-002/*.test.mjs 2>&1 | tee VERIFY-002_STATIC_RERUN.log
+
+      - name: verify-feat010
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/verify-feat010.mjs 2>&1 | tee VERIFY-002_VERIFY_FEAT010.log
+
+      - name: mutate-feat010
+        id: mutate
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/mutate-feat010.mjs 2>&1 | tee VERIFY-002_MUTATE_FEAT010.log
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee VERIFY-002_TYPECHECK.log
+
+      - name: Production build
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee VERIFY-002_BUILD.log
+
+      - name: Write gate summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "static=${{ steps.static.outcome }}"
+            echo "verify-feat010=${{ steps.verify.outcome }}"
+            echo "mutate-feat010=${{ steps.mutate.outcome }}"
+            echo "typecheck=${{ steps.typecheck.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo "overlay_sha=85f87abc973a4028150899011977915359f6f1795a2bed2176b2b23d56fb7777"
+            echo "commit=${GITHUB_SHA}"
+          } | tee VERIFY-002_GATE_SUMMARY.txt
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify002-rc9-evidence
+          path: |
+            VERIFY-002_*.log
+            VERIFY-002_GATE_SUMMARY.txt
+            docs/feat-010/evidence/
+          if-no-files-found: warn
+
+      - name: Enforce all gates
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.static.outcome }}" = "success"
+          test "${{ steps.verify.outcome }}" = "success"
+          test "${{ steps.mutate.outcome }}" = "success"
+          test "${{ steps.typecheck.outcome }}" = "success"
+          test "${{ steps.build.outcome }}" = "success"
