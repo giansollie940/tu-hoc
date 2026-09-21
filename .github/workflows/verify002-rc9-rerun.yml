@@ -18,14 +18,12 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Verify overlay SHA
+      - name: Rebuild and verify RC9 overlay
         shell: bash
         run: |
-          echo "85f87abc973a4028150899011977915359f6f1795a2bed2176b2b23d56fb7777  .verify002/VERIFY-002-RC9-OVERLAY.tar.gz" | sha256sum -c -
-
-      - name: Apply RC9 + VERIFY-002 overlay
-        shell: bash
-        run: tar -xzf .verify002/VERIFY-002-RC9-OVERLAY.tar.gz -C .
+          cat .verify002/chunks/part*.txt | tr -d '\n\r' | base64 -d > /tmp/VERIFY-002-RC9-OVERLAY.tar.gz
+          echo "85f87abc973a4028150899011977915359f6f1795a2bed2176b2b23d56fb7777  /tmp/VERIFY-002-RC9-OVERLAY.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/VERIFY-002-RC9-OVERLAY.tar.gz -C .
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
