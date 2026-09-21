@@ -5,6 +5,9 @@ on:
     branches: [verify002-rerun-rc9]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -92,6 +95,20 @@ jobs:
             VERIFY-002_GATE_SUMMARY.txt
             docs/feat-010/evidence/
           if-no-files-found: warn
+
+      - name: Persist evidence to branch
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p .verify002/evidence
+          cp -f VERIFY-002_*.log VERIFY-002_GATE_SUMMARY.txt .verify002/evidence/ 2>/dev/null || true
+          git config user.name "verify002-bot"
+          git config user.email "verify002-bot@users.noreply.github.com"
+          git add .verify002/evidence
+          if ! git diff --cached --quiet; then
+            git commit -m "verify002: persist CI evidence [skip ci]"
+            git push origin HEAD:verify002-rerun-rc9
+          fi
 
       - name: Enforce all gates
         if: always()
