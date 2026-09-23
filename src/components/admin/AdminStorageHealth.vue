@@ -10,11 +10,12 @@
 //     for and can undercount objects R2 holds but the app forgot; 'provider' is
 //     R2's own answer, used only while it is recent. An R2 answer that has gone
 //     stale is called out rather than quietly continuing to drive the lock.
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { AlertTriangle, DatabaseZap, HardDrive, RefreshCw, ShieldAlert, Trash2 } from 'lucide-vue-next'
 import AppButton from '../ui/AppButton.vue'
 import AppCard from '../ui/AppCard.vue'
 import InlineStatus, { type InlineStatusState } from '../ui/InlineStatus.vue'
+import { subscribeStorageChanges } from '../../features/storage/live'
 import { appDialog } from '../../features/shared/app-dialog'
 import { useContextStore } from '../../stores/context'
 import { useAuthStore } from '../../stores/auth'
@@ -31,6 +32,10 @@ const busy = ref('')
 const status = ref<InlineStatusState>('idle')
 const statusMessage = ref('')
 const sourceNote = ref('')
+const checkedAt = ref(0)
+const updating = ref(false)
+const providerNote = ref('')
+const connection = ref('Đang kết nối cập nhật trực tiếp…')
 
 const providers = computed(() => [
   { key: 'database' as const, title: 'Cơ sở dữ liệu Supabase', icon: DatabaseZap, data: state.value?.providers.database },
@@ -52,40 +57,70 @@ function report(error: unknown, fallback: string) {
 }
 
 let pendingLoad: Promise<void> | null = null
-let polling: ReturnType<typeof setInterval> | null = null
+let unsubscribe: (() => void) | undefined
+let debounce: ReturnType<typeof setTimeout> | undefined
+let dirty = false
+let r2Dirty = false
+function queueRefresh(r2 = false) {
+  dirty = true; r2Dirty ||= r2
+  if (disposed || typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+  if (debounce) clearTimeout(debounce)
+  debounce = setTimeout(() => { debounce = undefined; void load() }, 1200)
+}
 let lastLoadedAt = 0
+let disposed = false
 function load() {
   if (pendingLoad) return pendingLoad
-  if (auth.currentUser?.role !== 'admin' || typeof document !== 'undefined' && document.visibilityState === 'hidden') return Promise.resolve()
+  if (disposed || busy.value || auth.currentUser?.role !== 'admin' || typeof document !== 'undefined' && document.visibilityState === 'hidden') return Promise.resolve()
+  const actor = auth.currentUser
+  const stillCurrent = () => !disposed && auth.currentUser === actor && auth.currentUser?.role === 'admin'
+  const measureR2 = r2Dirty || !state.value
+  dirty = false; r2Dirty = false
+  updating.value = true
   pendingLoad = (async () => {
-    if (!state.value) busy.value = 'load'
     try {
-      const fresh = await storageStatus() // cached metadata; never trigger an R2 provider measurement on a timer
+      await refreshStorage()
+      if (!stillCurrent()) return
+      const fresh = await storageStatus()
+      if (!stillCurrent()) return
       state.value = fresh
       lastLoadedAt = Date.now()
+      checkedAt.value = lastLoadedAt
       if (status.value === 'error') { status.value = 'success'; statusMessage.value = 'Đã cập nhật trạng thái dung lượng.' }
-    } catch (error) { report(error, 'Không đọc được dung lượng. Đang giữ số liệu cập nhật gần nhất.') }
-    finally { if (busy.value === 'load') busy.value = ''; pendingLoad = null }
+      if (measureR2) {
+        try {
+          const result = await measureProviders()
+          if (!stillCurrent()) return
+          state.value = { ...result.state, candidates: fresh.candidates }
+          providerNote.value = result.r2.ok ? '' : 'Chưa đối soát được kho ảnh; hãy bấm “Hỏi kho ảnh” để thử lại. Số liệu ứng dụng vẫn được cập nhật.'
+        } catch {
+          if (stillCurrent()) providerNote.value = 'Chưa kết nối được kho ảnh; hãy bấm “Hỏi kho ảnh” để thử lại. Đang giữ số đo R2 gần nhất.'
+        }
+      }
+    } catch (error) { if (stillCurrent()) report(error, 'Không đọc được dung lượng. Đang giữ số liệu cập nhật gần nhất.') }
+    finally { updating.value = false; pendingLoad = null; if (dirty && !disposed) queueRefresh(r2Dirty) }
   })()
   return pendingLoad
 }
-function refreshOnFocus() { if (Date.now() - lastLoadedAt >= 5_000 && !busy.value) void load() }
+function refreshOnFocus() { if (Date.now() - lastLoadedAt >= 5_000 && !busy.value) queueRefresh(true) }
 
 async function refreshLocal() {
+  if (updating.value || busy.value) return
   busy.value = 'refresh'; status.value = 'saving'; statusMessage.value = 'Đang đo lại…'
   try {
     state.value = { ...(await refreshStorage()), candidates: state.value?.candidates }
     state.value = await storageStatus()
     status.value = 'success'; statusMessage.value = 'Đã đo lại dung lượng trong cơ sở dữ liệu.'
-  } catch (error) { report(error, 'Không đo lại được.') } finally { busy.value = '' }
+  } catch (error) { report(error, 'Không đo lại được.') } finally { busy.value = ''; if (dirty) queueRefresh(r2Dirty) }
 }
 
 async function measureAll() {
+  if (updating.value || busy.value) return
   busy.value = 'measure'; status.value = 'saving'; statusMessage.value = 'Đang hỏi kho ảnh…'; sourceNote.value = ''
   try {
     const result = await measureProviders()
     state.value = await storageStatus()
-    if (result.r2.ok) { status.value = 'success'; statusMessage.value = 'Đã lấy số liệu trực tiếp từ Cloudflare R2.' }
+    if (result.r2.ok) { providerNote.value = ''; status.value = 'success'; statusMessage.value = 'Đã lấy số liệu trực tiếp từ Cloudflare R2.' }
     else {
       // Not an error state: the dashboard still has the in-database numbers.
       status.value = 'server-changed'
@@ -94,10 +129,11 @@ async function measureAll() {
         : 'Chưa hỏi được Cloudflare R2. Đang dùng số liệu do ứng dụng tự cộng.'
       sourceNote.value = String(result.r2.reason ?? '')
     }
-  } catch (error) { report(error, 'Chưa đọc được dung lượng từ kho ảnh.') } finally { busy.value = '' }
+  } catch (error) { report(error, 'Chưa đọc được dung lượng từ kho ảnh.') } finally { busy.value = ''; if (dirty) queueRefresh(r2Dirty) }
 }
 
 async function editCapacity(key: 'database' | 'r2', title: string) {
+  if (updating.value || busy.value) return
   const current = state.value?.providers[key]?.configured_bytes
   const value = await appDialog.prompt({
     title: `Dung lượng của ${title}`,
@@ -114,10 +150,11 @@ async function editCapacity(key: 'database' | 'r2', title: string) {
     state.value = await storageStatus()
     status.value = 'success'
     statusMessage.value = value.trim() ? `Đã đặt dung lượng cho ${title}.` : `Đã xoá dung lượng cấu hình của ${title}.`
-  } catch (error) { report(error, 'Không lưu được dung lượng.') } finally { busy.value = '' }
+  } catch (error) { report(error, 'Không lưu được dung lượng.') } finally { busy.value = ''; if (dirty) queueRefresh(r2Dirty) }
 }
 
 async function cleanup() {
+  if (updating.value || busy.value) return
   const ok = await appDialog.confirm({
     title: 'Dọn ảnh chờ quá hạn',
     body: 'Chỉ xoá những ảnh đã tải lên nhưng không được gửi kèm bài nào và đã quá 24 giờ. Ảnh đang gắn với bài, lịch sử hay bản chỉnh sửa không bị đụng tới. Việc xoá chạy nền, nên dung lượng chỉ giảm sau khi kho ảnh xác nhận.',
@@ -133,26 +170,48 @@ async function cleanup() {
     // failure — and point at the one action that can actually lower it.
     status.value = 'success'
     statusMessage.value = result.queued
-      ? `Đã xếp ${result.queued} ảnh chờ vào hàng xoá. Số dung lượng chưa giảm ngay: tệp vẫn nằm trong kho cho tới khi tiến trình nền xoá xong. Chạy xong rồi hãy bấm “Hỏi kho ảnh” để lấy số mới.`
+      ? `Đã xếp ${result.queued} ảnh chờ vào hàng xoá. Số dung lượng chưa giảm ngay: tệp vẫn nằm trong kho cho tới khi tiến trình nền xoá xong. Trang cập nhật khi tiến trình nền xác nhận thay đổi; bạn cũng có thể bấm “Hỏi kho ảnh”.`
       : 'Không có ảnh chờ nào quá hạn.'
-  } catch (error) { report(error, 'Không dọn được ảnh chờ.') } finally { busy.value = '' }
+  } catch (error) { report(error, 'Không dọn được ảnh chờ.') } finally { busy.value = ''; if (dirty) queueRefresh(r2Dirty) }
 }
 
+async function connect() {
+  if (auth.currentUser?.role !== 'admin' || disposed) return
+  try {
+    const stop = await subscribeStorageChanges(r2 => queueRefresh(r2), status => {
+      if (disposed) return
+      if (status === 'SUBSCRIBED') {
+        connection.value = 'Đang nhận cập nhật khi dữ liệu thay đổi'
+        queueRefresh(true)
+      } else {
+        connection.value = 'Mất kết nối cập nhật trực tiếp; số liệu có thể đã cũ. Có thể đo bằng nút bên dưới.'
+      }
+    })
+    if (disposed || auth.currentUser?.role !== 'admin') stop()
+    else unsubscribe = stop
+  } catch (error) { if (!disposed) connection.value = error instanceof Error ? error.message : 'Chưa kết nối được cập nhật trực tiếp.' }
+}
+watch(() => auth.currentUser?.role, role => {
+  if (role !== 'admin') { unsubscribe?.(); unsubscribe = undefined; if (debounce) clearTimeout(debounce); dirty = r2Dirty = false; state.value = null }
+})
 onMounted(() => {
   void load()
+  void connect()
   if (typeof window !== 'undefined') {
-    polling = setInterval(() => { if (!busy.value) void load() }, 45_000)
     window.addEventListener('focus', refreshOnFocus)
     document.addEventListener('visibilitychange', refreshOnFocus)
   }
 })
 onBeforeUnmount(() => {
-  if (polling) clearInterval(polling)
+  disposed = true
+  unsubscribe?.()
+  if (debounce) clearTimeout(debounce)
   if (typeof window !== 'undefined') {
     window.removeEventListener('focus', refreshOnFocus)
     document.removeEventListener('visibilitychange', refreshOnFocus)
   }
 })
+
 </script>
 
 <template>
@@ -162,10 +221,15 @@ onBeforeUnmount(() => {
         <span class="kicker"><HardDrive aria-hidden="true" />DUNG LƯỢNG HỆ THỐNG</span>
         <p v-if="state?.measured_at">Đo lần cuối {{ new Date(state.measured_at).toLocaleString('vi-VN') }}</p>
         <p v-else>Chưa có số đo nào.</p>
+        <p role="status">{{ updating ? 'Đang cập nhật…' : checkedAt ? 'Cập nhật thành công lúc ' + new Date(checkedAt).toLocaleTimeString('vi-VN') : 'Đang kết nối…' }}</p>
+        <p>{{ connection }}</p>
+        <p>Ảnh chờ xóa chỉ biến mất sau khi quyền tải còn hiệu lực hết hạn, cộng 3 phút an toàn và một lượt xử lý nền thành công.</p>
+        <p>Thay đổi trực tiếp trong R2: dùng “Hỏi kho ảnh” để đối soát.</p>
+        <p v-if="providerNote">{{ providerNote }}</p>
       </div>
       <div class="bar-actions">
-        <AppButton variant="secondary" :loading="busy === 'refresh'" @click="refreshLocal"><RefreshCw aria-hidden="true" />Đo trong CSDL</AppButton>
-        <AppButton :loading="busy === 'measure'" @click="measureAll"><HardDrive aria-hidden="true" />Hỏi kho ảnh</AppButton>
+        <AppButton :disabled="updating || !!busy" variant="secondary" :loading="busy === 'refresh'" @click="refreshLocal"><RefreshCw aria-hidden="true" />Đo trong CSDL</AppButton>
+        <AppButton :disabled="updating || !!busy" :loading="busy === 'measure'" @click="measureAll"><HardDrive aria-hidden="true" />Hỏi kho ảnh</AppButton>
       </div>
     </AppCard>
 
@@ -218,6 +282,7 @@ onBeforeUnmount(() => {
             <div><dt>Đang dùng</dt><dd>{{ formatBytes(provider.data.total_bytes) }}</dd></div>
             <div><dt>Dung lượng đặt</dt><dd>{{ formatBytes(provider.data.configured_bytes) }}</dd></div>
             <template v-if="provider.key === 'r2'">
+              <div><dt>Đối soát R2 lúc</dt><dd>{{ provider.data.provider_measured_at ? new Date(provider.data.provider_measured_at).toLocaleString('vi-VN') : 'Chưa đối soát' }}</dd></div>
               <div><dt>Ảnh đang dùng</dt><dd>{{ formatBytes(provider.data.active_bytes) }}</dd></div>
               <div><dt>Ảnh chờ / tạm</dt><dd>{{ formatBytes(provider.data.pending_bytes) }}</dd></div>
               <div><dt>Đang chờ xoá</dt><dd>{{ formatBytes(provider.data.deleting_bytes) }}</dd></div>
@@ -234,7 +299,7 @@ onBeforeUnmount(() => {
             <template v-if="provider.key === 'r2' && Number(provider.data.deleting_bytes ?? 0) > 0"> Phần “đang chờ xoá” vẫn được tính là đã dùng: xếp hàng xoá chưa phải là đã xoá, tệp chỉ rời kho khi tiến trình nền xác nhận.</template>
             <template v-if="provider.data.stale"> · Số đo đã cũ hơn 24 giờ.</template>
           </small>
-          <AppButton variant="secondary" :loading="busy === `capacity:${provider.key}`" @click="editCapacity(provider.key, provider.title)">Đặt dung lượng</AppButton>
+          <AppButton :disabled="updating || !!busy" variant="secondary" :loading="busy === `capacity:${provider.key}`" @click="editCapacity(provider.key, provider.title)">Đặt dung lượng</AppButton>
         </template>
         <p v-else class="muted">Đang tải…</p>
       </AppCard>
@@ -243,7 +308,7 @@ onBeforeUnmount(() => {
     <AppCard padding="lg" class="candidates">
       <header>
         <div><h2>Có thể lưu trữ để giải phóng</h2><p>Dung lượng ảnh theo từng năm học. Việc đóng gói và xoá năm học thuộc FEAT-007; áp lực dung lượng không bao giờ tự xoá một năm học.</p></div>
-        <AppButton variant="secondary" :loading="busy === 'cleanup'" @click="cleanup"><Trash2 aria-hidden="true" />Dọn ảnh chờ quá hạn</AppButton>
+        <AppButton :disabled="updating || !!busy" variant="secondary" :loading="busy === 'cleanup'" @click="cleanup"><Trash2 aria-hidden="true" />Dọn ảnh chờ quá hạn</AppButton>
       </header>
       <ul v-if="state?.candidates?.length">
         <li v-for="row in state.candidates" :key="row.school_year_id">
