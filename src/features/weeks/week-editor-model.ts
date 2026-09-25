@@ -71,20 +71,6 @@ export function applyWeekDrafts(state: LegacyState, drafts: WeekEditorDraft[]): 
   return next
 }
 
-export function validateWeek1Start(value: string): void {
-  if (!value) throw new Error('Hãy chọn ngày bắt đầu Tuần 1.')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error('Ngày bắt đầu Tuần 1 không hợp lệ.')
-  }
-  const date = new Date(`${value}T00:00:00Z`)
-  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
-    throw new Error('Ngày bắt đầu Tuần 1 không hợp lệ.')
-  }
-  if (date.getUTCDay() !== 1) {
-    throw new Error('Ngày bắt đầu Tuần 1 phải là Thứ Hai.')
-  }
-}
-
 export function summarizeWeekStatuses(
   drafts: WeekEditorDraft[],
   statuses: Record<string, WeekOperationalStatus>,

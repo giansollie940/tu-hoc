@@ -1,15 +1,10 @@
 import type { PeriodRecord, RegistrationRecord, WeekRecord } from '../../types/legacy'
+import { addDaysISO } from '../shared/date'
 
 export type EffectiveWeekStatus = 'open' | 'locked' | 'upcoming' | 'holiday'
 export type ApprovalFilter = 'attention' | 'approved' | 'revision' | 'all'
 
 const OFFSET = '+07:00'
-
-function addDaysISO(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
-}
 
 export function dateForDow(week: WeekRecord, dow: number): string {
   return addDaysISO(week.startDate, Number(dow))

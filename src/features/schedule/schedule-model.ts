@@ -1,8 +1,8 @@
 import type { LegacyState, PeriodRecord, ScheduleOverride, ScheduleSlot, WeekRecord } from '../../types/legacy'
+import { addDaysISO } from '../shared/date'
 
 function slotKey(slot:ScheduleSlot){return `${slot.dow}-${slot.period}`}
 function canonicalSlots(slots:ScheduleSlot[]){const unique=new Map<string,ScheduleSlot>();for(const slot of slots){const normalized={dow:Number(slot.dow),period:Number(slot.period)};unique.set(slotKey(normalized),normalized)}return [...unique.values()].sort((a,b)=>a.dow-b.dow||a.period-b.period)}
-function addDaysISO(iso:string,days:number){const date=new Date(`${iso}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 
 export function timetablePeriodUnion(state:LegacyState):PeriodRecord[]{
   const byNumber=new Map<number,PeriodRecord>()

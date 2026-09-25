@@ -1,4 +1,4 @@
-import type { CurrentUser, LegacyState, RegistrationRecord, ScheduleSlot, WeekData, WeekRecord } from '../../types/legacy'
+import type { CurrentUser, LegacyState, RegistrationRecord, ScheduleSlot, WeekData } from '../../types/legacy'
 import { effectiveScheduleForWeek } from '../schedule/schedule-model'
 
 export interface WeekStatistics {
@@ -10,10 +10,6 @@ export interface WeekStatistics {
   missing: number
   needs: number
   rate: number
-}
-
-export interface WeekTrendRow extends WeekStatistics {
-  week: WeekRecord
 }
 
 export function mergeWeekData(state: LegacyState, weekId: string, weekData: WeekData): LegacyState {
@@ -81,12 +77,6 @@ export function statisticsForWeek(state: LegacyState, weekId: string): WeekStati
     needs,
     rate: total ? Math.round(valid / total * 100) : 0,
   }
-}
-
-export function statisticsTrend(state: LegacyState, limit = 12): WeekTrendRow[] {
-  return [...state.weeks]
-    .slice(0, Math.max(0, limit))
-    .map(week => ({ week, ...statisticsForWeek(state, week.id) }))
 }
 
 function csvCell(value: unknown): string {

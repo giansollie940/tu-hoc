@@ -68,7 +68,7 @@ const CLOSED: DialogState = {
   error: '',
 }
 
-export function createAppDialog() {
+function createAppDialog() {
   const state = reactive<DialogState>({ ...CLOSED })
   // cancelValue được ghi kèm để khi hộp thoại bị hủy (bấm Hủy, Esc, hoặc bị một
   // hộp thoại khác chiếm chỗ) thì Promise được trả đúng kiểu của chính nó:
@@ -161,6 +161,5 @@ export function createAppDialog() {
   return { state, confirm, prompt, accept, cancel, setValue }
 }
 
-export type AppDialog = ReturnType<typeof createAppDialog>
 
 export const appDialog = createAppDialog()
