@@ -1,4 +1,5 @@
 import { legacyApi } from '../../services/legacy-supabase'
+export { formatBytes } from '../shared/format'
 
 /**
  * FEAT-008 client. Capacity is deployment configuration, so every number here
@@ -61,9 +62,6 @@ export function isCapacityHold(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === CAPACITY_HOLD
 }
 
-export const CAPACITY_HOLD_MESSAGE =
-  'Hệ thống đang ở chế độ bảo vệ dung lượng. Bài dạng chữ, chỉnh sửa và báo cáo vẫn hoạt động.'
-
 interface Result { data: unknown; error: { message?: string; code?: string } | null }
 interface StorageClient {
   rpc(name: string, args: Record<string, unknown>): Promise<Result>
@@ -98,14 +96,6 @@ export async function measureProviders(): Promise<{ state: StorageState; r2: { a
   const result = data as { ok?: boolean; state: StorageState; r2: { attempted: boolean; ok?: boolean; partial?: boolean; reason?: string }; error?: string }
   if (!result.ok) throw new Error(result.error || 'Chưa đọc được dung lượng từ kho ảnh.')
   return { state: result.state, r2: result.r2 }
-}
-
-export function formatBytes(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = Number(value), unit = 0
-  while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1 }
-  return `${size.toFixed(size >= 100 || unit === 0 ? 0 : 1)} ${units[unit]}`
 }
 
 export const levelLabels: Record<StorageLevel, string> = {

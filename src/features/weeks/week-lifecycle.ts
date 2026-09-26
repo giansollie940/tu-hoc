@@ -1,6 +1,7 @@
 import type { PeriodRecord, ScheduleSlot, WeekRecord } from '../../types/legacy'
+import { addDaysISO } from '../shared/date'
+
 const DEFAULT_OFFSET='+07:00'
-function addDaysISO(iso:string,days:number){const date=new Date(`${iso}T00:00:00Z`);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 function localTimestamp(dateISO:string,time='00:00',offset=DEFAULT_OFFSET){return new Date(`${dateISO}T${/^\d{2}:\d{2}$/.test(time)?time:'00:00'}:00${offset}`).getTime()}
 function fallbackEnd(week:WeekRecord,offset:string){return localTimestamp(week.endDate||addDaysISO(week.startDate,4),'23:59',offset)+59_999}
 export function getWeekLastSessionEnd({week,slots=[],periods=[],getPeriod,timeZoneOffset=DEFAULT_OFFSET}:{week:WeekRecord;slots?:ScheduleSlot[];periods?:PeriodRecord[];getPeriod?:(dow:number,period:number)=>PeriodRecord|undefined;timeZoneOffset?:string}){

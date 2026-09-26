@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AlarmClock, CalendarDays, Laptop2, Lock, LockOpen, MessageSquareText, Pencil, Siren, Trash2 } from 'lucide-vue-next'
+import { AlarmClock, Laptop2, Lock, LockOpen, MessageSquareText, Pencil, Siren, Trash2 } from 'lucide-vue-next'
 import { computed } from 'vue'
 import AppButton from '../ui/AppButton.vue'
 import RegistrationStatusBadge from './RegistrationStatusBadge.vue'
