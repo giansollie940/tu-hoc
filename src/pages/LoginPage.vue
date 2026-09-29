@@ -1,17 +1,25 @@
 ﻿<script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useIntervalFn } from '@vueuse/core'
 import { Eye, EyeOff, LockKeyhole, Moon, Sun, UserRound } from 'lucide-vue-next'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import IconButton from '../components/ui/IconButton.vue'
+import LoginFlashlight from '../components/login/LoginFlashlight.vue'
+import LoginOwl from '../components/login/LoginOwl.vue'
+import LoginSky from '../components/login/LoginSky.vue'
+import { beamGeometry, createOwlCameo, flashRadius, pointNearRect, supportsBeamComposite, supportsFlashlightMask } from '../features/login/flashlight'
+// Imported (not served from public/) so each build gives them a content-hashed name and a
+// replaced picture can never be stuck behind a cached copy of the old one.
+import faviconUrl from '../assets/icons/icon-512.png'
+import heroDayUrl from '../assets/images/login/hero-day.webp'
+import heroNightUrl from '../assets/images/login/hero-night.webp'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
 
-const faviconUrl = `${import.meta.env.BASE_URL}assets/images/favicon.png`
-const loginHeroUrl = `${import.meta.env.BASE_URL}assets/images/login-hero.png`
+
 
 const auth = useAuthStore()
 const context = useContextStore()
@@ -41,6 +49,196 @@ useIntervalFn(() => {
 
 const slogan = computed(() => slogans[sloganIndex.value])
 
+// ===== Flashlight password reveal (UIFX-LOGIN-FLASHLIGHT-OWL-001) =====
+// Purely visual: the night mode lives only on this page and never touches the saved theme,
+// so the app opens in whatever theme Settings holds once the user signs in.
+const maskSupported = supportsFlashlightMask()
+const beamSupported = maskSupported && supportsBeamComposite()
+const flashlight = ref(false)
+const revealOn = computed(() => maskSupported ? flashlight.value : showPassword.value)
+const heroNight = computed(() => flashlight.value || preferences.resolvedTheme === 'dark')
+
+const fxRoot = ref<HTMLElement | null>(null)
+const revealLayer = ref<HTMLElement | null>(null)
+const revealText = ref<HTMLElement | null>(null)
+const passwordField = ref<HTMLElement | null>(null)
+const revealButton = ref<HTMLElement | null>(null)
+const headline = ref<HTMLElement | null>(null)
+const cardHeading = ref<HTMLElement | null>(null)
+const passwordSlot = ref<HTMLElement | null>(null)
+const revealOverflow = ref(false)
+
+const owl = createOwlCameo()
+const owlBox = ref({ x: 0, y: 0, size: 92 })
+
+let pointerX = 0
+let pointerY = 0
+let frame = 0
+// Keep in sync with the conic-gradient stops in the .beam styles (8deg soft edge, 26deg core).
+const BEAM_SPREAD = 26
+const BEAM_SOFT = 8
+
+// The torch takes the eye button's place in the password field and swivels on its tail there.
+function torchPivot(vw: number) {
+  const length = vw < 560 ? 64 : 76
+  const eye = revealButton.value?.getBoundingClientRect()
+  if (!eye) return { x: vw / 2, y: window.innerHeight - 20, length }
+  return { x: eye.left + eye.width / 2, y: eye.top + eye.height / 2, length }
+}
+
+function paint() {
+  frame = 0
+  const root = fxRoot.value
+  if (!root) return
+  const vw = window.innerWidth
+  const pivot = torchPivot(vw)
+  const radius = flashRadius(vw)
+  const beam = beamGeometry(pivot, { x: pointerX, y: pointerY }, pivot.length * 98 / 120, beamSupported ? radius * 0.45 : radius)
+  const set = (name: string, value: string) => root.style.setProperty(name, value)
+  set('--flash-x', `${pointerX}px`)
+  set('--flash-y', `${pointerY}px`)
+  set('--flash-r', `${radius}px`)
+  set('--pivot-x', `${pivot.x}px`)
+  set('--pivot-y', `${pivot.y}px`)
+  set('--torch-length', `${pivot.length}px`)
+  set('--beam-rot', `${beam.rotation}deg`)
+  set('--hx', `${beam.head.x}px`)
+  set('--hy', `${beam.head.y}px`)
+  set('--beam-from', `${beam.conicCenter - BEAM_SPREAD / 2 - BEAM_SOFT}deg`)
+  set('--beam-reach', `${beam.reach}px`)
+  const layer = revealLayer.value
+  if (layer) {
+    const rect = layer.getBoundingClientRect()
+    layer.style.setProperty('--lx', `${pointerX - rect.left}px`)
+    layer.style.setProperty('--ly', `${pointerY - rect.top}px`)
+    layer.style.setProperty('--lhx', `${beam.head.x - rect.left}px`)
+    layer.style.setProperty('--lhy', `${beam.head.y - rect.top}px`)
+  }
+  // The owl only turns up once the beam actually reaches its perch.
+  if (!owl.shown.value) {
+    const perch = owlPerch()
+    // Glinting eyes wait in the dark at the perch as a hint of where to shine.
+    if (perch) {
+      set('--hint-x', `${perch.x}px`)
+      set('--hint-y', `${perch.y}px`)
+      set('--hint-size', `${perch.size}px`)
+    }
+    if (perch && pointNearRect(pointerX, pointerY, { left: perch.x, top: perch.y, right: perch.x + perch.size, bottom: perch.y + perch.size }, 16)) {
+      owlBox.value = perch
+      owl.play()
+    }
+  }
+}
+
+function aimAt(x: number, y: number) {
+  pointerX = x
+  pointerY = y
+  if (!frame) frame = requestAnimationFrame(paint)
+}
+
+function onPointer(event: PointerEvent) { aimAt(event.clientX, event.clientY) }
+function onTouch(event: TouchEvent) {
+  const touch = event.touches[0]
+  if (touch) aimAt(touch.clientX, touch.clientY)
+}
+function onKey(event: KeyboardEvent) { if (event.key === 'Escape') setFlashlight(false) }
+function onLayout() { aimAt(pointerX, pointerY) }
+// Second click anywhere switches the light off. Clicks on the eye button toggle it themselves.
+function onClickAnywhere(event: MouseEvent) {
+  if (revealButton.value?.contains(event.target as Node)) return
+  setFlashlight(false)
+}
+let clickArmTimer: ReturnType<typeof setTimeout> | undefined
+
+function firstLineRect(heading: HTMLElement | null): DOMRect | undefined {
+  const text = heading?.firstChild
+  if (!text) return undefined
+  const range = document.createRange()
+  range.selectNodeContents(text)
+  return range.getClientRects()[0]
+}
+
+// The owl's perch: the end of the headline's first line ("Mỗi giờ tự học"), feet on that line, as
+// if it had landed on the words. On phones that headline has usually scrolled away while the form
+// is in view, so the perch moves to the end of the card's "Chào mừng trở lại" heading instead.
+// The owl artwork's feet sit ~6% above the bottom of its box.
+function owlPerch() {
+  const size = window.innerWidth < 560 ? 76 : 104
+  const hero = firstLineRect(headline.value)
+  const onScreen = (rect?: DOMRect) => rect && rect.top - size > 0 && rect.bottom < window.innerHeight
+  const line = onScreen(hero) ? hero : firstLineRect(cardHeading.value) ?? hero
+  if (!line) return null
+  const x = Math.min(line.right + 6, window.innerWidth - size - 8)
+  return { x, y: line.bottom - size * 0.94 - line.height * 0.12, size }
+}
+
+function listen(on: boolean) {
+  const method = on ? 'addEventListener' : 'removeEventListener'
+  window[method]('pointermove', onPointer as EventListener, { passive: true } as AddEventListenerOptions)
+  window[method]('pointerdown', onPointer as EventListener, { passive: true } as AddEventListenerOptions)
+  window[method]('touchmove', onTouch as EventListener, { passive: true } as AddEventListenerOptions)
+  window[method]('keydown', onKey as EventListener)
+  // Armed on the next task so the click that switched the light on does not switch it off again.
+  clearTimeout(clickArmTimer)
+  if (on) clickArmTimer = setTimeout(() => window.addEventListener('click', onClickAnywhere))
+  else window.removeEventListener('click', onClickAnywhere)
+  window[method]('resize', onLayout)
+  window[method]('scroll', onLayout, { passive: true, capture: true } as AddEventListenerOptions)
+}
+
+function setFlashlight(on: boolean) {
+  if (flashlight.value === on) return
+  flashlight.value = on
+  listen(on)
+  if (!on) {
+    if (frame) cancelAnimationFrame(frame)
+    frame = 0
+    owl.reset()
+  }
+}
+
+function toggleReveal() {
+  if (!maskSupported) {
+    showPassword.value = !showPassword.value
+    return
+  }
+  if (!flashlight.value) {
+    // The torch sits on the eye button, so start by shining back across the password text.
+    const slot = passwordSlot.value?.getBoundingClientRect()
+    if (slot) aimAt(slot.left + slot.width * 0.3, slot.top + slot.height / 2)
+  }
+  setFlashlight(!flashlight.value)
+}
+
+// Long passwords: keep the tail (where the caret usually is) in view, like the input does.
+watch([password, flashlight], async () => {
+  if (!flashlight.value) return
+  await nextTick()
+  const layer = revealLayer.value
+  const text = revealText.value
+  revealOverflow.value = Boolean(layer && text && text.scrollWidth > layer.clientWidth)
+  if (frame === 0 && layer) paint()
+})
+
+onBeforeUnmount(() => setFlashlight(false))
+
+function toggleTheme() {
+  const doc = document as Document & { startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void> } }
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  if (!doc.startViewTransition || reduced) {
+    preferences.toggleTheme()
+    return
+  }
+  // The view transition cross-fades the whole page; the hero's own fade is paused meanwhile
+  // so the two animations don't stack.
+  const root = document.documentElement
+  root.classList.add('theme-switching')
+  doc.startViewTransition(async () => {
+    preferences.toggleTheme()
+    await nextTick()
+  }).finished.finally(() => root.classList.remove('theme-switching'))
+}
+
 async function submit() {
   // novalidate trên form: bong bóng kiểm tra của trình duyệt không theo theme và
   // hiện bằng ngôn ngữ của trình duyệt. Trang này đã có sẵn chỗ báo lỗi riêng
@@ -65,6 +263,7 @@ async function submit() {
 
 <template>
   <AuthLayout>
+    <div ref="fxRoot" class="login-fx" :class="{ 'flashlight-on': flashlight, beam: beamSupported }">
     <section class="login-shell">
       <div class="login-visual">
         <header class="brand-row">
@@ -72,7 +271,7 @@ async function submit() {
             <img :src="faviconUrl" alt="" />
             <strong>SỔ TỰ HỌC</strong>
           </div>
-          <IconButton label="Đổi giao diện sáng/tối" @click="preferences.toggleTheme">
+          <IconButton label="Đổi giao diện sáng/tối" @click="toggleTheme">
             <Sun v-if="preferences.resolvedTheme === 'dark'" />
             <Moon v-else />
           </IconButton>
@@ -80,12 +279,14 @@ async function submit() {
 
         <div class="visual-copy">
           <span>HỌC CHỦ ĐỘNG</span>
-          <h1>Mỗi giờ tự học<br />đều có mục tiêu.</h1>
+          <h1 ref="headline">Mỗi giờ tự học<br />đều có mục tiêu.</h1>
           <p>Theo dõi kế hoạch, nhận phản hồi và tiến bộ rõ ràng theo từng tuần.</p>
         </div>
 
-        <figure class="hero-card">
-          <img :src="loginHeroUrl" alt="Học sinh cùng học tập" />
+        <figure class="hero-card" :class="{ night: heroNight }">
+          <LoginSky :night="heroNight" />
+          <img class="hero-day" :src="heroDayUrl" alt="Học sinh cùng học nhóm ban ngày" :aria-hidden="heroNight" />
+          <img class="hero-night" :src="heroNightUrl" alt="Học sinh tự học ban đêm" :aria-hidden="!heroNight" />
         </figure>
 
         <div class="slogan" aria-live="polite">
@@ -103,7 +304,7 @@ async function submit() {
       <div class="login-panel">
         <div class="form-heading">
           <span>TÀI KHOẢN HỌC TẬP</span>
-          <h2>Chào mừng trở lại</h2>
+          <h2 ref="cardHeading">Chào mừng trở lại</h2>
           <p>Dùng mã đăng nhập được nhà trường cấp.</p>
         </div>
 
@@ -124,23 +325,37 @@ async function submit() {
 
           <label>
             <span>Mật khẩu</span>
-            <div class="field">
+            <div ref="passwordField" class="field">
               <LockKeyhole />
-              <input
-                v-model="password"
-                :type="showPassword ? 'text' : 'password'"
-                autocomplete="current-password"
-                placeholder="Nhập mật khẩu"
-                required
-                :aria-invalid="passwordInvalid"
-              />
+              <span ref="passwordSlot" class="password-slot">
+                <input
+                  v-model="password"
+                  :type="showPassword ? 'text' : 'password'"
+                  autocomplete="current-password"
+                  placeholder="Nhập mật khẩu"
+                  required
+                  :aria-invalid="passwordInvalid"
+                />
+                <!-- Real characters, visible only inside the flashlight mask. Rendered as text
+                     (never an attribute) and only while the flashlight is on. -->
+                <span
+                  v-if="flashlight && password"
+                  ref="revealLayer"
+                  class="password-reveal-layer"
+                  :class="{ overflow: revealOverflow }"
+                  aria-hidden="true"
+                ><span ref="revealText">{{ password }}</span></span>
+              </span>
               <button
+                ref="revealButton"
                 type="button"
                 class="reveal"
-                :aria-label="showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
-                @click="showPassword = !showPassword"
+                :class="{ lit: flashlight }"
+                :aria-pressed="revealOn"
+                :aria-label="revealOn ? 'Tắt xem mật khẩu' : 'Bật xem mật khẩu'"
+                @click="toggleReveal"
               >
-                <EyeOff v-if="showPassword" />
+                <EyeOff v-if="revealOn" />
                 <Eye v-else />
               </button>
             </div>
@@ -162,6 +377,22 @@ async function submit() {
         </div>
       </div>
     </section>
+
+    <div class="night-overlay" aria-hidden="true"></div>
+    <div class="flash-glow" aria-hidden="true"></div>
+    <LoginFlashlight v-if="maskSupported" :on="flashlight" />
+    <LoginOwl
+      :phase="owl.phase.value"
+      :eyes-closed="owl.eyesClosed.value"
+      :x="owlBox.x"
+      :y="owlBox.y"
+      :size="owlBox.size"
+    />
+    <div v-if="flashlight && !owl.shown.value" class="owl-hint" aria-hidden="true">
+      <i class="eye left"></i>
+      <i class="eye right"></i>
+    </div>
+    </div>
   </AuthLayout>
 </template>
 
@@ -254,6 +485,34 @@ async function submit() {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.hero-card {
+  position: relative;
+  display: grid;
+  /* One definite cell the size of the hero row, so the stacked day/night images keep
+     height: 100% of the row instead of growing to their natural height. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+.hero-card img {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  transition: opacity 600ms ease;
+}
+
+.hero-card .hero-night,
+.hero-card.night .hero-day {
+  opacity: 0;
+}
+
+.hero-card.night .hero-night {
+  opacity: 1;
+}
+
+:global(html.theme-switching) .hero-card img {
+  transition: none;
 }
 
 .hero-card img {
@@ -441,6 +700,188 @@ async function submit() {
 }
 
 .reveal svg { width: 19px; }
+
+.reveal:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.reveal.lit {
+  color: #ffd98a;
+  filter: drop-shadow(0 0 6px rgb(255 220 150 / .8));
+}
+
+/* ===== UIFX-LOGIN-FLASHLIGHT-OWL-001 ===== */
+.login-fx {
+  display: contents;
+  --flash-x: 50vw;
+  --flash-y: 50vh;
+  --flash-r: clamp(96px, 11vw, 150px);
+}
+
+.night-overlay,
+.flash-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 500ms ease, visibility 0s linear 500ms;
+}
+
+.night-overlay {
+  z-index: 40;
+  background: radial-gradient(120% 90% at 50% 0%, #0c213d 0%, #091a30 55%, #071426 100%);
+  -webkit-mask-image: radial-gradient(circle var(--flash-r) at var(--flash-x) var(--flash-y), transparent 0%, transparent 45%, #000 100%);
+  mask-image: radial-gradient(circle var(--flash-r) at var(--flash-x) var(--flash-y), transparent 0%, transparent 45%, #000 100%);
+}
+
+/* Warm tint inside the beam so it reads as lamp light, not a hole. Multiply only warms
+   the colours underneath; it never washes the text out to white. */
+.flash-glow {
+  z-index: 41;
+  mix-blend-mode: multiply;
+  background: radial-gradient(
+    circle calc(var(--flash-r) * 1.1) at var(--flash-x) var(--flash-y),
+    rgb(255 246 205 / .95) 0%,
+    rgb(255 220 150 / .2) 70%,
+    transparent 100%
+  );
+}
+
+.flashlight-on .night-overlay,
+.flashlight-on .flash-glow {
+  visibility: visible;
+  transition: opacity 500ms ease, visibility 0s;
+}
+
+.flashlight-on .night-overlay { opacity: .88; }
+.flashlight-on .flash-glow { opacity: 1; }
+
+.password-slot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.password-reveal-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: none;
+  background: var(--field-surface);
+  color: var(--text);
+  font: inherit;
+  font-size: .95rem;
+  line-height: 1.45;
+  /* Opaque inside the beam (covers the dots), transparent outside it (dots show through). */
+  -webkit-mask-image: radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 62%, transparent 72%);
+  mask-image: radial-gradient(circle var(--flash-r) at var(--lx, -999px) var(--ly, -999px), #000 0%, #000 62%, transparent 72%);
+}
+
+.password-reveal-layer.overflow {
+  justify-content: flex-end;
+}
+
+/* Two glinting eyes above the night overlay, placed exactly where the owl's pupils will be
+   (pupil centres at 39% / 60% across and 34% down the owl artwork). */
+.owl-hint {
+  position: fixed;
+  z-index: 42;
+  left: var(--hint-x, -200px);
+  top: var(--hint-y, -200px);
+  width: var(--hint-size, 104px);
+  height: var(--hint-size, 104px);
+  pointer-events: none;
+  animation: owl-hint-in 900ms ease 400ms both;
+}
+
+.owl-hint .eye {
+  position: absolute;
+  top: calc(34% - 4.5%);
+  width: 9%;
+  height: 9%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #fffbe6 0 22%, #ffd75e 45%, #f2a93b 100%);
+  box-shadow: 0 0 6px 2px rgb(255 214 110 / .75), 0 0 16px 6px rgb(255 190 80 / .35);
+  animation: owl-hint-blink 3.6s ease-in-out infinite, owl-hint-glow 1.8s ease-in-out infinite;
+}
+
+.owl-hint .eye.left { left: calc(39% - 4.5%); }
+.owl-hint .eye.right { left: calc(60.4% - 4.5%); }
+
+/* A small four-point glint that twinkles off the left eye now and then. */
+.owl-hint .eye.left::after {
+  content: '';
+  position: absolute;
+  left: -70%;
+  top: -80%;
+  width: 110%;
+  height: 110%;
+  background: #fff8d6;
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+  animation: owl-hint-glint 3.6s ease-in-out infinite;
+}
+
+@keyframes owl-hint-in { from { opacity: 0; } }
+@keyframes owl-hint-blink { 0%, 44%, 52%, 100% { scale: 1 1; } 48% { scale: 1 .1; } }
+@keyframes owl-hint-glow { 0%, 100% { filter: brightness(.9); } 50% { filter: brightness(1.25); } }
+@keyframes owl-hint-glint { 0%, 60%, 100% { opacity: 0; scale: .4; } 72% { opacity: 1; scale: 1; } 84% { opacity: 0; scale: .6; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .owl-hint, .owl-hint .eye, .owl-hint .eye.left::after { animation: none; }
+}
+
+/* Trapezoid beam: the torch's cone cut off just past the pointer. Lit area = cone ∩ reach; the
+   night overlay uses its complement. There is no round spot at the pointer - only browsers
+   without mask-composite (no .beam) fall back to the round spot above. The --lit-* layers are
+   resolved on .login-fx in viewport px. */
+.login-fx.beam {
+  --lit-cone: conic-gradient(from var(--beam-from) at var(--hx) var(--hy), transparent 0deg, #000 8deg, #000 34deg, transparent 42deg, transparent 360deg);
+  --lit-reach: radial-gradient(circle var(--beam-reach) at var(--hx) var(--hy), #000 0%, #000 82%, transparent 100%);
+}
+
+.beam .night-overlay {
+  -webkit-mask-image: linear-gradient(#000, #000), var(--lit-cone), var(--lit-reach);
+  mask-image: linear-gradient(#000, #000), var(--lit-cone), var(--lit-reach);
+  -webkit-mask-composite: xor, source-in, source-over;
+  mask-composite: exclude, intersect, add;
+}
+
+.beam .flash-glow {
+  /* Warmest right at the lens, fading along the beam. */
+  background: radial-gradient(circle var(--beam-reach) at var(--hx) var(--hy), rgb(255 236 190) 0%, rgb(255 246 220) 100%);
+  -webkit-mask-image: var(--lit-cone), var(--lit-reach);
+  mask-image: var(--lit-cone), var(--lit-reach);
+  -webkit-mask-composite: source-in, source-over;
+  mask-composite: intersect, add;
+}
+
+/* Harder edges than the overlay so characters and dots never show on top of each other. */
+.beam .password-reveal-layer {
+  -webkit-mask-image:
+    conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, transparent 6deg, #000 9deg, #000 33deg, transparent 36deg, transparent 360deg),
+    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 88%, transparent 94%);
+  mask-image:
+    conic-gradient(from var(--beam-from) at var(--lhx, -999px) var(--lhy, -999px), transparent 0deg, transparent 6deg, #000 9deg, #000 33deg, transparent 36deg, transparent 360deg),
+    radial-gradient(circle var(--beam-reach) at var(--lhx, -999px) var(--lhy, -999px), #000 0%, #000 88%, transparent 94%);
+  -webkit-mask-composite: source-in, source-over;
+  mask-composite: intersect, add;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .night-overlay,
+  .flash-glow,
+  .flashlight-on .night-overlay,
+  .flashlight-on .flash-glow,
+  .hero-card img {
+    transition-duration: 150ms;
+  }
+}
 .submit { width: 100%; min-height: 50px; font-size: .92rem; }
 .error { margin: 0; color: var(--color-danger); font-size: 0.9rem; }
 
@@ -514,3 +955,12 @@ async function submit() {
 }
 </style>
 
+
+<style>
+/* Light/dark switch on the login page cross-fades the whole page (View Transitions API). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 550ms;
+  animation-timing-function: ease;
+}
+</style>
