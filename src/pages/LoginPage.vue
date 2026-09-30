@@ -18,6 +18,8 @@ import heroNightUrl from '../assets/images/login/hero-night.webp'
 import { useAuthStore } from '../stores/auth'
 import { useContextStore } from '../stores/context'
 import { usePreferencesStore } from '../stores/preferences'
+import { bagLoginEnabled } from '../features/auth-bag/flag'
+import BagMark from '../components/auth-bag/BagMark.vue'
 
 
 
@@ -27,6 +29,12 @@ const preferences = usePreferencesStore()
 const router = useRouter()
 
 const code = ref('')
+// AUTH-BAG-001: secondary sign-in, shown only while the rollout flag is on.
+const bagEnabled = bagLoginEnabled()
+function openBagLogin() {
+  const value = code.value.trim()
+  void router.push({ path: '/login/bag', query: value ? { code: value } : {} })
+}
 const password = ref('')
 const showPassword = ref(false)
 const submitError = ref('')
@@ -380,6 +388,17 @@ async function submit() {
           <AppButton type="submit" :loading="auth.loading" class="submit">
             Đăng nhập
           </AppButton>
+
+          <template v-if="bagEnabled">
+            <div class="or-divider" aria-hidden="true"><span>hoặc</span></div>
+            <button type="button" class="bag-option bag-mark-host" @click="openBagLogin">
+              <BagMark :size="30" />
+              <span class="bag-text">Hành trang tự học</span>
+              <span class="twinkle t1" aria-hidden="true">✦</span>
+              <span class="twinkle t2" aria-hidden="true">✦</span>
+              <span class="twinkle t3" aria-hidden="true">✦</span>
+            </button>
+          </template>
         </form>
 
         <div class="security-notes">
@@ -896,6 +915,83 @@ async function submit() {
   }
 }
 .submit { width: 100%; min-height: 50px; font-size: .92rem; }
+.or-divider { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: .78rem; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+/* "Hành trang tự học": a four-colour border that runs round the button on hover, a sweep of
+   light, a few twinkling stars, and the bag mark's pencils bobbing (BagMark). */
+@property --bag-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.bag-option {
+  --bag-angle: 0deg;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background:
+    linear-gradient(color-mix(in srgb, var(--color-primary) 6%, var(--surface)), color-mix(in srgb, var(--color-primary) 6%, var(--surface))) padding-box,
+    conic-gradient(from var(--bag-angle), #e5484d, #f5b400, #22a06b, #3b82f6, #e5484d) border-box;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: .9rem;
+  font-weight: 850;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 220ms ease;
+}
+.bag-option::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / .75) 48%, rgb(255 255 255 / .15) 56%, transparent 70%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.twinkle {
+  position: absolute;
+  font-size: .7rem;
+  opacity: 0;
+  pointer-events: none;
+}
+.twinkle.t1 { top: 6px; left: 16%; color: #f5b400; }
+.twinkle.t2 { bottom: 5px; left: 72%; color: #3b82f6; font-size: .6rem; }
+.twinkle.t3 { top: 8px; right: 12%; color: #e5484d; font-size: .55rem; }
+.bag-option:hover,
+.bag-option:focus-visible {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 18px color-mix(in srgb, #f5b400 28%, transparent),
+    0 2px 14px color-mix(in srgb, #3b82f6 22%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-primary) 10%, transparent);
+  animation: bag-border-spin 2.4s linear infinite;
+}
+.bag-option:hover::after,
+.bag-option:focus-visible::after { animation: bag-shine 1.4s ease-in-out infinite; }
+.bag-option:hover .twinkle,
+.bag-option:focus-visible .twinkle { animation: bag-twinkle 1.2s ease-in-out infinite; }
+.bag-option:hover .twinkle.t2,
+.bag-option:focus-visible .twinkle.t2 { animation-delay: .35s; }
+.bag-option:hover .twinkle.t3,
+.bag-option:focus-visible .twinkle.t3 { animation-delay: .7s; }
+.bag-option:active { transform: translateY(0) scale(.98); }
+.bag-option:focus-visible { outline: 3px solid var(--focus-ring, var(--color-primary)); outline-offset: 2px; }
+@keyframes bag-border-spin { to { --bag-angle: 360deg; } }
+@keyframes bag-shine { 0% { transform: translateX(-120%); } 60%, 100% { transform: translateX(120%); } }
+@keyframes bag-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0); } 50% { opacity: 1; transform: scale(1.2) rotate(45deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .bag-option:hover, .bag-option:focus-visible, .bag-option:hover::after, .bag-option:focus-visible::after,
+  .bag-option:hover .twinkle, .bag-option:focus-visible .twinkle { animation: none; }
+  .bag-option:hover .twinkle, .bag-option:focus-visible .twinkle { opacity: 1; }
+}
 .error { margin: 0; color: var(--color-danger); font-size: 0.9rem; }
 
 .security-notes {
