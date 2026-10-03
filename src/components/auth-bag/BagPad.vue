@@ -75,7 +75,7 @@ const wheelItems = computed(() => Array.from({ length: SLOTS }, (_, slot) => {
       '--sin': Math.sin(angle).toFixed(4),
       '--lift': (1 - depth).toFixed(4),
       '--scale': (0.46 + 0.54 * depth).toFixed(4),
-      opacity: (0.3 + 0.7 * depth).toFixed(3),
+      opacity: (0.55 + 0.45 * depth).toFixed(3),
       zIndex: String(Math.round(depth * 20)),
     },
   }
@@ -475,7 +475,8 @@ defineExpose({ reshuffle, focus: focusFront })
 
         <div class="wheel-nav">
           <AppButton type="button" variant="secondary" aria-label="Xoay sang trái" @click="rotate(-1)"><ChevronLeft /></AppButton>
-          <span class="hint">Lăn chuột hoặc vuốt để xoay (Shift + lăn để đổi màu), rồi bấm hoặc kéo món ở giữa vào cặp</span>
+          <span class="hint hint-mouse">Lăn chuột để xoay (Shift + lăn để đổi màu), rồi bấm hoặc kéo món ở giữa vào cặp</span>
+          <span class="hint hint-touch">Vuốt để xoay, rồi chạm hoặc kéo món ở giữa vào cặp</span>
           <AppButton type="button" variant="secondary" aria-label="Xoay sang phải" @click="rotate(1)"><ChevronRight /></AppButton>
         </div>
         <p class="key-hint"><kbd>←</kbd><kbd>→</kbd> xoay · <kbd>↑</kbd><kbd>↓</kbd> đổi màu · <kbd>Space</kbd> bỏ vào cặp · <kbd>⌫</kbd> trả lại</p>
@@ -510,19 +511,54 @@ defineExpose({ reshuffle, focus: focusFront })
 .bag-box { grid-area: box; display: grid; align-content: start; gap: 12px; }
 .bag-actions { grid-area: actions; display: grid; align-content: start; gap: 12px; }
 
-/* ===== Wheel ===== */
+/* Shared by unlock, enrollment and practice. Both themes retain the selected
+ * colour; dark mode uses a subdued stage and brighter text and selection. */
 .wheel-area {
+  --wheel-control: #fff;
+  --wheel-card-top: #fff;
+  --wheel-card-bottom: color-mix(in srgb, var(--theme-soft) 28%, white);
+  --wheel-highlight: #fff;
+  --wheel-accent: var(--theme-deep);
+  --wheel-ink: #26364f;
+  --wheel-hint: #46536b;
+  --wheel-edge: color-mix(in srgb, var(--theme) 36%, white);
+  --wheel-shadow: color-mix(in srgb, var(--theme-deep) 18%, transparent);
   grid-area: wheel;
   container-type: inline-size;
   display: grid;
   gap: 10px;
   padding: 14px;
   border-radius: 22px;
+  color: var(--wheel-ink);
   background:
-    radial-gradient(circle at 50% 62%, color-mix(in srgb, var(--theme-soft) 85%, transparent) 0 34%, transparent 70%),
-    linear-gradient(160deg, color-mix(in srgb, var(--theme-soft) 55%, var(--surface)), color-mix(in srgb, var(--theme) 14%, var(--surface)));
-  border: 1px solid color-mix(in srgb, var(--theme) 28%, var(--border));
+    radial-gradient(ellipse at 50% 58%, rgb(255 255 255 / .8), transparent 60%),
+    radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--theme) 25%, transparent), transparent 65%),
+    linear-gradient(145deg, color-mix(in srgb, var(--theme-soft) 60%, white), var(--theme-soft));
+  border: 1px solid var(--wheel-edge);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .7),
+    inset 0 0 24px color-mix(in srgb, var(--theme) 10%, transparent),
+    0 10px 28px var(--wheel-shadow);
   transition: background 320ms ease, border-color 320ms ease;
+}
+
+/* The attribute is on the app root, outside this scoped component. */
+[data-theme='dark'] .wheel-area {
+  --wheel-control: color-mix(in srgb, var(--theme) 12%, #18202e);
+  --wheel-card-top: color-mix(in srgb, var(--theme-soft) 16%, #243247);
+  --wheel-card-bottom: color-mix(in srgb, var(--theme-soft) 8%, #1a2536);
+  --wheel-highlight: rgb(255 255 255 / .14);
+  --wheel-accent: color-mix(in srgb, var(--theme) 62%, white);
+  --wheel-ink: #f2f5fa;
+  --wheel-hint: #d4ddea;
+  --wheel-edge: color-mix(in srgb, var(--theme) 42%, #44516a);
+  --wheel-shadow: rgb(0 0 0 / .28);
+  background:
+    radial-gradient(ellipse at 50% 58%, color-mix(in srgb, var(--theme) 18%, transparent), transparent 60%),
+    radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--theme) 12%, transparent), transparent 65%),
+    linear-gradient(145deg, color-mix(in srgb, var(--theme) 19%, #151b29), color-mix(in srgb, var(--theme) 30%, #18202e));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .06),
+    inset 0 0 24px color-mix(in srgb, var(--theme) 8%, transparent),
+    0 10px 28px var(--wheel-shadow);
 }
 
 .color-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
@@ -533,10 +569,10 @@ defineExpose({ reshuffle, focus: focusFront })
   gap: 6px;
   min-height: 36px;
   padding: 4px 6px;
-  border: 2px solid transparent;
+  border: 2px solid var(--wheel-edge);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  color: var(--text);
+  background: var(--wheel-control);
+  color: var(--wheel-ink);
   font: inherit;
   font-size: .78rem;
   font-weight: 800;
@@ -549,8 +585,8 @@ defineExpose({ reshuffle, focus: focusFront })
 .chip.yellow .dot { background: #f5b400; }
 .chip.green .dot { background: #22a06b; }
 .chip:hover { transform: translateY(-1px); }
-.chip[aria-checked='true'] { border-color: var(--theme); box-shadow: 0 4px 14px color-mix(in srgb, var(--theme) 35%, transparent); }
-.chip:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+.chip[aria-checked='true'] { border-color: var(--wheel-accent); box-shadow: 0 4px 14px color-mix(in srgb, var(--theme) 35%, transparent); }
+.chip:focus-visible { outline: 3px solid var(--wheel-ink); outline-offset: 2px; }
 
 .wheel {
   --ring: min(40cqw, 230px);
@@ -569,7 +605,7 @@ defineExpose({ reshuffle, focus: focusFront })
   height: calc(var(--ring) * .62);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  border: 3px dashed color-mix(in srgb, var(--theme) 45%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--wheel-accent) 55%, transparent);
   background: radial-gradient(ellipse at center, color-mix(in srgb, var(--theme) 16%, transparent), transparent 70%);
   pointer-events: none;
 }
@@ -584,10 +620,10 @@ defineExpose({ reshuffle, focus: focusFront })
   display: grid;
   place-items: center;
   padding: 0;
-  border: 2px solid color-mix(in srgb, var(--theme) 30%, var(--border));
+  border: 2px solid var(--wheel-edge);
   border-radius: 22px;
-  background: var(--surface-raised, var(--surface));
-  box-shadow: 0 6px 16px rgb(0 0 0 / .12);
+  background: linear-gradient(145deg, var(--wheel-card-top), var(--wheel-card-bottom));
+  box-shadow: inset 0 1px 0 var(--wheel-highlight), 0 6px 16px var(--wheel-shadow);
   cursor: pointer;
   touch-action: pan-y;
   -webkit-touch-callout: none;
@@ -599,33 +635,61 @@ defineExpose({ reshuffle, focus: focusFront })
 }
 .wheel-item .icon { width: 58px; height: 58px; pointer-events: none; }
 .wheel-item.front {
-  border-color: var(--theme);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme) 22%, transparent), 0 12px 26px color-mix(in srgb, var(--theme-deep) 30%, transparent);
+  width: 96px;
+  height: 96px;
+  border: 3px solid var(--wheel-accent);
+  box-shadow: inset 0 1px 0 var(--wheel-highlight), 0 0 0 4px color-mix(in srgb, var(--theme) 20%, transparent),
+    0 12px 28px var(--wheel-shadow);
   cursor: grab;
 }
+.wheel-item.front .icon { width: 68px; height: 68px; }
+.wheel-item.front::after {
+  content: '';
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  bottom: -15px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--wheel-accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--theme) 35%, transparent);
+  pointer-events: none;
+}
 .wheel-item.front:active { cursor: grabbing; }
-.wheel-item:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
+.wheel-item:focus-visible { outline: 3px solid var(--wheel-ink); outline-offset: 3px; }
 .front-label {
   position: absolute;
   left: 50%;
   bottom: 2px;
   transform: translateX(-50%);
-  padding: 3px 12px;
+  padding: 5px 16px;
+  border: 1px solid var(--wheel-edge);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  color: var(--theme-deep);
-  font-size: .82rem;
+  background: var(--wheel-control);
+  color: var(--wheel-ink);
+  box-shadow: 0 2px 8px var(--wheel-shadow);
+  font-size: .9rem;
   font-weight: 900;
   white-space: nowrap;
   pointer-events: none;
 }
 
 .wheel-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
-.wheel-nav :deep(.app-button) { min-width: 44px; padding-inline: 10px; }
-.hint { text-align: center; color: var(--text-muted); font-size: .78rem; line-height: 1.3; }
+.wheel-nav :deep(.app-button) {
+  min-width: 44px;
+  padding-inline: 10px;
+  background: var(--wheel-control);
+  border-color: var(--wheel-edge);
+  color: var(--wheel-ink);
+}
+.wheel-nav :deep(.app-button:focus-visible) { outline: 3px solid var(--wheel-ink); outline-offset: 2px; }
+.hint { text-align: center; color: var(--wheel-hint); font-size: .78rem; line-height: 1.3; }
+/* Mouse wording only where there is a mouse; touch screens get the short swipe hint. */
+.hint-mouse { display: none; }
+@media (hover: hover) and (pointer: fine) { .hint-mouse { display: block; } .hint-touch { display: none; } }
 /* Keyboard shortcuts: only where there is a real keyboard and mouse. */
-.key-hint { display: none; margin: 0; text-align: center; color: var(--text-muted); font-size: .74rem; }
-.key-hint kbd { display: inline-block; min-width: 1.6em; margin: 0 1px; padding: 1px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; background: var(--surface); font: inherit; font-weight: 800; }
+.key-hint { display: none; margin: 0; text-align: center; color: var(--wheel-hint); font-size: .74rem; }
+.key-hint kbd { display: inline-block; min-width: 1.6em; margin: 0 1px; padding: 1px 5px; border: 1px solid var(--wheel-edge); border-bottom-width: 2px; border-radius: 6px; background: var(--wheel-control); color: var(--wheel-ink); font: inherit; font-weight: 800; }
 @media (hover: hover) and (pointer: fine) { .key-hint { display: block; } }
 
 /* ===== Bag ===== */
@@ -684,17 +748,21 @@ defineExpose({ reshuffle, focus: focusFront })
   .bag-art { width: 64px; height: 64px; }
   .bag-count { font-size: .85rem; }
   .bag-tools { grid-template-columns: 1fr 1fr; }
-  .bag-tools :deep(.app-button) { min-height: 38px; padding-inline: 8px; font-size: .8rem; white-space: normal; line-height: 1.15; }
+  .bag-tools :deep(.app-button) { min-height: 38px; gap: 4px; padding-inline: 8px; font-size: .8rem; white-space: nowrap; }
+  .bag-tools :deep(.app-button svg) { width: 16px; height: 16px; flex: none; }
   .toggle { font-size: .78rem; }
 }
 
 @container (max-width: 420px) {
   .wheel { --ring: 41cqw; height: 200px; }
   .wheel-item { width: 60px; height: 60px; border-radius: 18px; }
-  .wheel-item.front { width: 68px; height: 68px; }
+  .wheel-item.front { width: 72px; height: 72px; }
+  .front-label { padding: 4px 12px; font-size: .82rem; }
   .wheel-item .icon { width: 44px; height: 44px; }
   .wheel-item.front .icon { width: 52px; height: 52px; }
-  .chip { font-size: .7rem; gap: 4px; }
+  /* Two by two, so "Xanh dương" / "Xanh lá" stay on one line. */
+  .color-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chip { min-height: 32px; font-size: .74rem; gap: 5px; white-space: nowrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {
